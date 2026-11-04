@@ -41,7 +41,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use crate::exploit::{self, AppDeviceTunnel, Logger};
 use crate::ffi_util::{cstr, opt_str};
 
-const MACHINE_NAME: &str = "AirCard";
+const MACHINE_NAME: &str = "Mirsa";
 
 // ---------------------------------------------------------------------------
 // FFI types

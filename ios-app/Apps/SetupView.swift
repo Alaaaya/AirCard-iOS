@@ -56,7 +56,9 @@ struct SetupView: View {
         .sheet(isPresented: $showPairing, onDismiss: {
             vm.refreshPairingFile(); vm.refreshNetworkStatus()
         }) {
-            PairingTab().environmentObject(vm)
+            SetupPairingSheet().environmentObject(vm)
+                .presentationDetents([.large])
+                .presentationBackground(.ultraThinMaterial)
         }
         .sheet(isPresented: $showLogin) {
             LoginSheet(store: store)
