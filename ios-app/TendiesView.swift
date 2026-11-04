@@ -12,8 +12,44 @@ import UniformTypeIdentifiers
 struct TendiesView: View {
     @EnvironmentObject var vm: AppViewModel
     @State private var showFilePicker = false
+    @State private var showVideoPicker = false
+    @State private var preparingVideo = false
+    @State private var videoProgress: Double = 0
+
+    private var arabic: Bool { Locale.preferredLanguages.first?.hasPrefix("ar") == true }
+    private func videoPicked(_ result: Result<URL, Error>?) {
+        showVideoPicker = false
+        guard let result = result else { return }
+        switch result {
+        case .failure(let error): vm.errorMessage = error.localizedDescription
+        case .success(let source):
+            preparingVideo = true
+            videoProgress = 0
+            let aspect = UIScreen.main.bounds.width / UIScreen.main.bounds.height
+            Task {
+                defer {
+                    preparingVideo = false
+                    try? FileManager.default.removeItem(at: source)
+                }
+                do {
+                    let archive = try await Task.detached(priority: .userInitiated) {
+                        try await VideoWallpaper.makeArchive(from: source, screenAspect: aspect) { value in
+                            Task { @MainActor in videoProgress = value }
+                        }
+                    }.value
+                    defer { try? FileManager.default.removeItem(at: archive) }
+                    await vm.importTendieFiles(urls: [archive])
+                } catch { vm.errorMessage = error.localizedDescription }
+            }
+        }
+    }
     @State private var selectedDetailItem: TendieItem? = nil
     @State private var isNeoSpringing = false
+
+    private var videoApplyRunning: Bool {
+        if case .running = vm.tendiesFlashPhase { return true }
+        return false
+    }
 
     private var selectedCount: Int {
         vm.tendieItems.filter { $0.isSelected }.count
@@ -63,6 +99,26 @@ struct TendiesView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
+
+                    Button {
+                        showVideoPicker = true
+                    } label: {
+                        Label(arabic ? "فيديو من الاستوديو" : "Video from Photos", systemImage: "video.badge.plus")
+                    }
+                    .disabled(preparingVideo || videoApplyRunning)
+                    if preparingVideo {
+                        ProgressView(value: videoProgress) {
+                            Text(arabic ? "عم نجهّز الفيديو…" : "Preparing video…")
+                        }
+                    }
+                    Text(arabic
+                        ? "أول ١٠ ثواني، قصّ للملء بحسب الشاشة. بعد التحضير اختار تطبيق الخلفيات كالمعتاد."
+                        : "Uses the first 10 seconds, center-cropped to your screen. Apply through the existing wallpaper flow when ready.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(arabic
+                        ? "ميزة تجريبية. بحسب مطوّر AirCard، iOS 27.2 beta 3 والأحدث مسدود. ممكن إصدار النظام يأثر على حركة الخلفية."
+                        : "Experimental. AirCard reports its apply method patched on iOS 27.2 beta 3 and later. Animation behavior may vary by iOS version.")
+                        .font(.caption).foregroundStyle(.orange)
                 } footer: {
                     if vm.posterBoardContainer.isEmpty {
                         Text("PosterBoard container will be auto-detected automatically on flash.")
@@ -218,6 +274,10 @@ struct TendiesView: View {
                         await vm.importTendieFiles(urls: urls)
                     }
                 }
+            }
+            .sheet(isPresented: $showVideoPicker) {
+                WallpaperVideoPicker(completion: videoPicked)
+                    .interactiveDismissDisabled()
             }
             .sheet(item: $selectedDetailItem) { item in
                 TendieDetailSheet(item: item)

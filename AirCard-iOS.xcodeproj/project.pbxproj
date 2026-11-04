@@ -28,6 +28,8 @@
 		E465958AA611ADD0214C4EA7 /* WalletScanParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112FEBCD1D737B123BA56116 /* WalletScanParserTests.swift */; };
 		EC47B2D4A39F0B4AF200BC68 /* CardPhotoCropTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BB2EDFDBB812F08B85CA1E0 /* CardPhotoCropTests.swift */; };
 		F425EA3763995D85ABFBB99B /* RespringHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744597D526DCBE3516400831 /* RespringHelper.swift */; };
+        AAAAAAAA1111111111111111 /* VideoWallpaper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA2222222222222222; };
+        AAAAAAAA3333333333333333 /* VideoCAML in Resources */ = {isa = PBXBuildFile; fileRef = AAAAAAAA4444444444444444; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,6 +68,8 @@
 		DBBA5065266B49EB00F3F7B7 /* CardPhotoPickerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardPhotoPickerTests.swift; sourceTree = "<group>"; };
 		E001E5A3AA0793BBC1F623A7 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		FDA40D945A44DA2CF2914BCD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+        AAAAAAAA2222222222222222 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoWallpaper.swift; sourceTree = "<group>"; };
+        AAAAAAAA4444444444444444 = {isa = PBXFileReference; lastKnownFileType = folder; path = VideoCAML; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +125,8 @@
 		D6E48EFDA14D810D89B9AE80 /* ios-app */ = {
 			isa = PBXGroup;
 			children = (
+                AAAAAAAA2222222222222222,
+                AAAAAAAA4444444444444444,
 				0A31F22848A9E3B541A9ADF5 /* AirCardApp.swift */,
 				6DCB2FCB8D4F45B9474A81BC /* AppViewModel.swift */,
 				D0F9F55D9C9EC2D4AE16F004 /* Assets.xcassets */,
@@ -227,6 +233,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                AAAAAAAA3333333333333333,
 				2298380CF8CA245F06A363A1 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -261,7 +268,8 @@
 				F425EA3763995D85ABFBB99B /* RespringHelper.swift in Sources */,
 				D01333FE5D76673B726EC922 /* TendiesEngine.swift in Sources */,
 				010AC8DF1C1EED48625C6675 /* TendiesModel.swift in Sources */,
-				80E5245336B574F61E0D3194 /* TendiesView.swift in Sources */,
+				AAAAAAAA1111111111111111,
+                80E5245336B574F61E0D3194 /* TendiesView.swift in Sources */,
 				771980AD8A57F84F9D2B30DC /* Utilities.swift in Sources */,
 				C55BFA030CD02BFD7322D8FD /* WalletScanParser.swift in Sources */,
 			);
