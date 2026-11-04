@@ -137,7 +137,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
-            .thread_stack_size(4 * 1024 * 1024)
+            .thread_stack_size(16 * 1024 * 1024)
             .thread_name("aircard-sideload")
             .build()
             .expect("tokio runtime")
@@ -576,14 +576,23 @@ fn write_result(
     }
 }
 
-fn guarded<F: FnOnce() -> Result<serde_json::Value, String> + std::panic::UnwindSafe>(
-    name: &str,
-    f: F,
-) -> Result<serde_json::Value, String> {
-    match std::panic::catch_unwind(f) {
-        Ok(r) => r,
-        Err(e) => Err(format!("Rust panic in {name}: {e:?}")),
-    }
+/// Run `f` on a dedicated thread with a large stack. Swift Concurrency and GCD
+/// threads have ~512 KB of stack, which the signing + install futures overflow
+/// (a stack overflow kills the whole app, it cannot be caught).
+fn guarded<F>(name: &str, f: F) -> Result<serde_json::Value, String>
+where
+    F: FnOnce() -> Result<serde_json::Value, String> + std::panic::UnwindSafe + Send + 'static,
+{
+    let label = name.to_string();
+    let handle = std::thread::Builder::new()
+        .name(label.clone())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || match std::panic::catch_unwind(f) {
+            Ok(r) => r,
+            Err(e) => Err(format!("Rust panic in {label}: {e:?}")),
+        })
+        .map_err(|e| format!("Failed to start worker for {name}: {e}"))?;
+    handle.join().unwrap_or_else(|e| Err(format!("Worker for {name} crashed: {e:?}")))
 }
 
 /// Configure the Keychain-backed store. Call once at launch.

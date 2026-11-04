@@ -113,6 +113,13 @@ final class AppsStore: ObservableObject {
     }
 
     private func load() {
+        let ud = UserDefaults.standard
+        if let stage = ud.string(forKey: "mirsa.install.stage") {
+            let last = ud.string(forKey: "mirsa.install.lastLog") ?? ""
+            error = L.f("err.crashedAt", stage) + (last.isEmpty ? "" : "\n\n" + last)
+            ud.removeObject(forKey: "mirsa.install.stage")
+            ud.removeObject(forKey: "mirsa.install.lastLog")
+        }
         guard let d = try? Data(contentsOf: dbURL),
               let a = try? JSONDecoder().decode([ManagedApp].self, from: d) else { return }
         apps = a

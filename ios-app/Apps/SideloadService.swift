@@ -182,14 +182,23 @@ enum SideloadService {
         let box = ProgressBox(progress)
         let ctx = Unmanaged.passRetained(box).toOpaque()
         defer { Unmanaged<ProgressBox>.fromOpaque(ctx).release() }
+        // Breadcrumbs: if the app dies mid-install, the next launch can say where.
+        UserDefaults.standard.set("Starting", forKey: "mirsa.install.stage")
+        UserDefaults.standard.removeObject(forKey: "mirsa.install.lastLog")
+        defer {
+            UserDefaults.standard.removeObject(forKey: "mirsa.install.stage")
+            UserDefaults.standard.removeObject(forKey: "mirsa.install.lastLog")
+        }
         let rc = al_sl_install(pairingPath(), appPath, "iPhone", { ctx, f, stage in
             guard let ctx else { return }
             let b = Unmanaged<ProgressBox>.fromOpaque(ctx).takeUnretainedValue()
             let s = stage.map { String(cString: $0) } ?? ""
+            UserDefaults.standard.set("\(s) (\(Int(f * 100))%)", forKey: "mirsa.install.stage")
             DispatchQueue.main.async { b.f(f, s) }
         }, { _, msg in
             guard let msg else { return }
             let line = String(cString: msg)
+            UserDefaults.standard.set(line, forKey: "mirsa.install.lastLog")
             DispatchQueue.main.async { AppViewModel.sharedLogSink?(line) }
         }, ctx, &out, &err)
         let o = take(out), e = take(err)
