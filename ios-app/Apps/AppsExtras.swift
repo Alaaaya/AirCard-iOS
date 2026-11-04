@@ -15,7 +15,8 @@ extension AppsStore {
     /// already managed) it installs straight away; otherwise the usual
     /// Container / Real App choice sheet appears.
     @discardableResult
-    func installFromURL(_ url: URL, location: AppLocation? = nil, vm: AppViewModel? = AppViewModel.shared) async -> Bool {
+    func installFromURL(_ url: URL, location: AppLocation? = nil, vm vmArg: AppViewModel? = nil) async -> Bool {
+        let vm: AppViewModel? = vmArg ?? AppViewModel.shared
         busy = tr("Downloading…", "عم ينزّل…")
         let file: URL
         do {
