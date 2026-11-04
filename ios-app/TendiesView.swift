@@ -176,7 +176,7 @@ struct TendiesView: View {
                             Text("No .tendies wallpapers loaded yet")
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            Text("Tap 'Choose .tendies from Files' or copy wallpapers into On My iPhone › AirCard-iOS.")
+                            Text("Tap 'Choose .tendies from Files' or copy wallpapers into On My iPhone › Mirsa.")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)

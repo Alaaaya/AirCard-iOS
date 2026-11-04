@@ -229,7 +229,7 @@ struct SupportPopupSheet: View {
                             .font(.system(size: 56))
                             .foregroundStyle(.pink)
 
-                        Text("Welcome to AirCard-iOS!")
+                        Text("Welcome to Mirsa!")
                             .font(.title2.bold())
 
                         Text("Free & Open Source • Developed by @mak5er")
@@ -244,7 +244,7 @@ struct SupportPopupSheet: View {
                         Button {
                             dismiss()
                         } label: {
-                            Text("Continue to AirCard")
+                            Text("Continue to Mirsa")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
@@ -343,7 +343,7 @@ struct CreditsSheet: View {
                     .font(.system(size: 64))
                     .foregroundStyle(.blue)
 
-                Text("AirCard-iOS")
+                Text("Mirsa")
                     .font(.title2.bold())
 
                 Text("Apple Wallet Skins & Passcode Themes (iOS 18.0 – 27.2 b2)")
@@ -550,7 +550,7 @@ struct PairingGuideSheet: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Where to find your pairing file")
                             .font(.title2.bold())
-                        Text("AirCard-iOS can import pairing files exported by SideStore, LiveContainer, iLoader, or your computer.")
+                        Text("Mirsa can import pairing files exported by SideStore, LiveContainer, iLoader, or your computer.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -654,14 +654,14 @@ struct PairingGuideSheet: View {
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
-                        Text("Files app › On My iPhone › AirCard-iOS")
+                        Text("Files app › On My iPhone › Mirsa")
                             .font(.caption.monospaced())
                             .padding(8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color(uiColor: .systemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                        Text("It will immediately appear under 'Discovered in Documents' in AirCard-iOS.")
+                        Text("It will immediately appear under 'Discovered in Documents' in Mirsa.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -928,7 +928,7 @@ struct PairingTab: View {
                             Image(systemName: "creditcard.circle.fill")
                                 .font(.title2)
                                 .foregroundStyle(.blue)
-                            Text("AirCard-iOS")
+                            Text("Mirsa")
                                 .font(.title2.bold())
                             Spacer()
                             Text("iOS \(ProcessInfo.processInfo.operatingSystemVersion.majorVersion) · v1.3.2")
@@ -1205,7 +1205,7 @@ struct PairingTab: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 60)
             }
-            .navigationTitle("AirCard-iOS")
+            .navigationTitle("Mirsa")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -1290,7 +1290,7 @@ struct VPNStatusRow: View {
                         .font(.caption.bold())
                     ForEach([
                         "1. Open LocalDevVPN app and tap Connect.",
-                        "2. Return to AirCard-iOS — status indicator turns green."
+                        "2. Return to Mirsa — status indicator turns green."
                     ], id: \.self) { step in
                         Text(step)
                             .font(.caption)
@@ -2064,7 +2064,7 @@ struct ApplyThemeSection: View {
     var body: some View {
         // Themes dropped directly into Documents folder
         if !vm.documentsThemes.isEmpty {
-            Section("Themes in App Folder (On My iPhone › AirCard-iOS)") {
+            Section("Themes in App Folder (On My iPhone › Mirsa)") {
                 ForEach(vm.documentsThemes, id: \.self) { file in
                     HStack {
                         Image(systemName: "paintpalette.fill")

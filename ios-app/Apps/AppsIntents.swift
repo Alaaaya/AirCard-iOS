@@ -4,8 +4,8 @@ import AppIntents
 /// joining home Wi-Fi) so sideloaded real apps never hit their 7-day expiry.
 /// Needs Wi-Fi + the loopback VPN, the same as refreshing from the Apps tab.
 struct RefreshAppsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Refresh AirCard Apps"
-    static var description = IntentDescription("Re-signs and reinstalls every app AirCard installed as a real app, and re-signs Container apps when the certificate changed.")
+    static var title: LocalizedStringResource = "Refresh Mirsa Apps"
+    static var description = IntentDescription("Re-signs and reinstalls every app Mirsa installed as a real app, and re-signs Container apps when the certificate changed.")
     static var openAppWhenRun: Bool = false
 
     @MainActor

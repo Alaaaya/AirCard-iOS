@@ -302,7 +302,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "-lc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mak5er.aircard;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alaa.mirsa;
 				PRODUCT_NAME = "AirCard-iOS";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -450,7 +450,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mak5er.aircard.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alaa.mirsa.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AirCard-iOS.app/AirCard-iOS";
@@ -467,7 +467,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.mak5er.aircard.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alaa.mirsa.tests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/AirCard-iOS.app/AirCard-iOS";
@@ -490,7 +490,7 @@
 					"@executable_path/Frameworks",
 				);
 				OTHER_LDFLAGS = "-lc++";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mak5er.aircard;
+				PRODUCT_BUNDLE_IDENTIFIER = com.alaa.mirsa;
 				PRODUCT_NAME = "AirCard-iOS";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";

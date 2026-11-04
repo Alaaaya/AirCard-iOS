@@ -55,7 +55,7 @@ struct AccountState: Equatable {
 @MainActor
 final class AppsStore: ObservableObject {
     static let shared = AppsStore()
-    nonisolated static let bgTaskID = "com.mak5er.aircard.apps.refresh"
+    nonisolated static let bgTaskID = "com.alaa.mirsa.apps.refresh"
 
     @Published var apps: [ManagedApp] = []
     @Published var account: AccountState? = nil
@@ -471,14 +471,14 @@ final class AppsStore: ObservableObject {
             // Normalise the bundle id so isideload appends the team id once.
             let plistURL = copy.appendingPathComponent("Info.plist")
             if let info = NSMutableDictionary(contentsOf: plistURL) {
-                info["CFBundleIdentifier"] = "com.mak5er.aircard"
+                info["CFBundleIdentifier"] = "com.alaa.mirsa"
                 _ = info.write(to: plistURL, atomically: true)
             }
             let path = copy.path
             _ = try await Task.detached {
                 try SideloadService.install(appPath: path) { f, _ in Task { @MainActor in AppsStore.shared.progress = f } }
             }.value
-            toast = L.f("toast.installed", "AirCard")
+            toast = L.f("toast.installed", "Mirsa")
         } catch { self.error = error.localizedDescription }
     }
 
@@ -509,7 +509,7 @@ final class AppsStore: ObservableObject {
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             if granted {
                 let c = UNMutableNotificationContent()
-                c.title = "AirCard"
+                c.title = "Mirsa"
                 c.body = L.f("notif.tap", app.name)
                 let req = UNNotificationRequest(identifier: "aircard.guest.relaunch", content: c,
                                                 trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false))

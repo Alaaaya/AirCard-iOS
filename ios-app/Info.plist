@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>AirCard-iOS</string>
+	<string>Mirsa</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -48,7 +48,7 @@
 	<!-- Apps tab: background refresh of sideloaded apps -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>com.mak5er.aircard.apps.refresh</string>
+		<string>com.alaa.mirsa.apps.refresh</string>
 	</array>
 	<!-- Apps tab Container: guest apps run inside AirCard's process, so iOS
 	     reads their privacy prompts from AirCard's Info.plist. Without these
