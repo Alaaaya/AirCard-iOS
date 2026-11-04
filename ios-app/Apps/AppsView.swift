@@ -193,6 +193,10 @@ struct AppsTab: View {
                 UserDefaults.standard.removeObject(forKey: "aircard.guest.lastError")
             }
             if store.account == nil && store.hasSavedLogin { await store.refreshAccount() }
+            store.scheduleExpiryReminders()
+            if GitHubWatcher.shared.autoInstall && !GitHubWatcher.shared.sources.isEmpty && store.networkReady(vm) {
+                Task { await GitHubWatcher.shared.checkAll(install: true) }
+            }
             vm.refreshNetworkStatus()
             store.scheduleBackgroundRefresh()
         }
@@ -920,10 +924,24 @@ struct AppsSettingsSheet: View {
                         .keyboardType(.URL)
                 }
 
+                Section(tr("Days left", "الأيام الباقية")) {
+                    ExpiryListView(store: store)
+                }
+
+                Section(tr("Get apps", "جيب تطبيقات")) {
+                    NavigationLink { GitHubSourcesView() } label: {
+                        Label(tr("GitHub Updates", "تحديثات GitHub"), systemImage: "shippingbox.and.arrow.backward")
+                    }
+                    NavigationLink { WebUploadView() } label: {
+                        Label(tr("Upload from Computer", "رفع من الكمبيوتر"), systemImage: "laptopcomputer.and.arrow.down")
+                    }
+                }
+
                 Section {
                     NavigationLink(L.t("settings.licenses")) { LicensesView() }
                 }
             }
+            .onChange(of: store.pending?.id) { _, new in if new != nil { dismiss() } }
             .navigationTitle(L.t("settings.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

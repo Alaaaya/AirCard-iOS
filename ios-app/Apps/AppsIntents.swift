@@ -35,5 +35,11 @@ struct AirCardAppShortcuts: AppShortcutsProvider {
             shortTitle: "Refresh Apps",
             systemImageName: "arrow.clockwise.circle"
         )
+        AppShortcut(
+            intent: InstallFromLinkIntent(),
+            phrases: ["Install IPA with \(.applicationName)"],
+            shortTitle: "Install from Link",
+            systemImageName: "arrow.down.app"
+        )
     }
 }

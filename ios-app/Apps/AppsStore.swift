@@ -662,6 +662,7 @@ final class AppsStore: ObservableObject {
     nonisolated static func registerBackgroundTask() {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: bgTaskID, using: nil) { task in
             let work = Task { @MainActor in
+                if GitHubWatcher.shared.autoInstall { await GitHubWatcher.shared.checkAll(install: true) }
                 let n = await AppsStore.shared.refreshAll(vm: AppViewModel.shared)
                 AppsStore.shared.scheduleBackgroundRefresh()
                 task.setTaskCompleted(success: n >= 0)
@@ -671,7 +672,8 @@ final class AppsStore: ObservableObject {
     }
 
     func scheduleBackgroundRefresh() {
-        guard autoRefresh, !realApps.isEmpty else { return }
+        scheduleExpiryReminders()
+        guard autoRefresh, !realApps.isEmpty || !GitHubWatcher.shared.sources.isEmpty else { return }
         let req = BGProcessingTaskRequest(identifier: Self.bgTaskID)
         req.requiresNetworkConnectivity = true
         // Aim for ~2 days before the soonest expiry; iOS decides the exact time.
