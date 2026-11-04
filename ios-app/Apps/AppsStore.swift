@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import SwiftUI
 import UIKit
 import BackgroundTasks
@@ -215,6 +216,37 @@ final class AppsStore: ObservableObject {
               let p = try? PropertyListSerialization.propertyList(from: d, format: nil) as? [String: Any] else { return nil }
         return (p["TeamIdentifier"] as? [String])?.first
     }()
+
+    /// Serial numbers (uppercase hex, no leading zeros) of the certificates the
+    /// embedded provisioning profile allows.
+    lazy var ownProfileCertSerials: [String] = {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              let s = String(data: data, encoding: .isoLatin1),
+              let a = s.range(of: "<?xml"), let b = s.range(of: "</plist>") else { return [] }
+        let xml = String(s[a.lowerBound..<b.upperBound])
+        guard let d = xml.data(using: .isoLatin1),
+              let p = try? PropertyListSerialization.propertyList(from: d, format: nil) as? [String: Any],
+              let certs = p["DeveloperCertificates"] as? [Data] else { return [] }
+        return certs.compactMap { der in
+            guard let c = SecCertificateCreateWithData(nil, der as CFData),
+                  let sn = SecCertificateCopySerialNumberData(c, nil) as Data? else { return nil }
+            let hex = sn.map { String(format: "%02X", $0) }.joined()
+            let t = hex.drop(while: { $0 == "0" })
+            return String(t)
+        }
+    }()
+
+    /// Same team, but this Mirsa was signed with an older certificate than the
+    /// one now used for Container apps (e.g. a new certificate was created after
+    /// signing in on this copy). iOS then rejects the guest's signature.
+    var containerCertMismatch: Bool {
+        guard !containerTeamMismatch, let serial = account?.certSerial, !serial.isEmpty else { return false }
+        let own = ownProfileCertSerials
+        guard !own.isEmpty else { return false }
+        let want = String(serial.uppercased().drop(while: { $0 == "0" }))
+        return !own.contains(want)
+    }
 
     /// Container apps can only load when this Mirsa is signed by the same team
     /// as the Apple ID that signs them (not an ESign/Feather certificate).
@@ -528,6 +560,7 @@ final class AppsStore: ObservableObject {
             _ = AppsStore.openInstalledApp(bundleID: bid)
         case .container:
             if containerTeamMismatch { error = L.t("err.teamMismatch"); return }
+            if containerCertMismatch { error = L.t("err.certMismatch"); return }
             launchCandidate = app
         }
     }
