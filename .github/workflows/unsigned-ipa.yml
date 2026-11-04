@@ -1,0 +1,16 @@
+name: Unsigned video wallpaper IPA
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project
+        run: brew install xcodegen && xcodegen generate
+      - name: Build unsigned IPA
+        run: bash build-ipa.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AirCard-video-wallpaper-unsigned
+          path: build/AirCard-iOS.ipa
