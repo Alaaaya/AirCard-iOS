@@ -152,6 +152,17 @@ enum SideloadService {
         return json(o)
     }
 
+    /// PairingController is @MainActor; resolve the pairing path on the main thread
+    /// so these blocking FFI calls can run from any context.
+    private static func pairingPath() -> String {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { PairingController.pairingFilePath() }
+        }
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated { PairingController.pairingFilePath() }
+        }
+    }
+
     static func logout() { al_sl_logout() }
 
     static func accountInfo() throws -> [String: Any] {
@@ -171,7 +182,7 @@ enum SideloadService {
         let box = ProgressBox(progress)
         let ctx = Unmanaged.passRetained(box).toOpaque()
         defer { Unmanaged<ProgressBox>.fromOpaque(ctx).release() }
-        let rc = al_sl_install(PairingController.pairingFilePath(), appPath, "iPhone", { ctx, f, stage in
+        let rc = al_sl_install(pairingPath(), appPath, "iPhone", { ctx, f, stage in
             guard let ctx else { return }
             let b = Unmanaged<ProgressBox>.fromOpaque(ctx).takeUnretainedValue()
             let s = stage.map { String(cString: $0) } ?? ""
@@ -188,7 +199,7 @@ enum SideloadService {
 
     static func uninstall(bundleID: String) throws {
         var err: UnsafeMutablePointer<CChar>?
-        let rc = al_sl_uninstall(PairingController.pairingFilePath(), bundleID, nil, nil, &err)
+        let rc = al_sl_uninstall(pairingPath(), bundleID, nil, nil, &err)
         let e = take(err)
         if rc != 0 { throw SideloadError.message(e ?? "Uninstall failed") }
     }
