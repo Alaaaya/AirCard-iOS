@@ -9,10 +9,7 @@ struct SetupView: View {
     @State private var showPairing = false
     @State private var showLogin = false
 
-    private var networkOK: Bool { vm.vpnUp }
-    private var networkStatus: String {
-        !vm.vpnUp ? L.t("setup.networkOff") : (vm.wifiUp ? L.t("setup.networkOK") : L.t("setup.cellular"))
-    }
+    private var networkOK: Bool { vm.vpnUp && vm.wifiUp }
     private var pairingOK: Bool { vm.hasPairingFile }
     private var accountOK: Bool { store.account != nil }
     private var ready: Bool { networkOK && pairingOK && accountOK }
@@ -25,7 +22,7 @@ struct SetupView: View {
                 VStack(spacing: 18) {
                     header
                     step(1, icon: "lock.shield.fill", title: L.t("setup.network"),
-                         status: networkStatus,
+                         status: networkOK ? L.t("setup.networkOK") : L.t("setup.networkOff"),
                          ok: networkOK, action: L.t("setup.check")) {
                         vm.refreshNetworkStatus()
                     }
