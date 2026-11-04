@@ -66,6 +66,40 @@ final class AppsStore: ObservableObject {
     @Published var prompt: SideloadPrompt? = nil
     @Published var error: String? = nil
     @Published var toast: String? = nil
+    /// Bundle id of the Mirsa that installSelf just installed (to open it).
+    @Published var installedSelfBundleID: String? = nil
+    /// This Mirsa was signed with an older certificate: offer a one-tap repair.
+    @Published var needsRepair = false
+
+    /// Built as "Mirsa Setup": a small installer that installs Mirsa with the
+    /// user's Apple ID and hands over the login, signing key and pairing.
+    nonisolated static var isSetupMode: Bool {
+        Bundle.main.object(forInfoDictionaryKey: "MirsaSetupMode") as? Bool ?? false
+    }
+    nonisolated static let handoffName = "MirsaHandoff.json"
+    nonisolated static let handoffPairingName = "MirsaHandoff-pairing.plist"
+
+    /// First launch of a Mirsa installed by Mirsa Setup: take over its
+    /// Keychain items (same signing key = same certificate) and pairing file.
+    nonisolated static func importHandoffIfNeeded() {
+        guard !isSetupMode else { return }
+        let ud = UserDefaults.standard
+        guard !ud.bool(forKey: "mirsa.handoff.done") else { return }
+        let b = Bundle.main.bundleURL
+        let fm = FileManager.default
+        let j = b.appendingPathComponent(handoffName)
+        if let d = try? Data(contentsOf: j),
+           let o = try? JSONSerialization.jsonObject(with: d) as? [String: String] {
+            Keychain.importAll(o)
+        }
+        let pf = b.appendingPathComponent(handoffPairingName)
+        if fm.fileExists(atPath: pf.path) {
+            let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            let dest = docs.appendingPathComponent("aircard_pairing.plist")
+            if !fm.fileExists(atPath: dest.path) { try? fm.copyItem(at: pf, to: dest) }
+        }
+        ud.set(true, forKey: "mirsa.handoff.done")
+    }
     @Published var launchCandidate: ManagedApp? = nil
 
     @Published var realLimit: Int = {
@@ -192,6 +226,7 @@ final class AppsStore: ObservableObject {
             a.appIDsAvailable = o["app_ids_available"] as? Int
             a.appIDsMax = o["app_ids_max"] as? Int
             account = a
+            needsRepair = !Self.isSetupMode && containerCertMismatch
             await resignContainerIfCertChanged()
         } catch {
             self.error = error.localizedDescription
@@ -531,12 +566,30 @@ final class AppsStore: ObservableObject {
             let plistURL = copy.appendingPathComponent("Info.plist")
             if let info = NSMutableDictionary(contentsOf: plistURL) {
                 info["CFBundleIdentifier"] = "com.alaa.mirsa"
+                info["CFBundleDisplayName"] = "Mirsa"
+                info["CFBundleName"] = "Mirsa"
+                info.removeObject(forKey: "MirsaSetupMode")
                 _ = info.write(to: plistURL, atomically: true)
             }
+            // Never carry an old handoff along; Setup writes a fresh one.
+            try? fm.removeItem(at: copy.appendingPathComponent(Self.handoffName))
+            try? fm.removeItem(at: copy.appendingPathComponent(Self.handoffPairingName))
+            if Self.isSetupMode {
+                let kc = Keychain.exportAll()
+                if let d = try? JSONSerialization.data(withJSONObject: kc) {
+                    try d.write(to: copy.appendingPathComponent(Self.handoffName))
+                }
+                let pf = PairingController.pairingFilePath()
+                if fm.fileExists(atPath: pf) {
+                    try? fm.copyItem(at: URL(fileURLWithPath: pf), to: copy.appendingPathComponent(Self.handoffPairingName))
+                }
+            }
             let path = copy.path
-            _ = try await Task.detached {
+            let o = try await Task.detached {
                 try SideloadService.install(appPath: path) { f, _ in Task { @MainActor in AppsStore.shared.progress = f } }
             }.value
+            installedSelfBundleID = o["bundle_id"] as? String
+            needsRepair = false
             toast = L.f("toast.installed", "Mirsa")
         } catch { self.error = Self.friendly(error) }
     }

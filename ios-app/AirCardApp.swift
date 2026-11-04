@@ -27,12 +27,15 @@ struct AirCardApp: App {
         // Apps tab: background refresh of sideloaded apps must be registered
         // before launch finishes.
         AppsStore.registerBackgroundTask()
+        AppsStore.importHandoffIfNeeded()
     }
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(vm)
+            Group {
+                if AppsStore.isSetupMode { SetupView() } else { ContentView() }
+            }
+            .environmentObject(vm)
         }
     }
 }

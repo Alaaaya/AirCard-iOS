@@ -181,6 +181,11 @@ struct AppsTab: View {
             Button(L.t("choice.cancel"), role: .cancel) { store.launchCandidate = nil }
             Button(L.t("launch.go")) { if let a = store.launchCandidate { store.confirmLaunch(a) } }
         } message: { Text(L.f("launch.body", store.launchCandidate?.name ?? "")) }
+        .alert(L.t("repair.title"), isPresented: Binding(get: { store.needsRepair && store.busy == nil && store.error == nil },
+                                                         set: { if !$0 { store.needsRepair = false } })) {
+            Button(L.t("choice.cancel"), role: .cancel) { store.needsRepair = false }
+            Button(L.t("repair.go")) { Task { await store.installSelf(vm: vm) } }
+        } message: { Text(L.t("repair.body")) }
         .overlay(alignment: .top) { toast }
         .task {
             if let e = store.lastLaunchError {

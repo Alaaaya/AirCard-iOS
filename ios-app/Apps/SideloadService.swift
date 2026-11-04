@@ -38,6 +38,32 @@ enum Keychain {
         SecItemAdd(add as CFDictionary, nil)
     }
 
+    /// Every item this app keeps (Apple ID login, signing key, session), for
+    /// handing over from Mirsa Setup to the Mirsa it installs.
+    static func exportAll() -> [String: String] {
+        let q: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecReturnAttributes as String: true,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var out: AnyObject?
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
+              let items = out as? [[String: Any]] else { return [:] }
+        var d: [String: String] = [:]
+        for it in items {
+            if let k = it[kSecAttrAccount as String] as? String,
+               let v = it[kSecValueData as String] as? Data,
+               let sv = String(data: v, encoding: .utf8) { d[k] = sv }
+        }
+        return d
+    }
+
+    static func importAll(_ d: [String: String]) {
+        for (k, v) in d { set(k, v) }
+    }
+
     static func wipe() {
         let q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
