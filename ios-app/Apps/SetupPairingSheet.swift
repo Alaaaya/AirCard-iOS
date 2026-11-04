@@ -7,7 +7,10 @@ struct SetupPairingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showFilePicker = false
 
-    private var networkOK: Bool { vm.vpnUp && vm.wifiUp }
+    private var networkOK: Bool { vm.vpnUp }
+    private var networkStatus: String {
+        !vm.vpnUp ? L.t("setup.networkOff") : (vm.wifiUp ? L.t("setup.networkOK") : L.t("setup.cellular"))
+    }
 
     var body: some View {
         ZStack {
@@ -65,7 +68,7 @@ struct SetupPairingSheet: View {
     private var networkCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             row(icon: "lock.shield", ok: networkOK, title: L.t("setup.network"),
-                sub: networkOK ? L.t("setup.networkOK") : L.t("setup.networkOff"))
+                sub: networkStatus)
             HStack(spacing: 10) {
                 if !networkOK {
                     Button {
