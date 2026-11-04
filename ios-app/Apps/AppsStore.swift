@@ -55,7 +55,7 @@ struct AccountState: Equatable {
 @MainActor
 final class AppsStore: ObservableObject {
     static let shared = AppsStore()
-    static let bgTaskID = "com.mak5er.aircard.apps.refresh"
+    nonisolated static let bgTaskID = "com.mak5er.aircard.apps.refresh"
 
     @Published var apps: [ManagedApp] = []
     @Published var account: AccountState? = nil
@@ -470,9 +470,9 @@ final class AppsStore: ObservableObject {
             try fm.copyItem(at: Bundle.main.bundleURL, to: copy)
             // Normalise the bundle id so isideload appends the team id once.
             let plistURL = copy.appendingPathComponent("Info.plist")
-            if var info = NSDictionary(contentsOf: plistURL) as? [String: Any] {
+            if let info = NSMutableDictionary(contentsOf: plistURL) {
                 info["CFBundleIdentifier"] = "com.mak5er.aircard"
-                (info as NSDictionary).write(to: plistURL, atomically: true)
+                _ = info.write(to: plistURL, atomically: true)
             }
             let path = copy.path
             _ = try await Task.detached {
@@ -526,7 +526,7 @@ final class AppsStore: ObservableObject {
     var lastLaunchError: String? { UserDefaults.standard.string(forKey: "aircard.guest.lastError") }
 
     static func openInstalledApp(bundleID: String) -> Bool {
-        guard let cls = NSClassFromString("LSApplicationWorkspace") as? NSObject.Type,
+        guard let cls: AnyObject = NSClassFromString("LSApplicationWorkspace"),
               let ws = cls.perform(NSSelectorFromString("defaultWorkspace"))?.takeUnretainedValue() as? NSObject
         else { return false }
         let sel = NSSelectorFromString("openApplicationWithBundleID:")
