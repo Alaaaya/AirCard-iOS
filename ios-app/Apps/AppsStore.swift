@@ -196,6 +196,26 @@ final class AppsStore: ObservableObject {
         account = nil
     }
 
+    /// Team ID of the certificate this copy of Mirsa is signed with (from its
+    /// embedded provisioning profile). nil when there is no profile.
+    lazy var ownTeamID: String? = {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url),
+              let s = String(data: data, encoding: .isoLatin1),
+              let a = s.range(of: "<?xml"), let b = s.range(of: "</plist>") else { return nil }
+        let xml = String(s[a.lowerBound..<b.upperBound])
+        guard let d = xml.data(using: .isoLatin1),
+              let p = try? PropertyListSerialization.propertyList(from: d, format: nil) as? [String: Any] else { return nil }
+        return (p["TeamIdentifier"] as? [String])?.first
+    }()
+
+    /// Container apps can only load when this Mirsa is signed by the same team
+    /// as the Apple ID that signs them (not an ESign/Feather certificate).
+    var containerTeamMismatch: Bool {
+        guard let own = ownTeamID, let acct = account?.teamID, !acct.isEmpty else { return false }
+        return own != acct
+    }
+
     /// Expiry of AirCard's own provisioning profile, when it has one.
     lazy var ownExpiry: Date? = {
         guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
@@ -394,7 +414,7 @@ final class AppsStore: ObservableObject {
             await refreshAccount()
             return true
         } catch {
-            self.error = error.localizedDescription
+            self.error = Self.friendly(error)
             return false
         }
     }
@@ -479,7 +499,16 @@ final class AppsStore: ObservableObject {
                 try SideloadService.install(appPath: path) { f, _ in Task { @MainActor in AppsStore.shared.progress = f } }
             }.value
             toast = L.f("toast.installed", "Mirsa")
-        } catch { self.error = error.localizedDescription }
+        } catch { self.error = Self.friendly(error) }
+    }
+
+    /// Turn the raw connection error into something readable, keeping the detail.
+    static func friendly(_ error: Error) -> String {
+        let raw = error.localizedDescription
+        if raw.contains("Device connection failed") || raw.contains("RemoteXPC") || raw.contains("timed out") {
+            return L.t("err.device") + "\n\n" + raw
+        }
+        return raw
     }
 
     // MARK: Launch
@@ -491,6 +520,7 @@ final class AppsStore: ObservableObject {
             guard let bid = app.installedBundleID else { return }
             _ = AppsStore.openInstalledApp(bundleID: bid)
         case .container:
+            if containerTeamMismatch { error = L.t("err.teamMismatch"); return }
             launchCandidate = app
         }
     }
