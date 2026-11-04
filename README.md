@@ -55,6 +55,38 @@ The app communicates with internal system services over a local loopback tunnel 
 - Injects wallpaper configurations and assets into PosterBoard storage.
 - Automatically triggers a NeoSpring respring after flashing to apply wallpapers without rebooting your iPhone.
 
+### Apps (sideloader + Container, Beta)
+A SideStore-style sideloader built into AirCard, using the MIT-licensed
+[isideload](https://github.com/nab138/isideload) and [idevice](https://github.com/jkcoxson/idevice) crates.
+
+- **Sign in once** with your own Apple ID (2FA supported). Credentials and the
+  certificate's private key are stored only in this iPhone's Keychain.
+- **Install in Container (default, unlimited):** the app runs *inside* AirCard.
+  Its executable is patched into a library and signed once with your free
+  development certificate; it uses no App ID and no app slot. When the
+  certificate changes, Container apps are re-signed automatically.
+- **Install as Real App:** signed with your free certificate and installed with
+  `installation_proxy` over the loopback VPN. Gets its own Home Screen icon,
+  push notifications and extensions, but counts against the free-account limit
+  (**3 active apps including AirCard, 10 App IDs per 7 days**) and expires after
+  **7 days**. Refresh / Refresh All, background refresh and the *Refresh AirCard
+  Apps* Shortcuts action keep them alive. The limit can be raised in Settings for
+  paid developer accounts.
+- Move apps between Container and Real App from the long-press menu.
+
+Requirements: Wi-Fi + loopback VPN (LocalDevVPN) + pairing file, same as the other tabs.
+
+**Container limitations:** no app extensions / widgets, no push notifications,
+no app groups, guests share AirCard's Keychain and preferences domain, URL
+schemes of the guest are not registered, App Store (FairPlay-encrypted) IPAs are
+refused, and some apps will crash. The Container only works when AirCard itself
+is signed by the **same team** as your Apple ID: use *Apps → Settings → Install
+AirCard with my Apple ID* and use that copy. Opening a Container app relaunches
+AirCard into it (tap the notification if iOS doesn't reopen it); swipe it away
+from the app switcher to get back to AirCard.
+
+See `LICENSES/Sideloader-NOTICE.md` (includes the LGPL-2.1 note for apple-codesign-quick).
+
 ### Pairing options
 - **Import pairing file**: Supports pairing files (`.mobiledevicepairing`, `.plist`, `.mobilepair`) from **SideStore**, **LiveContainer**, **iLoader**, **AltStore**, **Jitterbug**, or exported from Mac/PC.
 - **On-device pairing (iOS 27+)**: Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
@@ -128,6 +160,9 @@ cd AirCard-iOS
 The completed package is written to `build/AirCard-iOS.ipa`.
 
 ### Rebuilding the Rust framework
+CI (`.github/workflows/unsigned-ipa.yml`) rebuilds `AirliftFFI.xcframework`
+from `rust-core` on every run; the checked-in copy may lag behind the source.
+
 To compile changes in `rust-core`:
 ```bash
 ./build-ios.sh
