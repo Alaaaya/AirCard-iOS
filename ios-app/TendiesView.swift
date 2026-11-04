@@ -61,7 +61,7 @@ struct TendiesView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MirsaForm {
                 // Notice Banners
                 if let err = vm.errorMessage {
                     Section {

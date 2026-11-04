@@ -1565,7 +1565,7 @@ struct WalletCardsTab: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
+            MirsaScroll {
                 VStack(spacing: 16) {
                     scannerBanner
 
@@ -1944,7 +1944,7 @@ struct AddCardSheet: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MirsaForm {
                 Section("Card Hash") {
                     TextField("Paste card hash (e.g. M6nDwZrkYbFl…)", text: $hashText, axis: .vertical)
                         .font(.system(.body, design: .monospaced))
@@ -1982,7 +1982,7 @@ struct PasscodeThemeTab: View {
 
     var body: some View {
         NavigationStack {
-            Form {
+            MirsaForm {
                 // Mode picker
                 Section {
                     Picker("Mode", selection: $vm.passcodeMode) {
