@@ -1,7 +1,12 @@
 import SwiftUI
 import AirliftFFI
 
-@main
+/// Entry point called from main.m once the Container loader has had its turn.
+@_cdecl("aircard_swift_main")
+public func aircardSwiftMain() {
+    AirCardApp.main()
+}
+
 struct AirCardApp: App {
     @StateObject private var vm = AppViewModel()
 
@@ -18,6 +23,10 @@ struct AirCardApp: App {
         // Point the sink at the vm once it's created (set in AppViewModel.init).
         // Ensure ALGetGrappaToken symbol is retained and linked into the binary
         _ = ALGetGrappaToken(0, 0, 0, nil, 0, nil, nil, 0)
+
+        // Apps tab: background refresh of sideloaded apps must be registered
+        // before launch finishes.
+        AppsStore.registerBackgroundTask()
     }
 
     var body: some Scene {

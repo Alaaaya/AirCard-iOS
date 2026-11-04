@@ -854,6 +854,16 @@ struct ContentView: View {
             TendiesView()
                 .tabItem { Label("Wallpapers", systemImage: "photo.stack.fill") }
                 .tag(AppTab.wallpapers)
+
+            AppsTab()
+                .tabItem { Label(L.t("tab"), systemImage: "square.grid.3x3.fill") }
+                .tag(AppTab.apps)
+        }
+        .onOpenURL { url in
+            // "Open in AirCard" for .ipa files → Apps tab import.
+            guard url.isFileURL, url.pathExtension.lowercased() == "ipa" else { return }
+            vm.selectedTab = .apps
+            Task { await AppsStore.shared.importIPA(from: url) }
         }
         .alert("Notice", isPresented: Binding(
             get: { vm.errorMessage != nil },

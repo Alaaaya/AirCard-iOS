@@ -42,7 +42,37 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
+		<string>processing</string>
 	</array>
+	<!-- Apps tab: background refresh of sideloaded apps -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.mak5er.aircard.apps.refresh</string>
+	</array>
+	<!-- Apps tab Container: guest apps run inside AirCard's process, so iOS
+	     reads their privacy prompts from AirCard's Info.plist. Without these
+	     keys a guest asking for the camera, microphone, ... would crash. -->
+	<key>NSCameraUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use the camera.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use the microphone.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>An app running in the AirCard Container wants to save to your photo library.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use your location.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>An app running in the AirCard Container wants to access your contacts.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use Face ID.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use Bluetooth.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use motion data.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>An app running in the AirCard Container wants to access your calendars.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>An app running in the AirCard Container wants to use speech recognition.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIFileSharingEnabled</key>
@@ -83,6 +113,18 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>iOS App</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.apple.itunes.ipa</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>PosterBoard Wallpaper</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -96,6 +138,24 @@
 	</array>
 	<key>UTImportedTypeDeclarations</key>
 	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.apple.itunes.ipa</string>
+			<key>UTTypeDescription</key>
+			<string>iOS App Archive</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.zip-archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>ipa</string>
+				</array>
+			</dict>
+		</dict>
 		<dict>
 			<key>UTTypeIdentifier</key>
 			<string>com.aircard.passthm</string>
