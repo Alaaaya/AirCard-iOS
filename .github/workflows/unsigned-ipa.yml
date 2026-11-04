@@ -1,16 +1,52 @@
-name: Unsigned video wallpaper IPA
+name: Unsigned AirCard IPA
 on:
   workflow_dispatch:
+  push:
+    branches: [apps-sideloader]
 jobs:
   build:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XC" ]; then XC=$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1); fi
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-core
+
+      # rust-core changed (sideloader + container signer), so rebuild the
+      # static library instead of using the prebuilt AirliftFFI.xcframework.
+      - name: Build AirliftFFI for iOS (device)
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        run: |
+          cd rust-core
+          cargo build --release --target aarch64-apple-ios
+          cd ..
+          rm -rf AirliftFFI.xcframework
+          xcodebuild -create-xcframework \
+            -library rust-core/target/aarch64-apple-ios/release/libairlift_ffi.a \
+            -headers rust-core/include \
+            -output AirliftFFI.xcframework
+
       - name: Generate Xcode project
         run: brew install xcodegen && xcodegen generate
+
       - name: Build unsigned IPA
         run: bash build-ipa.sh
+
       - uses: actions/upload-artifact@v4
         with:
-          name: AirCard-video-wallpaper-unsigned
+          name: AirCard-apps-sideloader-unsigned
           path: build/AirCard-iOS.ipa
