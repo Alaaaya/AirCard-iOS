@@ -165,6 +165,49 @@ int32_t al_set_target_hosts(const char *const *hosts, size_t count);
 void al_clear_target_hosts(void);
 
 
+
+// ---------------------------------------------------------------------------
+// Sideloader (Apps tab) — isideload + idevice, see rust-core/src/sideload.rs
+// ---------------------------------------------------------------------------
+
+// Keychain-backed key/value store supplied by Swift. `get` returns a malloc'd
+// string (freed by Rust with free()) or NULL. `set` with "" deletes the key.
+typedef struct {
+    void *ctx;
+    char *(*get)(void *ctx, const char *key);
+    void (*set)(void *ctx, const char *key, const char *value);
+} ALKeyValueStore;
+
+// Blocking prompt into Swift. `json` has "kind": "two_factor" | "max_certs".
+// Return a malloc'd answer ("code:123456", "sms:<id>", "devices", "resend",
+// "abort"; or comma separated cert serials to revoke) or NULL to abort.
+typedef char *(*ALPromptCb)(void *ctx, const char *json);
+typedef void (*ALProgressCb)(void *ctx, double fraction, const char *stage);
+
+int32_t al_sl_set_storage(ALKeyValueStore store);
+
+// Sign in with an Apple ID. BLOCKS (network + 2FA prompt). `anisette_url` may be NULL/"".
+int32_t al_sl_login(const char *email, const char *password, const char *anisette_url,
+                    ALPromptCb prompt_cb, void *ctx, char **out_json, char **out_error);
+int32_t al_sl_is_logged_in(void);
+void al_sl_logout(void);
+
+// JSON: email, team_id, team_name, cert_serial, cert_expires, app_ids_available, app_ids_max, app_ids[]
+int32_t al_sl_account_info(char **out_json, char **out_error);
+
+// Sign (.ipa or .app) with the free development certificate and install as a
+// real app over the loopback tunnel. JSON: bundle_id, name, version, expires, team_id
+int32_t al_sl_install(const char *pairing_path, const char *app_path, const char *device_name,
+                      ALProgressCb progress_cb, ALLogCallback log_cb, void *ctx,
+                      char **out_json, char **out_error);
+int32_t al_sl_uninstall(const char *pairing_path, const char *bundle_id,
+                        ALLogCallback log_cb, void *ctx, char **out_error);
+
+// Container: patch the guest main executable into a dylib and sign every
+// Mach-O in the extracted .app with the session's development certificate.
+// JSON: executable, signed_files, cert_serial, team_id
+int32_t al_container_sign(const char *app_dir, char **out_json, char **out_error);
+
 #ifdef __cplusplus
 }
 #endif

@@ -45,9 +45,26 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 libc = "0.2"
 
+# isideload (MIT, github.com/nab138/isideload): Apple ID login (GSA/SRP + 2FA),
+# anisette, development certificate / App ID / provisioning profile management
+# and code signing. Keyring storage is disabled: AirCard supplies its own
+# Keychain-backed storage through FFI callbacks.
+isideload = { version = "0.5.2", default-features = false, features = ["install", "tokio-mt"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "aws-lc-rs", "tls12", "std"] }
+base64 = "0.22"
+# Same versions isideload uses, so their types line up (container signer).
+apple-codesign-quick = "0.1.0"
+x509-cert = "0.2.5"
+rootcause = "0.12"
+
 # Apply the same OPACK back-reference patch as SideInstaller:
 # devices emit tag 0xAB when name==model, which causes "unsupported OPACK tag".
 [patch."https://github.com/jkcoxson/idevice.git"]
+idevice = { path = "vendor/idevice" }
+
+# isideload depends on idevice from crates.io; point it at the same patched
+# vendored copy so both share one set of types (IdeviceProvider, RsdProvider...).
+[patch.crates-io]
 idevice = { path = "vendor/idevice" }
 
 [profile.release]
