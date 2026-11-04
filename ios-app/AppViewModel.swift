@@ -35,7 +35,7 @@ final class AppViewModel: ObservableObject {
     }
 
     // MARK: - Tab
-    @Published var selectedTab: AppTab = .pairing
+    @Published var selectedTab: AppTab = .apps
 
     // MARK: - Wallet Cards tab
     @Published var cards: [CardItem] = []
@@ -454,7 +454,7 @@ final class AppViewModel: ObservableObject {
                 }
             }
         }
-        thread.name = "AirCard.SyslogScanner"
+        thread.name = "Mirsa.SyslogScanner"
         thread.stackSize = 4 * 1024 * 1024 // 4 MB stack
         thread.qualityOfService = .userInitiated
         thread.start()
@@ -739,7 +739,7 @@ final class AppViewModel: ObservableObject {
         errorMessage = nil
 
         if !vpnUp {
-            cardFlashLog.append("⚠️ Notice: Loopback VPN (LocalDevVPN or SideStore WireGuard) is strongly recommended for on-device operations.")
+            cardFlashLog.append("⚠️ Notice: Loopback VPN (LocalDevVPN) is strongly recommended for on-device operations.")
         }
 
         let pairingPath = PairingController.pairingFilePath()
@@ -1019,7 +1019,7 @@ final class AppViewModel: ObservableObject {
         syncTargetHostsToRust()
 
         if !vpnUp {
-            passthmFlashLog.append("⚠️ Notice: Loopback VPN (LocalDevVPN or SideStore WireGuard) is strongly recommended for on-device operations.")
+            passthmFlashLog.append("⚠️ Notice: Loopback VPN (LocalDevVPN) is strongly recommended for on-device operations.")
         }
 
         let pairingPath = PairingController.pairingFilePath()
@@ -1203,7 +1203,7 @@ final class AppViewModel: ObservableObject {
                 bold: passcodeBoldTarget
             )
             let tempURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("AirCard_Custom_\(Int(Date().timeIntervalSince1970)).passthm")
+                .appendingPathComponent("Mirsa_Custom_\(Int(Date().timeIntervalSince1970)).passthm")
             try zipData.write(to: tempURL)
             self.exportedThemeURL = tempURL
             self.showShareSheet = true

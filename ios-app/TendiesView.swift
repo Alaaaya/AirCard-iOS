@@ -116,8 +116,8 @@ struct TendiesView: View {
                         : "Uses the first 10 seconds, center-cropped to your screen. Apply through the existing wallpaper flow when ready.")
                         .font(.caption).foregroundStyle(.secondary)
                     Text(arabic
-                        ? "ميزة تجريبية. بحسب مطوّر AirCard، iOS 27.2 beta 3 والأحدث مسدود. ممكن إصدار النظام يأثر على حركة الخلفية."
-                        : "Experimental. AirCard reports its apply method patched on iOS 27.2 beta 3 and later. Animation behavior may vary by iOS version.")
+                        ? "ميزة تجريبية. طريقة التطبيق مسدودة على iOS 27.2 beta 3 والأحدث. ممكن إصدار النظام يأثر على حركة الخلفية."
+                        : "Experimental. The apply method is patched on iOS 27.2 beta 3 and later. Animation behavior may vary by iOS version.")
                         .font(.caption).foregroundStyle(.orange)
                 } footer: {
                     if vm.posterBoardContainer.isEmpty {

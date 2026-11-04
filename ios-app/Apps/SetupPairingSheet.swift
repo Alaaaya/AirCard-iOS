@@ -6,6 +6,7 @@ struct SetupPairingSheet: View {
     @EnvironmentObject var vm: AppViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showFilePicker = false
+    var showsClose = true
 
     private var networkOK: Bool { vm.vpnUp && vm.wifiUp }
 
@@ -17,11 +18,11 @@ struct SetupPairingSheet: View {
                     HStack {
                         Text(L.t("setup.pairing")).font(.largeTitle.bold()).foregroundStyle(.white)
                         Spacer()
-                        Button { dismiss() } label: {
+                        if showsClose { Button { dismiss() } label: {
                             Image(systemName: "xmark").font(.headline).foregroundStyle(.white)
                                 .frame(width: 38, height: 38)
                         }
-                        .appsGlassCapsule()
+                        .appsGlassCapsule() }
                     }
                     .padding(.bottom, 4)
 

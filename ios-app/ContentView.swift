@@ -839,25 +839,13 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $vm.selectedTab) {
-            PairingTab()
-                .tabItem { Label("Pairing", systemImage: "antenna.radiowaves.left.and.right") }
-                .tag(AppTab.pairing)
-
-            WalletCardsTab()
-                .tabItem { Label("Wallet Cards", systemImage: "creditcard.fill") }
-                .tag(AppTab.walletCards)
-
-            PasscodeThemeTab()
-                .tabItem { Label("Passcode", systemImage: "lock.circle.fill") }
-                .tag(AppTab.passcodeThemes)
-
-            TendiesView()
-                .tabItem { Label("Wallpapers", systemImage: "photo.stack.fill") }
-                .tag(AppTab.wallpapers)
-
             AppsTab()
                 .tabItem { Label(L.t("tab"), systemImage: "square.grid.3x3.fill") }
                 .tag(AppTab.apps)
+
+            ToolsTab()
+                .tabItem { Label(L.t("tools.tab"), systemImage: "wand.and.stars") }
+                .tag(AppTab.pairing)
         }
         .onOpenURL { url in
             // "Open in AirCard" for .ipa files → Apps tab import.
@@ -889,11 +877,7 @@ struct ContentView: View {
         .onAppear {
             vm.showSuccessAlert = false
             vm.successAlertMessage = ""
-            if !dontShowSupportOnLaunch {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                    showSupportPopup = true
-                }
-            }
+
         }
     }
 }
@@ -1654,13 +1638,6 @@ struct WalletCardsTab: View {
                                 Label("Clear All Cards", systemImage: "trash")
                             }
 
-                            Divider()
-
-                            Button {
-                                showCredits = true
-                            } label: {
-                                Label("Credits & Donate", systemImage: "heart.fill")
-                            }
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
