@@ -288,252 +288,14 @@ struct SupportPopupSheet: View {
 
 struct CreditsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedTab: Int
-
-    init(initialTab: Int = 0) {
-        _selectedTab = State(initialValue: initialTab)
-    }
-
+    init(initialTab: Int = 0) {}
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                Picker("Section", selection: $selectedTab) {
-                    Text("Credits").tag(0)
-                    Text("Donate ❤️").tag(1)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-
-                Divider()
-
-                ScrollView {
-                    if selectedTab == 0 {
-                        creditsContent
-                    } else {
-                        VStack(spacing: 20) {
-                            DonateView()
-                            Spacer(minLength: 20)
-                        }
-                        .padding(.vertical)
-                    }
-                }
-            }
-            .navigationTitle(selectedTab == 0 ? "Credits" : "Donate & Support")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .bold()
-                }
-            }
+            LicensesView()
+                .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() }.bold() } }
         }
-        .presentationDetents([.medium, .large])
     }
 
-    @ViewBuilder
-    private var creditsContent: some View {
-        VStack(spacing: 20) {
-            // Header Brand
-            VStack(spacing: 8) {
-                Image(systemName: "creditcard.circle.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.blue)
-
-                Text("Mirsa")
-                    .font(.title2.bold())
-
-                Text("Apple Wallet Skins & Passcode Themes (iOS 18.0 – 27.2 b2)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding(.top, 10)
-
-            // Donate banner inside credits
-            Button {
-                withAnimation {
-                    selectedTab = 1
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "heart.fill")
-                        .foregroundStyle(.pink)
-                        .font(.title3)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Support @mak5er Development")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(.primary)
-                        Text("PayPal & Crypto donation options available")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
-                }
-                .padding(12)
-                .background(Color.pink.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 14) {
-                // mak5er (Lead & Core Developer)
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Label("Lead & Core Developer", systemImage: "crown.fill")
-                            .font(.caption.bold().uppercaseSmallCaps())
-                            .foregroundStyle(.orange)
-                        Spacer()
-                        Text("Chief")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.orange.opacity(0.15))
-                            .foregroundStyle(.orange)
-                            .clipShape(Capsule())
-                    }
-
-                    HStack(spacing: 8) {
-                        Text("@mak5er")
-                            .font(.headline.bold())
-
-                        Spacer()
-
-                        Link(destination: URL(string: "https://github.com/mak5er")!) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "link")
-                                Text("GitHub")
-                            }
-                            .font(.caption.bold())
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Link(destination: URL(string: "https://x.com/mak5er")!) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "bubble.left.and.bubble.right.fill")
-                                Text("Twitter / X")
-                            }
-                            .font(.caption.bold())
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                }
-                .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                // merybist (Base IPA Developer)
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Label("Base IPA Developer", systemImage: "hammer.fill")
-                            .font(.caption.bold().uppercaseSmallCaps())
-                            .foregroundStyle(.blue)
-                        Spacer()
-                        Text("Base")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.blue.opacity(0.15))
-                            .foregroundStyle(.blue)
-                            .clipShape(Capsule())
-                    }
-
-                    HStack(spacing: 8) {
-                        Text("@merybist")
-                            .font(.headline.bold())
-
-                        Spacer()
-
-                        Link(destination: URL(string: "https://github.com/merybist")!) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "link")
-                                Text("GitHub")
-                            }
-                            .font(.caption.bold())
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-
-                        Link(destination: URL(string: "https://x.com/merybist")!) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "bubble.left.and.bubble.right.fill")
-                                Text("Twitter / X")
-                            }
-                            .font(.caption.bold())
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                }
-                .padding(14)
-                .background(Color(uiColor: .secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-
-                // Technology acknowledgments
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 12) {
-                        Image(systemName: "bolt.shield.fill")
-                            .font(.title3)
-                            .foregroundStyle(.orange)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Core Exploit")
-                                .font(.subheadline.bold())
-                            Text("airlift (AirTraffic sync sandbox escape)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Divider()
-
-                    HStack(spacing: 12) {
-                        Image(systemName: "lock.shield.fill")
-                            .font(.title3)
-                            .foregroundStyle(.purple)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Passcode Themes")
-                                .font(.subheadline.bold())
-                            Text(".passthm standard (Cowabunga / Nugget)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Divider()
-
-                    HStack(spacing: 12) {
-                        Image(systemName: "bolt.fill")
-                            .font(.title3)
-                            .foregroundStyle(.yellow)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("NeoSpring & PosterBoard")
-                                .font(.subheadline.bold())
-                            Text("SpringBoard reload & .tendies wallpapers (@neonmodder123, @skadz108, @rooootdev)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(14)
-                .background(Color(uiColor: .tertiarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.horizontal)
-
-            Spacer(minLength: 20)
-        }
-        .padding(.vertical)
-    }
 }
 
 // MARK: - Pairing File Guide Sheet
@@ -892,9 +654,6 @@ struct ContentView: View {
                 ShareSheet(items: [url])
             }
         }
-        .sheet(isPresented: $showSupportPopup) {
-            SupportPopupSheet(dontShowOnLaunch: $dontShowSupportOnLaunch)
-        }
         .onAppear {
             vm.showSuccessAlert = false
             vm.successAlertMessage = ""
@@ -1220,7 +979,7 @@ struct PairingTab: View {
                         HStack(spacing: 4) {
                             Image(systemName: "heart.fill")
                                 .font(.caption)
-                            Text("Credits & Donate")
+                            Text(tr("About Mirsa", "حول مرسى"))
                                 .font(.caption.bold())
                         }
                         .foregroundStyle(.pink)

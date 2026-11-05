@@ -1029,12 +1029,48 @@ struct LicensesView: View {
              note: "AFC and installation_proxy over the on-device loopback tunnel; pairing and RSD."),
         Item(name: "apple-codesign-quick", license: "LGPL-2.1-or-later", url: "https://github.com/Dadoum/apple-codesign-quick",
              note: "Code signing (used by isideload). Statically linked: Mirsa's full source and build scripts are public so you can relink with a modified version, as the LGPL requires."),
-        Item(name: "Mirsa Container loader", license: "MIT (Mirsa)", url: "https://github.com/Alaaaya/AirCard-iOS",
-             note: "Written for Mirsa. Uses the same general idea as LiveContainer (AGPL-3.0) but contains none of its code."),
+        Item(name: "Mirsa base code", license: "MIT", url: "https://github.com/Alaaaya/AirCard-iOS",
+             note: "Copyright (c) 2026 Johnny Franks. MIT License."),
     ]
 
+    private var version: String {
+        let i = Bundle.main.infoDictionary
+        let v = i?["CFBundleShortVersionString"] as? String ?? "?"
+        let b = i?["CFBundleVersion"] as? String ?? "?"
+        return "\(v) (\(b))"
+    }
+    private var appIcon: UIImage? {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let p = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let f = (p["CFBundleIconFiles"] as? [String])?.last else { return nil }
+        return UIImage(named: f)
+    }
+
     var body: some View {
-        List(items) { i in
+        List {
+            Section {
+                VStack(spacing: 10) {
+                    if let img = appIcon {
+                        Image(uiImage: img).resizable().frame(width: 84, height: 84)
+                            .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    }
+                    Text("Mirsa").font(.title.bold())
+                    Text(tr("Version ", "الإصدار ") + version).font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity).padding(.vertical, 8)
+                LabeledContent(tr("Developer", "المطوّر"), value: "Alaa")
+                Link(destination: URL(string: "https://x.com/rasmtk30")!) {
+                    LabeledContent("X", value: "@rasmtk30")
+                }
+            }
+            Section(tr("Open-source licenses", "تراخيص المكتبات المفتوحة")) {
+                ForEach(items) { i in licenseRow(i) }
+            }
+        }
+        .navigationTitle(tr("About", "حول التطبيق"))
+    }
+
+    private func licenseRow(_ i: Item) -> some View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(i.name).font(.headline)
@@ -1047,7 +1083,5 @@ struct LicensesView: View {
                 if let u = URL(string: i.url) { Link(i.url, destination: u).font(.caption) }
             }
             .padding(.vertical, 4)
-        }
-        .navigationTitle(L.t("settings.licenses"))
     }
 }
