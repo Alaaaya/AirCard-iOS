@@ -843,6 +843,10 @@ struct ContentView: View {
                 .tabItem { Label(L.t("tab"), systemImage: "square.grid.3x3.fill") }
                 .tag(AppTab.apps)
 
+            SourcesTab()
+                .tabItem { Label(tr("Sources", "السورسات"), systemImage: "shippingbox.fill") }
+                .tag(AppTab.sources)
+
             ToolsTab()
                 .tabItem { Label(L.t("tools.tab"), systemImage: "wand.and.stars") }
                 .tag(AppTab.pairing)
