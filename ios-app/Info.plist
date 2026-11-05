@@ -75,6 +75,17 @@
 	<string>An app running in the AirCard Container wants to use speech recognition.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.alaa.mirsa.launch</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mirsa</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

@@ -102,7 +102,7 @@ enum IconTint {
 
 // MARK: - Root
 
-enum AppsSegment { case container, real }
+enum AppsSegment { case container, real, downloads }
 
 struct AppsTab: View {
     @EnvironmentObject var vm: AppViewModel
@@ -114,6 +114,8 @@ struct AppsTab: View {
     @State private var showSettings = false
     @State private var infoApp: ManagedApp?
     @State private var backupApp: ManagedApp?
+    @State private var shortcutError: String?
+    @ObservedObject private var downloads = DownloadsLibrary.shared
     @Namespace private var segNS
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 18), count: 3)
@@ -176,6 +178,9 @@ struct AppsTab: View {
                 .presentationBackground(.ultraThinMaterial)
         }
         .sheet(item: $backupApp) { a in BackupsSheet(app: a) }
+        .alert(tr("Home Screen", "الشاشة الرئيسية"), isPresented: Binding(get: { shortcutError != nil }, set: { if !$0 { shortcutError = nil } })) {
+            Button("OK") { shortcutError = nil }
+        } message: { Text(shortcutError ?? "") }
         .sheet(item: $infoApp) { a in
             AppInfoSheet(app: a, store: store)
                 .presentationDetents([.medium])
@@ -261,6 +266,7 @@ struct AppsTab: View {
         HStack(spacing: 4) {
             segButton(.container, title: L.t("seg.container"), trailing: "∞")
             segButton(.real, title: L.t("seg.real"), trailing: "\(store.slotsUsed)/\(store.realLimit)")
+            segButton(.downloads, title: tr("Downloads", "التنزيلات"), trailing: "\(downloads.items.count)")
         }
         .padding(4)
         .appsGlassCapsule()
@@ -271,7 +277,7 @@ struct AppsTab: View {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { segment = s }
         } label: {
             HStack(spacing: 6) {
-                Text(title).font(.subheadline.weight(.semibold))
+                Text(title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
                 Text(trailing)
                     .font(.caption.weight(.bold).monospacedDigit())
                     .foregroundStyle(.white.opacity(segment == s ? 0.9 : 0.5))
@@ -297,7 +303,9 @@ struct AppsTab: View {
 
     @ViewBuilder
     private var grid: some View {
-        if currentApps.isEmpty {
+        if segment == .downloads {
+            DownloadsList(store: store)
+        } else if currentApps.isEmpty {
             ContentUnavailableView {
                 Label(L.t("empty.title"), systemImage: segment == .container ? "shippingbox" : "app.badge")
                     .foregroundStyle(.white)
@@ -338,6 +346,9 @@ struct AppsTab: View {
             .disabled(store.slotsLeft == 0)
             Button { Task { await store.resign(app) } } label: { Label(L.t("menu.resign"), systemImage: "signature") }
             Button { backupApp = app } label: { Label(tr("Data backups", "نسخ البيانات"), systemImage: "externaldrive") }
+            Button { shortcutError = HomeShortcut.add(app) } label: {
+                Label(tr("Add to Home Screen", "إضافة للشاشة الرئيسية"), systemImage: "plus.app")
+            }
         } else {
             Button { Task { await store.move(app, to: .container, vm: vm) } } label: {
                 Label(L.t("menu.toContainer"), systemImage: "shippingbox")

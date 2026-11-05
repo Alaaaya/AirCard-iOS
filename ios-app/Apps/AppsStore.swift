@@ -375,6 +375,9 @@ final class AppsStore: ObservableObject {
                                 name: name, version: version, icon: Self.findIcon(in: app, info: info),
                                 wantsNotifications: modes.contains("remote-notification"),
                                 hasExtensions: hasExt, sizeBytes: size)
+        if !url.standardizedFileURL.path.hasPrefix(DownloadsLibrary.root.standardizedFileURL.path) {
+            DownloadsLibrary.shared.add(ipa: ipa, bundleID: bid, name: name, version: version, size: size, icon: pending?.icon)
+        }
     }
 
     static func findIcon(in app: URL, info: [String: Any]) -> UIImage? {

@@ -852,6 +852,8 @@ struct ContentView: View {
                 .tag(AppTab.pairing)
         }
         .onOpenURL { url in
+            // mirsa://launch?bundle=… from a Home Screen shortcut.
+            if HomeShortcut.handle(url) { vm.selectedTab = .apps; return }
             // "Open in AirCard" for .ipa files → Apps tab import.
             guard url.isFileURL, url.pathExtension.lowercased() == "ipa" else { return }
             vm.selectedTab = .apps
