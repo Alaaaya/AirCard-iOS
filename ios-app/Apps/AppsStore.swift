@@ -508,6 +508,8 @@ final class AppsStore: ObservableObject {
         let a = dir.appendingPathComponent("a-\(UUID().uuidString).dylib")
         let b = dir.appendingPathComponent("b-\(UUID().uuidString).dylib")
         var out = ["[self-test]"]
+        // Remove the certificate export left by an earlier test build.
+        try? fm.removeItem(at: fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Mirsa-Certificate.p12"))
         if let f = MirsaProcessFlags() { out.append("process: " + String(cString: f)); free(f) }
         out.append("iOS \(UIDevice.current.systemVersion)")
         out.append("0 (in Mirsa bundle): " + Self.kernelCheck(probe.path))
