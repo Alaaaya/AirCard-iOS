@@ -161,7 +161,22 @@ impl CmsSigner for RustCryptoCmsSigner {
             .add_signer_info::<RsaSha256SigningKey, rsa::pkcs1v15::Signature>(signer_info)
             .map_err(cms_builder_error)?;
 
-        let content_info = builder.build().map_err(cms_builder_error)?;
+        let mut content_info = builder.build().map_err(cms_builder_error)?;
+        // Like zsign / Apple codesign: SignerInfo.signatureAlgorithm is plain
+        // rsaEncryption (the digest is named by digestAlgorithm).
+        let mut signed_data: cms::signed_data::SignedData =
+            content_info.content.decode_as().map_err(cms_der_error)?;
+        let mut infos: Vec<cms::signed_data::SignerInfo> =
+            signed_data.signer_infos.0.into_vec();
+        for info in infos.iter_mut() {
+            info.signature_algorithm = AlgorithmIdentifierOwned {
+                oid: const_oid::db::rfc5912::RSA_ENCRYPTION,
+                parameters: Some(Any::null()),
+            };
+        }
+        signed_data.signer_infos =
+            cms::signed_data::SignerInfos(SetOfVec::try_from(infos).map_err(cms_der_error)?);
+        content_info.content = Any::encode_from(&signed_data).map_err(cms_der_error)?;
         content_info.to_der().map_err(cms_der_error)
     }
 }
@@ -285,7 +300,12 @@ fn apple_code_directory_digest_attribute(request: &CmsSigningRequest<'_>) -> Res
     }
 
     let mut values = Vec::with_capacity(request.code_directories.len());
-    for code_directory in request.code_directories {
+    // zsign / LiveContainer list only the SHA-256 CodeDirectory here.
+    for code_directory in request
+        .code_directories
+        .iter()
+        .filter(|cd| cd.algorithm == HashAlgorithm::Sha256)
+    {
         let digest = code_directory.algorithm.digest(code_directory.bytes);
         let digest = OctetStringRef::new(&digest).map_err(cms_der_error)?;
         values.push(

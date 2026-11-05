@@ -204,6 +204,7 @@ pub(crate) struct SuperblobSizePlan<'a> {
 
 pub(crate) fn planned_superblob_len_from_parts(plan: SuperblobSizePlan<'_>) -> usize {
     let count = 4
+        - usize::from(plan.entitlements_blob_len == 0)
         + usize::from(plan.der_entitlements_blob_len.is_some())
         + usize::from(plan.has_cms_signature);
     let mut len = 12 + count * 8;
@@ -214,6 +215,7 @@ pub(crate) fn planned_superblob_len_from_parts(plan: SuperblobSizePlan<'_>) -> u
         plan.team_id,
         plan.code_limit,
         plan.is_executable,
+        plan.entitlements_blob_len,
     );
     len += code_directory_len(
         HashAlgorithm::Sha256,
@@ -221,6 +223,7 @@ pub(crate) fn planned_superblob_len_from_parts(plan: SuperblobSizePlan<'_>) -> u
         plan.team_id,
         plan.code_limit,
         plan.is_executable,
+        plan.entitlements_blob_len,
     );
     len += plan.requirements_blob_len;
     len += plan.entitlements_blob_len;
@@ -289,8 +292,10 @@ pub fn encode_embedded_signature(
     let mut blobs: Vec<(u32, Cow<'_, [u8]>)> = vec![
         (CSSLOT_CODEDIRECTORY, Cow::Owned(primary_code_directory)),
         (CSSLOT_REQUIREMENTS, Cow::Borrowed(params.requirements_blob)),
-        (CSSLOT_ENTITLEMENTS, Cow::Borrowed(params.entitlements_blob)),
     ];
+    if !params.entitlements_blob.is_empty() || params.is_executable {
+        blobs.push((CSSLOT_ENTITLEMENTS, Cow::Borrowed(params.entitlements_blob)));
+    }
 
     if let Some(der_entitlements_blob) = params.der_entitlements_blob {
         blobs.push((
@@ -311,15 +316,23 @@ pub fn encode_embedded_signature(
     Ok(encode_superblob(blobs))
 }
 
+/// Container mode: a non-executable without entitlements gets only the
+/// Info.plist and requirements special slots and no entitlements blob
+/// (matches zsign / LiveContainer output for guest dylibs).
+fn special_slots_for(is_executable: bool, entitlements_len: usize) -> usize {
+    if is_executable { 7 } else if entitlements_len == 0 { 2 } else { 5 }
+}
+
 fn code_directory_len(
     algorithm: HashAlgorithm,
     identifier: &str,
     team_id: &str,
     code_limit: usize,
     is_executable: bool,
+    entitlements_len: usize,
 ) -> usize {
     let hash_len = algorithm.digest_len();
-    let special_slots = if is_executable { 7 } else { 5 };
+    let special_slots = special_slots_for(is_executable, entitlements_len);
     let code_slots = code_limit.div_ceil(CODEDIRECTORY_PAGE_SIZE);
 
     CODEDIRECTORY_HEADER_LEN
@@ -336,7 +349,7 @@ fn encode_code_directory(
     code_hashes: &[CodePageHashes],
 ) -> Result<Vec<u8>> {
     let hash_len = algorithm.digest_len();
-    let special_slot_count = if params.is_executable { 7 } else { 5 };
+    let special_slot_count = special_slots_for(params.is_executable, params.entitlements_blob.len());
     let code_slot_count = code_hashes.len();
     let dynamic_len = params.identifier.len()
         + 1
@@ -392,13 +405,15 @@ fn encode_code_directory(
         push_zero_hash(&mut out, hash_len);
     }
 
-    algorithm.push_digest(&mut out, params.entitlements_blob);
-    push_zero_hash(&mut out, hash_len);
-
-    if let Some(code_resources) = params.code_resources {
-        algorithm.push_digest(&mut out, code_resources);
-    } else {
+    if special_slot_count > 2 {
+        algorithm.push_digest(&mut out, params.entitlements_blob);
         push_zero_hash(&mut out, hash_len);
+
+        if let Some(code_resources) = params.code_resources {
+            algorithm.push_digest(&mut out, code_resources);
+        } else {
+            push_zero_hash(&mut out, hash_len);
+        }
     }
 
     algorithm.push_digest(&mut out, params.requirements_blob);

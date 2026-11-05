@@ -43,6 +43,9 @@ pub struct MachOSigningConfig<'a> {
     pub cms_blob_reservation: usize,
     /// Requirements blob to embed (e.g. a designated requirement). Empty set when None.
     pub requirements: Option<&'a [u8]>,
+    /// Container mode: leave out the entitlements blob on non-executables
+    /// (as zsign / LiveContainer do for guest code).
+    pub omit_entitlements: bool,
 }
 
 impl<'a> MachOSigningConfig<'a> {
@@ -61,6 +64,7 @@ impl<'a> MachOSigningConfig<'a> {
             cms_signer,
             cms_blob_reservation: DEFAULT_CMS_BLOB_RESERVATION,
             requirements: None,
+            omit_entitlements: false,
         }
     }
 }
@@ -132,7 +136,11 @@ fn sign_thin_macho(
         .map(|r| r.to_vec())
         .unwrap_or_else(empty_requirements_blob);
     let entitlements_xml = entitlements_xml(config.entitlements)?;
-    let entitlements = entitlements_blob(&entitlements_xml);
+    let entitlements = if config.omit_entitlements && !macho.is_executable() {
+        Vec::new()
+    } else {
+        entitlements_blob(&entitlements_xml)
+    };
     let der_entitlements = if macho.is_executable() {
         Some(der_entitlements_blob(config.entitlements)?)
     } else {

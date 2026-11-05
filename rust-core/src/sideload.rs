@@ -607,6 +607,7 @@ async fn container_sign_file(path: String, ident: String) -> Result<serde_json::
         let req = designated_requirement(&ident, &leaf_common_name(&id));
         let mut cfg = apple_codesign_quick::MachOSigningConfig::new(&ident, &team_id, &empty, Some(&signer));
         cfg.requirements = Some(&req);
+        cfg.omit_entitlements = true;
         apple_codesign_quick::sign_macho_file(std::path::Path::new(&path), &cfg)
             .map_err(|e| format!("Signing failed: {e}"))?;
         Ok(serde_json::json!({ "ok": true }))
@@ -646,6 +647,7 @@ async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<s
             let req = designated_requirement(ident, &cn);
             let mut cfg = apple_codesign_quick::MachOSigningConfig::new(ident, &team, &empty, Some(&signer));
             cfg.requirements = Some(&req);
+        cfg.omit_entitlements = true;
             apple_codesign_quick::sign_macho_file(path, &cfg)
                 .map_err(|e| format!("Signing {} failed: {e}", path.display()))?;
             signed += 1;
