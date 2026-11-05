@@ -1,4 +1,6 @@
 import Foundation
+import UIKit
+import UserNotifications
 import AirliftFFI
 
 /// Drives the RPPairing host: requests Local Network, keeps the app alive while
@@ -137,6 +139,7 @@ final class PairingController: ObservableObject {
         running = false
         pairingPIN = nil
         pairingStatus = "Cancelled"
+        PairNotifier.shared.clear()
         resolve(.failure(CancellationError()))
     }
 
@@ -153,6 +156,7 @@ final class PairingController: ObservableObject {
         pairingPIN = nil
         pairingStatus = "Starting local host…"
 
+        PairNotifier.shared.prepare()
         Task {
             _ = await localNetwork.request()
             guard running else { return }
@@ -227,6 +231,7 @@ final class PairingController: ObservableObject {
         }
         running = false
         pairingPIN = nil
+        PairNotifier.shared.finish(success: { if case .success = outcome { return true }; return false }())
 
         switch outcome {
         case let .success(name, path):
@@ -264,6 +269,8 @@ final class PairingController: ObservableObject {
 
     fileprivate func presentPin(_ pin: String) {
         pairingPIN = pin
+        UIPasteboard.general.string = pin
+        PairNotifier.shared.showPIN(pin)
         pairingStatus = "Enter PIN \(pin) in Settings › Privacy & Security › Developer Mode › Pair with Mirsa"
     }
 
@@ -306,3 +313,77 @@ private func cStr(_ ptr: UnsafeMutablePointer<CChar>?) -> String {
     return String(cString: ptr)
 }
 
+
+
+// MARK: - Pairing code as a notification
+
+/// Shows the pairing code as a notification while the user is in Settings,
+/// shows it again if they swipe it away before pairing is done, and brings
+/// Mirsa back once pairing finishes.
+final class PairNotifier: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = PairNotifier()
+    private let pinID = "mirsa.pair.pin"
+    private let doneID = "mirsa.pair.done"
+    private let category = "mirsa.pair.pin.cat"
+    private var currentPIN: String?
+
+    func prepare() {
+        let c = UNUserNotificationCenter.current()
+        c.delegate = self
+        c.setNotificationCategories([UNNotificationCategory(identifier: category, actions: [],
+                                                            intentIdentifiers: [], options: [.customDismissAction])])
+        c.requestAuthorization(options: [.alert, .sound, .timeSensitive]) { _, _ in }
+    }
+
+    func showPIN(_ pin: String) {
+        currentPIN = pin
+        post(id: pinID, title: L.f("pair.notifPIN", pin), body: L.t("pair.notifPINBody"), category: category)
+    }
+
+    func clear() {
+        currentPIN = nil
+        let c = UNUserNotificationCenter.current()
+        c.removeDeliveredNotifications(withIdentifiers: [pinID])
+        c.removePendingNotificationRequests(withIdentifiers: [pinID])
+    }
+
+    func finish(success: Bool) {
+        clear()
+        post(id: doneID, title: L.t(success ? "pair.notifDone" : "pair.notifFail"),
+             body: L.t("pair.notifDoneBody"), category: nil)
+        // Try to come back to the front by ourselves; the notification stays as fallback.
+        guard success else { return }
+        MainActor.assumeIsolated {
+            if UIApplication.shared.applicationState != .active {
+                _ = AppsStore.openInstalledApp(bundleID: Bundle.main.bundleIdentifier ?? "")
+            }
+        }
+    }
+
+    private func post(id: String, title: String, body: String, category: String?) {
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+        if let category { content.categoryIdentifier = category }
+        let req = UNNotificationRequest(identifier: id, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req)
+    }
+
+    // Swiped away before pairing finished: show it again.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler done: @escaping () -> Void) {
+        if response.actionIdentifier == UNNotificationDismissActionIdentifier,
+           response.notification.request.identifier == pinID, let pin = currentPIN {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.showPIN(pin) }
+        }
+        done()
+    }
+
+    // Mirsa in front: no banner for the code (it is on screen), banner for the result.
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent n: UNNotification,
+                                withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+        done(n.request.identifier == pinID ? [] : [.banner, .sound])
+    }
+}
