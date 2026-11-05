@@ -113,6 +113,7 @@ struct AppsTab: View {
     @State private var showLogin = false
     @State private var showSettings = false
     @State private var infoApp: ManagedApp?
+    @State private var backupApp: ManagedApp?
     @Namespace private var segNS
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 18), count: 3)
@@ -174,6 +175,7 @@ struct AppsTab: View {
                 .presentationDetents([.large])
                 .presentationBackground(.ultraThinMaterial)
         }
+        .sheet(item: $backupApp) { a in BackupsSheet(app: a) }
         .sheet(item: $infoApp) { a in
             AppInfoSheet(app: a, store: store)
                 .presentationDetents([.medium])
@@ -335,6 +337,7 @@ struct AppsTab: View {
             }
             .disabled(store.slotsLeft == 0)
             Button { Task { await store.resign(app) } } label: { Label(L.t("menu.resign"), systemImage: "signature") }
+            Button { backupApp = app } label: { Label(tr("Data backups", "نسخ البيانات"), systemImage: "externaldrive") }
         } else {
             Button { Task { await store.move(app, to: .container, vm: vm) } } label: {
                 Label(L.t("menu.toContainer"), systemImage: "shippingbox")

@@ -422,6 +422,9 @@ final class AppsStore: ObservableObject {
             id: p.bundleID, name: p.name, version: p.version, sizeBytes: p.sizeBytes,
             location: location, installedBundleID: nil, expires: nil, signedSerial: nil,
             wantsNotifications: p.wantsNotifications, hasExtensions: p.hasExtensions, addedAt: Date())
+        if location == .container, apps.contains(where: { $0.id == p.bundleID && $0.location == .container }) {
+            await backupData(app, quiet: true)
+        }
         app.name = p.name; app.version = p.version; app.sizeBytes = p.sizeBytes
 
         switch location {
@@ -653,6 +656,7 @@ final class AppsStore: ObservableObject {
 
     func delete(_ app: ManagedApp, vm: AppViewModel?) async {
         let fm = FileManager.default
+        if app.location == .container { await backupData(app, quiet: true) }
         if app.location == .real, let bid = app.installedBundleID, networkReady(vm) {
             _ = try? await Task.detached { try SideloadService.uninstall(bundleID: bid) }.value
         }
