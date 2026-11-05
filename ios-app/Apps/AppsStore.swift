@@ -511,6 +511,18 @@ final class AppsStore: ObservableObject {
         if let f = MirsaProcessFlags() { out.append("process: " + String(cString: f)); free(f) }
         out.append("iOS \(UIDevice.current.systemVersion)")
         out.append("0 (in Mirsa bundle): " + Self.kernelCheck(probe.path))
+        // Probe inside a fake .app that carries Mirsa's provisioning profile.
+        let fakeApp = Self.appDir("selftest-app").appendingPathComponent("Probe.app")
+        try? fm.removeItem(at: fakeApp.deletingLastPathComponent())
+        try? fm.createDirectory(at: fakeApp, withIntermediateDirectories: true)
+        let prof = Bundle.main.bundleURL.appendingPathComponent("embedded.mobileprovision")
+        try? fm.copyItem(at: prof, to: fakeApp.appendingPathComponent("embedded.mobileprovision"))
+        try? fm.copyItem(at: Bundle.main.bundleURL.appendingPathComponent("Info.plist"), to: fakeApp.appendingPathComponent("Info.plist"))
+        let inApp = fakeApp.appendingPathComponent("MirsaProbe.dylib")
+        if (try? fm.copyItem(at: probe, to: inApp)) != nil {
+            out.append("A-app (with profile): " + Self.kernelCheck(inApp.path))
+        }
+        try? fm.removeItem(at: fakeApp.deletingLastPathComponent())
         for (label, base) in [("Documents", fm.urls(for: .documentDirectory, in: .userDomainMask)[0]),
                               ("tmp", fm.temporaryDirectory)] {
             let t = base.appendingPathComponent("probe-\(UUID().uuidString).dylib")

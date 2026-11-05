@@ -585,6 +585,14 @@ async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<s
     tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
         let signer = container_signer(&id)?;
         let prepared = crate::container::prepare_bundle(&dir)?;
+        // Like zsign/LiveContainer: put the host's provisioning profile in the
+        // guest bundle, so iOS can find the profile for the developer signature.
+        if let Some(prof) = std::env::current_exe().ok()
+            .and_then(|e| e.parent().map(|p| p.join("embedded.mobileprovision")))
+            .and_then(|p| std::fs::read(p).ok())
+        {
+            let _ = std::fs::write(dir.join("embedded.mobileprovision"), prof);
+        }
         let empty = plist::Dictionary::new();
         let mut signed = 0usize;
         for (path, ident) in &prepared.macho_files {
