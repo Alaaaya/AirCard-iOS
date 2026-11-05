@@ -554,6 +554,46 @@ fn container_signer(id: &CertificateIdentity) -> Result<apple_codesign_quick::Ru
     })
 }
 
+
+/// Designated requirement like zsign/codesign:
+/// identifier "<id>" and anchor apple generic and
+/// certificate leaf[subject.CN] = "<cn>" and certificate 1[field.1.2.840.113635.100.6.2.1] exists
+fn designated_requirement(ident: &str, cn: &str) -> Vec<u8> {
+    fn be(v: &mut Vec<u8>, x: u32) { v.extend_from_slice(&x.to_be_bytes()); }
+    fn data(v: &mut Vec<u8>, d: &[u8]) {
+        be(v, d.len() as u32);
+        v.extend_from_slice(d);
+        while v.len() % 4 != 0 { v.push(0); }
+    }
+    let mut e = Vec::new();
+    be(&mut e, 1); // kind: expression form
+    be(&mut e, 6); be(&mut e, 2); data(&mut e, ident.as_bytes()); // and(ident, ...)
+    be(&mut e, 6); be(&mut e, 15); // and(anchor apple generic, ...)
+    be(&mut e, 6); // and(
+    be(&mut e, 11); be(&mut e, 0); data(&mut e, b"subject.CN"); be(&mut e, 1); data(&mut e, cn.as_bytes());
+    be(&mut e, 14); be(&mut e, 1); data(&mut e, &[0x2a, 0x86, 0x48, 0x86, 0xf7, 0x63, 0x64, 0x06, 0x02, 0x01]); be(&mut e, 0);
+    let mut req = Vec::new();
+    be(&mut req, 0xfade0c00); be(&mut req, (8 + e.len()) as u32); req.extend_from_slice(&e);
+    let mut out = Vec::new();
+    be(&mut out, 0xfade0c01); be(&mut out, (20 + req.len()) as u32); be(&mut out, 1);
+    be(&mut out, 3); be(&mut out, 20);
+    out.extend_from_slice(&req);
+    out
+}
+
+fn leaf_common_name(id: &CertificateIdentity) -> String {
+    use x509_cert::der::asn1::{PrintableStringRef, Utf8StringRef};
+    for rdn in id.certificate.tbs_certificate.subject.0.iter() {
+        for atv in rdn.0.iter() {
+            if atv.oid.to_string() == "2.5.4.3" {
+                if let Ok(s) = atv.value.decode_as::<Utf8StringRef>() { return s.as_str().to_string(); }
+                if let Ok(s) = atv.value.decode_as::<PrintableStringRef>() { return s.as_str().to_string(); }
+            }
+        }
+    }
+    String::new()
+}
+
 /// Signs one Mach-O file as-is (no patching) with the container signer.
 async fn container_sign_file(path: String, ident: String) -> Result<serde_json::Value, String> {
     let (id, team_id) = {
@@ -564,7 +604,9 @@ async fn container_sign_file(path: String, ident: String) -> Result<serde_json::
     tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
         let signer = container_signer(&id)?;
         let empty = plist::Dictionary::new();
-        let cfg = apple_codesign_quick::MachOSigningConfig::new(&ident, &team_id, &empty, Some(&signer));
+        let req = designated_requirement(&ident, &leaf_common_name(&id));
+        let mut cfg = apple_codesign_quick::MachOSigningConfig::new(&ident, &team_id, &empty, Some(&signer));
+        cfg.requirements = Some(&req);
         apple_codesign_quick::sign_macho_file(std::path::Path::new(&path), &cfg)
             .map_err(|e| format!("Signing failed: {e}"))?;
         Ok(serde_json::json!({ "ok": true }))
@@ -584,6 +626,7 @@ async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<s
     let team = team_id.clone();
     tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
         let signer = container_signer(&id)?;
+        let cn = leaf_common_name(&id);
         let prepared = crate::container::prepare_bundle(&dir)?;
         // Like zsign/LiveContainer: put the host's provisioning profile in the
         // guest bundle, so iOS can find the profile for the developer signature.
@@ -600,7 +643,9 @@ async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<s
             // provisioning profile, whose App ID is the host's bundle id, so
             // every guest Mach-O is signed under the host's identifier.
             let ident: &str = host_ident.as_deref().unwrap_or(ident.as_str());
-            let cfg = apple_codesign_quick::MachOSigningConfig::new(ident, &team, &empty, Some(&signer));
+            let req = designated_requirement(ident, &cn);
+            let mut cfg = apple_codesign_quick::MachOSigningConfig::new(ident, &team, &empty, Some(&signer));
+            cfg.requirements = Some(&req);
             apple_codesign_quick::sign_macho_file(path, &cfg)
                 .map_err(|e| format!("Signing {} failed: {e}", path.display()))?;
             signed += 1;

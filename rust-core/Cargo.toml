@@ -66,6 +66,8 @@ idevice = { path = "vendor/idevice" }
 # vendored copy so both share one set of types (IdeviceProvider, RsdProvider...).
 [patch.crates-io]
 idevice = { path = "vendor/idevice" }
+# Adds a designated requirement option (like zsign) to the container signer.
+apple-codesign-quick = { path = "vendor/apple-codesign-quick" }
 
 [profile.release]
 opt-level = 3
