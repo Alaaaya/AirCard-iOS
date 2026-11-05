@@ -529,7 +529,19 @@ async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<s
     let serial = id.get_serial_number();
     let team = team_id.clone();
     tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        let signer = signer_for(&id)?;
+        // Use the same certificate chain the real-app signer uses: the one
+        // built from this app's own provisioning profile (falls back to the
+        // bundled Apple CAs when there is no profile).
+        let signer = match std::env::current_exe().ok()
+            .and_then(|e| e.parent().map(|p| p.join("embedded.mobileprovision")))
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|d| apple_codesign_quick::ProvisioningProfile::parse(&d).ok())
+            .and_then(|prof| id.profile_to_certificate_chain(&prof).ok())
+        {
+            Some(chain) => apple_codesign_quick::RustCryptoCmsSigner::new(
+                id.private_key.clone(), id.certificate.clone(), chain),
+            None => signer_for(&id)?,
+        };
         let prepared = crate::container::prepare_bundle(&dir)?;
         let empty = plist::Dictionary::new();
         let mut signed = 0usize;

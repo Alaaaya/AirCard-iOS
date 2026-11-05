@@ -26,6 +26,9 @@
 #import <mach-o/dyld.h>
 #import <mach-o/loader.h>
 #import <crt_externs.h>
+#include <fcntl.h>
+#include <sys/fcntl.h>
+#include <unistd.h>
 
 static NSString *const kBundleKey = @"aircard.guest.bundlePath";
 static NSString *const kDataKey   = @"aircard.guest.dataPath";
@@ -73,6 +76,47 @@ static uint64_t AirCardEntryOffset(const struct mach_header_64 *h) {
 }
 
 static char *gOrigHome, *gOrigFixed, *gOrigTmp;
+
+/// Asks the kernel to validate the guest's signature and returns its reason
+/// (F_ADDFILESIGS_RETURN + F_CHECK_LV), for the error shown in Mirsa.
+static NSString *AirCardKernelSignatureCheck(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return [NSString stringWithFormat:@"open errno=%d", errno];
+    struct mach_header_64 h;
+    if (pread(fd, &h, sizeof(h), 0) != sizeof(h) || h.magic != MH_MAGIC_64) { close(fd); return @"not a thin arm64 Mach-O"; }
+    NSMutableData *cmds = [NSMutableData dataWithLength:h.sizeofcmds];
+    pread(fd, cmds.mutableBytes, h.sizeofcmds, sizeof(h));
+    const uint8_t *p = cmds.bytes; uint32_t dataoff = 0, datasize = 0;
+    for (uint32_t i = 0; i < h.ncmds; i++) {
+        const struct load_command *lc = (const struct load_command *)p;
+        if (lc->cmd == LC_CODE_SIGNATURE) {
+            const struct linkedit_data_command *cs = (const struct linkedit_data_command *)lc;
+            dataoff = cs->dataoff; datasize = cs->datasize;
+        }
+        p += lc->cmdsize;
+    }
+    if (!datasize) { close(fd); return @"no LC_CODE_SIGNATURE"; }
+    fsignatures_t sig = {0};
+    sig.fs_file_start = 0;
+    sig.fs_blob_start = (void *)(uintptr_t)dataoff;
+    sig.fs_blob_size = datasize;
+    NSString *r;
+    if (fcntl(fd, F_ADDFILESIGS_RETURN, &sig) == -1) {
+        r = [NSString stringWithFormat:@"F_ADDFILESIGS failed errno=%d (%s)", errno, strerror(errno)];
+    } else {
+        char msg[1024] = {0};
+        fchecklv_t lv = {0};
+        lv.lv_file_start = 0;
+        lv.lv_error_message_size = sizeof(msg);
+        lv.lv_error_message = msg;
+        if (fcntl(fd, F_CHECK_LV, &lv) == -1)
+            r = [NSString stringWithFormat:@"F_CHECK_LV failed errno=%d: %s", errno, msg];
+        else
+            r = @"kernel accepts the signature";
+    }
+    close(fd);
+    return r;
+}
 
 static void AirCardRestoreEnv(void) {
     if (gOrigHome) setenv("HOME", gOrigHome, 1); else unsetenv("HOME");
@@ -130,7 +174,8 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
         void *handle = dlopen(exe.fileSystemRepresentation, RTLD_LAZY | RTLD_GLOBAL);
         if (!handle) {
             const char *err = dlerror();
-            AirCardGuestFail([NSString stringWithFormat:@"dlopen failed: %s", err ? err : "unknown"]);
+            NSString *kc = AirCardKernelSignatureCheck(exe.fileSystemRepresentation);
+            AirCardGuestFail([NSString stringWithFormat:@"[kernel] %@\n\ndlopen failed: %s", kc, err ? err : "unknown"]);
             // Restore so AirCard itself keeps working.
             gGuestBundle = nil;
             method_setImplementation(m, original);
