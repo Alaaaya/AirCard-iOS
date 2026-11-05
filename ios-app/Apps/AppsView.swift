@@ -107,6 +107,7 @@ enum AppsSegment { case container, real }
 struct AppsTab: View {
     @EnvironmentObject var vm: AppViewModel
     @StateObject private var store = AppsStore.shared
+    @StateObject private var updater = MirsaUpdater.shared
     @State private var segment: AppsSegment = .container
     @State private var showPicker = false
     @State private var showLogin = false
@@ -168,6 +169,11 @@ struct AppsTab: View {
             AppsSettingsSheet(store: store, onSignIn: { showSettings = false; showLogin = true })
                 .environmentObject(vm)
         }
+        .sheet(item: $updater.available) { rel in
+            MirsaUpdateSheet(release: rel, updater: updater) { Task { await updater.install(rel, vm: vm) } }
+                .presentationDetents([.large])
+                .presentationBackground(.ultraThinMaterial)
+        }
         .sheet(item: $infoApp) { a in
             AppInfoSheet(app: a, store: store)
                 .presentationDetents([.medium])
@@ -196,6 +202,7 @@ struct AppsTab: View {
             if store.account == nil && store.hasSavedLogin { await store.refreshAccount() }
             if let e = launchErr { store.error = store.signingDiagnostics + "\n\n" + e }
             store.scheduleExpiryReminders()
+            await updater.check()
             if GitHubWatcher.shared.autoInstall && !GitHubWatcher.shared.sources.isEmpty && store.networkReady(vm) {
                 Task { await GitHubWatcher.shared.checkAll(install: true) }
             }

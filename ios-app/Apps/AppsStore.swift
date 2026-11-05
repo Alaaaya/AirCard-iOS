@@ -594,7 +594,7 @@ final class AppsStore: ObservableObject {
 
     /// Container apps must be signed by the same team as the AirCard that loads
     /// them. This installs a copy of AirCard signed with the user's Apple ID.
-    func installSelf(vm: AppViewModel?) async {
+    func installSelf(vm: AppViewModel?, from source: URL? = nil) async {
         guard networkReady(vm) else { error = L.t("err.vpn"); return }
         guard await ensureSession() else { error = L.t("err.notSignedIn"); return }
         busy = L.t("busy.installing"); progress = 0
@@ -605,7 +605,7 @@ final class AppsStore: ObservableObject {
         defer { try? fm.removeItem(at: tmp) }
         do {
             try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
-            try fm.copyItem(at: Bundle.main.bundleURL, to: copy)
+            try fm.copyItem(at: source ?? Bundle.main.bundleURL, to: copy)
             // Normalise the bundle id so isideload appends the team id once.
             let plistURL = copy.appendingPathComponent("Info.plist")
             if let info = NSMutableDictionary(contentsOf: plistURL) {
@@ -613,6 +613,9 @@ final class AppsStore: ObservableObject {
                 info["CFBundleDisplayName"] = "Mirsa"
                 info["CFBundleName"] = "Mirsa"
                 info.removeObject(forKey: "MirsaSetupMode")
+                if source != nil, let bg = Bundle.main.object(forInfoDictionaryKey: "BGTaskSchedulerPermittedIdentifiers") {
+                    info["BGTaskSchedulerPermittedIdentifiers"] = bg
+                }
                 _ = info.write(to: plistURL, atomically: true)
             }
             // Never carry an old handoff along; Setup writes a fresh one.

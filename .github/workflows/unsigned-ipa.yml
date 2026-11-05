@@ -3,6 +3,8 @@ on:
   workflow_dispatch:
   push:
     branches: [apps-sideloader]
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ${{ vars.MAC_RUNNER || 'macos-14' }}
@@ -44,6 +46,9 @@ jobs:
       - name: Generate Xcode project
         run: brew install xcodegen && xcodegen generate
 
+      - name: Stamp build number
+        run: /usr/libexec/PlistBuddy -c "Add :MirsaBuild string ${{ github.run_number }}" ios-app/Info.plist
+
       - name: Build unsigned IPA
         run: bash build-ipa.sh
 
@@ -51,3 +56,15 @@ jobs:
         with:
           name: AirCard-apps-sideloader-unsigned
           path: build/AirCard-iOS.ipa
+
+      # Mirsa checks the latest release on launch and offers to update itself.
+      - name: Publish release for in-app updates
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/AirCard-iOS.ipa build/Mirsa.ipa
+          git log -1 --pretty=%B > notes.txt
+          gh release create "build-${{ github.run_number }}" build/Mirsa.ipa \
+            --title "Mirsa build ${{ github.run_number }}" --notes-file notes.txt \
+            --target "${{ github.sha }}" --latest

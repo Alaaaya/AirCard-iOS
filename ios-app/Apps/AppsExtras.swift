@@ -444,3 +444,133 @@ struct WebUploadView: View {
         .navigationTitle(tr("Upload from Computer", "رفع من الكمبيوتر"))
     }
 }
+
+// MARK: - Mirsa updates itself
+
+/// Checks GitHub Releases of Mirsa's own repo on launch. When a newer build is
+/// out it shows a sheet; "Update now" downloads it and installs it over this
+/// copy with the user's Apple ID (iOS closes Mirsa for a moment while it
+/// installs; data stays because the bundle id is the same).
+@MainActor
+final class MirsaUpdater: ObservableObject {
+    static let shared = MirsaUpdater()
+    static let repo = "Alaaaya/AirCard-iOS"
+
+    struct Release: Identifiable, Decodable {
+        struct Asset: Decodable { let name: String; let browser_download_url: URL }
+        let tag_name: String
+        let name: String?
+        let body: String?
+        let assets: [Asset]
+        var id: String { tag_name }
+        var build: Int { Int(tag_name.filter(\.isNumber)) ?? 0 }
+        var ipa: URL? { assets.first(where: { $0.name.lowercased().hasSuffix(".ipa") })?.browser_download_url }
+    }
+
+    @Published var available: Release?
+    @Published var installing = false
+
+    static var currentBuild: Int {
+        Int((Bundle.main.object(forInfoDictionaryKey: "MirsaBuild") as? String ?? "").filter(\.isNumber)) ?? 0
+    }
+    private var skipped: String? {
+        get { UserDefaults.standard.string(forKey: "mirsa.update.skipped") }
+        set { UserDefaults.standard.set(newValue, forKey: "mirsa.update.skipped") }
+    }
+
+    func check(force: Bool = false) async {
+        guard !AppsStore.isSetupMode, available == nil else { return }
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
+        guard let (d, r) = try? await URLSession.shared.data(for: req),
+              (r as? HTTPURLResponse)?.statusCode == 200,
+              let rel = try? JSONDecoder().decode(Release.self, from: d),
+              rel.ipa != nil, rel.build > Self.currentBuild else { return }
+        if !force, rel.tag_name == skipped { return }
+        available = rel
+    }
+
+    func later(_ rel: Release) { skipped = rel.tag_name; available = nil }
+
+    func install(_ rel: Release, vm: AppViewModel) async {
+        guard let url = rel.ipa else { return }
+        let store = AppsStore.shared
+        installing = true; defer { installing = false }
+        available = nil
+        store.busy = tr("Downloading update…", "عم ينزّل التحديث…")
+        let fm = FileManager.default
+        let work = fm.temporaryDirectory.appendingPathComponent("upd-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: work) }
+        do {
+            try fm.createDirectory(at: work, withIntermediateDirectories: true)
+            let (tmp, resp) = try await URLSession.shared.download(from: url)
+            if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
+                throw NSError(domain: "Mirsa", code: h.statusCode, userInfo: [NSLocalizedDescriptionKey: "Download failed (\(h.statusCode))"])
+            }
+            let ipa = work.appendingPathComponent("u.ipa")
+            try fm.moveItem(at: tmp, to: ipa)
+            let out = work.appendingPathComponent("x", isDirectory: true)
+            try fm.createDirectory(at: out, withIntermediateDirectories: true)
+            let ok = await Task.detached { SideloadService.unzip(ipa.path, to: out.path) }.value
+            let payload = out.appendingPathComponent("Payload", isDirectory: true)
+            guard ok, let app = (try? fm.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil))?
+                    .first(where: { $0.pathExtension == "app" }) else {
+                throw NSError(domain: "Mirsa", code: 1, userInfo: [NSLocalizedDescriptionKey: "The update file is not a valid IPA"])
+            }
+            store.busy = nil
+            skipped = nil
+            await store.installSelf(vm: vm, from: app)
+        } catch {
+            store.busy = nil
+            store.error = error.localizedDescription
+        }
+    }
+}
+
+struct MirsaUpdateSheet: View {
+    let release: MirsaUpdater.Release
+    @ObservedObject var updater: MirsaUpdater
+    let onUpdate: () -> Void
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 14) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 40)).foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(tr("New version available", "في نسخة جديدة")).font(.title3.bold())
+                    Text(tr("Build \(release.build)", "النسخة \(release.build)")).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(tr("What's new", "شو الجديد")).font(.headline)
+                    Text((release.body?.isEmpty == false ? release.body! : (release.name ?? release.tag_name)))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding()
+            }
+            .background(RoundedRectangle(cornerRadius: 16).fill(.white.opacity(0.06)))
+            Text(tr("Mirsa closes for a moment while it installs, then it's updated. Wi-Fi and LocalDevVPN need to be on.",
+                    "Mirsa رح يسكّر لحظة وهو عم يتثبّت، وبعدين بيكون محدّث. لازم يكون الواي فاي و LocalDevVPN شغّالين."))
+                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Button(action: onUpdate) {
+                Text(tr("Update now", "حدّث هلّق")).font(.headline).frame(maxWidth: .infinity).padding()
+                    .background(RoundedRectangle(cornerRadius: 16).fill(.green.opacity(0.8)))
+                    .foregroundStyle(.white)
+            }
+            if let ipa = release.ipa {
+                Button { openURL(ipa) } label: {
+                    Label(tr("Download IPA manually", "نزّل الـ IPA يدوياً"), systemImage: "arrow.down.circle")
+                }.font(.subheadline)
+            }
+            Button(tr("Later", "لاحقاً")) { updater.later(release) }
+                .font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(24)
+    }
+}
