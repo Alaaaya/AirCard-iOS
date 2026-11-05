@@ -19,6 +19,9 @@ The complete app source, Rust sources, Cargo.lock and build scripts are included
 ```sh
 git clone https://github.com/Alaaaya/Mirsa.git
 cd Mirsa/app-source
+export DEVELOPER_DIR="$(xcode-select -p)"
+bash build-ios.sh
+xcodegen generate
 bash build-ipa.sh
 ```
 
