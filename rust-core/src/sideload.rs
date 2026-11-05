@@ -23,7 +23,7 @@ use isideload::auth::apple_account::{
     AppleAccount, TwoFactorCallbackParams, TwoFactorCallbackResponse,
 };
 use isideload::dev::app_ids::AppIdsApi;
-use isideload::dev::certificates::DevelopmentCertificate;
+use isideload::dev::certificates::{CertificatesApi, DevelopmentCertificate};
 use isideload::dev::developer_session::DeveloperSession;
 use isideload::dev::devices::DevicesApi;
 use isideload::dev::teams::{DeveloperTeam, TeamsApi};
@@ -350,7 +350,26 @@ async fn account_info() -> Result<serde_json::Value, String> {
             })
         })
         .collect();
+    // Is the certificate we sign with still active on Apple's side? A revoked
+    // certificate keeps already-installed apps running for a while, but iOS
+    // refuses any new code signed with it (what LiveContainer reports as
+    // "Certificate: Revoked").
+    let want = id.get_serial_number().trim_start_matches('0').to_uppercase();
+    let cert_status = match s.sideloader.get_dev_session().list_all_development_certs(&team, None).await {
+        Ok(list) => {
+            let found = list.iter().any(|c| {
+                c.serial_number.as_deref().unwrap_or("").trim_start_matches('0').to_uppercase() == want
+            });
+            let others: Vec<String> = list
+                .iter()
+                .map(|c| format!("{} ({})", c.serial_number.clone().unwrap_or_default(), c.machine_name.clone().unwrap_or_default()))
+                .collect();
+            serde_json::json!({ "active": found, "on_account": others })
+        }
+        Err(e) => serde_json::json!({ "error": format!("{e}") }),
+    };
     Ok(serde_json::json!({
+        "cert_status": cert_status,
         "email": s.email,
         "team_id": team.team_id,
         "team_name": team.name.clone().unwrap_or_default(),

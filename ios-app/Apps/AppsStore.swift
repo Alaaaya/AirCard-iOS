@@ -48,6 +48,7 @@ struct AccountState: Equatable {
     var teamName: String = ""
     var teamID: String = ""
     var certSerial: String = ""
+    var certStatus: String = ""
     var certExpires: Date?
     var appIDsAvailable: Int?
     var appIDsMax: Int?
@@ -247,6 +248,14 @@ final class AppsStore: ObservableObject {
             a.teamName = o["team_name"] as? String ?? ""
             a.teamID = o["team_id"] as? String ?? ""
             a.certSerial = o["cert_serial"] as? String ?? ""
+            if let cs = o["cert_status"] as? [String: Any] {
+                if let e = cs["error"] as? String { a.certStatus = "unknown (\(e))" }
+                else {
+                    let active = cs["active"] as? Bool ?? false
+                    let list = (cs["on_account"] as? [String] ?? []).joined(separator: ", ")
+                    a.certStatus = (active ? "ACTIVE" : "REVOKED / not on account") + " · on account: " + (list.isEmpty ? "none" : list)
+                }
+            }
             if let t = o["cert_expires"] as? Double { a.certExpires = Date(timeIntervalSince1970: t) }
             a.appIDsAvailable = o["app_ids_available"] as? Int
             a.appIDsMax = o["app_ids_max"] as? Int
@@ -478,6 +487,7 @@ final class AppsStore: ObservableObject {
         lines.append("Mirsa team: \(ownTeamID ?? "none")  ·  Apple ID team: \(account?.teamID ?? "none")")
         lines.append("Mirsa profile certs: \(ownProfileCertSerials.isEmpty ? "none" : ownProfileCertSerials.joined(separator: ", "))")
         lines.append("Signing cert: \(n(account?.certSerial).isEmpty ? "none" : n(account?.certSerial))")
+        lines.append("Signing cert on Apple: \(account?.certStatus.isEmpty == false ? account!.certStatus : "not checked")")
         for a in containerApps { lines.append("\(a.name) signed with: \(n(a.signedSerial).isEmpty ? "re-sign pending" : n(a.signedSerial))") }
         lines.append("Setup mode: \(Self.isSetupMode ? "yes" : "no")  ·  bundle: \(Bundle.main.bundleIdentifier ?? "?")")
         return lines.joined(separator: "\n")
