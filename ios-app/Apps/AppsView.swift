@@ -1029,7 +1029,7 @@ struct LicensesView: View {
              note: "AFC and installation_proxy over the on-device loopback tunnel; pairing and RSD."),
         Item(name: "apple-codesign-quick", license: "LGPL-2.1-or-later", url: "https://github.com/Dadoum/apple-codesign-quick",
              note: "Code signing (used by isideload). Statically linked: Mirsa's full source and build scripts are public so you can relink with a modified version, as the LGPL requires."),
-        Item(name: "Mirsa Container loader", license: "MIT (Mirsa)", url: "https://github.com/Alaaaya/AirCard-iOS",
+        Item(name: "Mirsa Container loader", license: "MIT (Mirsa)", url: "https://github.com/Alaaaya/Mirsa/tree/main/app-source",
              note: "Written for Mirsa. Uses the same general idea as LiveContainer (AGPL-3.0) but contains none of its code."),
     ]
 
