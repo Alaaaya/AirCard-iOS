@@ -205,6 +205,20 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
 }
 
 /// For Swift (via @_silgen_name): the kernel's verdict on a file's signature.
+extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
+
+/// This process's code-signing flags, for the self-test.
+char *MirsaProcessFlags(void) {
+    uint32_t f = 0;
+    if (csops(getpid(), 0 /* CS_OPS_STATUS */, &f, sizeof(f)) != 0)
+        return strdup([NSString stringWithFormat:@"csops errno=%d", errno].UTF8String);
+    NSString *s = [NSString stringWithFormat:@"0x%08x get-task-allow=%@ debugged=%@ hard=%@ kill=%@ lib-validation=%@ platform=%@",
+        f, (f & 0x4) ? @"yes" : @"NO", (f & 0x10000000) ? @"yes" : @"no",
+        (f & 0x100) ? @"yes" : @"no", (f & 0x200) ? @"yes" : @"no",
+        (f & 0x2000) ? @"yes" : @"no", (f & 0x4000000) ? @"yes" : @"no"];
+    return strdup(s.UTF8String);
+}
+
 char *MirsaKernelCheck(const char *path) {
     return strdup(AirCardKernelSignatureCheck(path).UTF8String);
 }

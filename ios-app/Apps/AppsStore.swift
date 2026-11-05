@@ -508,7 +508,17 @@ final class AppsStore: ObservableObject {
         let a = dir.appendingPathComponent("a-\(UUID().uuidString).dylib")
         let b = dir.appendingPathComponent("b-\(UUID().uuidString).dylib")
         var out = ["[self-test]"]
+        if let f = MirsaProcessFlags() { out.append("process: " + String(cString: f)); free(f) }
+        out.append("iOS \(UIDevice.current.systemVersion)")
         out.append("0 (in Mirsa bundle): " + Self.kernelCheck(probe.path))
+        for (label, base) in [("Documents", fm.urls(for: .documentDirectory, in: .userDomainMask)[0]),
+                              ("tmp", fm.temporaryDirectory)] {
+            let t = base.appendingPathComponent("probe-\(UUID().uuidString).dylib")
+            if (try? fm.copyItem(at: probe, to: t)) != nil {
+                out.append("A-\(label): " + Self.kernelCheck(t.path))
+                try? fm.removeItem(at: t)
+            }
+        }
         do {
             try fm.copyItem(at: probe, to: a)
             out.append("A (copied as-is): " + Self.kernelCheck(a.path))
@@ -804,3 +814,6 @@ final class AppsStore: ObservableObject {
 
 @_silgen_name("MirsaKernelCheck")
 func MirsaKernelCheck(_ path: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+
+@_silgen_name("MirsaProcessFlags")
+func MirsaProcessFlags() -> UnsafeMutablePointer<CChar>?
