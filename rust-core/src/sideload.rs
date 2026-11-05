@@ -844,6 +844,31 @@ pub unsafe extern "C" fn al_container_sign_as(
     write_result(res, out_json, out_error)
 }
 
+/// Writes the signing certificate + key as a PKCS#12 file (for importing into LiveContainer).
+async fn export_p12(path: String, password: String) -> Result<serde_json::Value, String> {
+    let id = {
+        let mut guard = session_lock().lock().await;
+        let s = guard.as_mut().ok_or_else(|| "Sign in with your Apple ID first".to_string())?;
+        identity(s).await?
+    };
+    let bytes = id.as_p12(&password).await.map_err(|e| format!("p12: {e:?}"))?;
+    std::fs::write(&path, &bytes).map_err(|e| format!("write p12: {e}"))?;
+    Ok(serde_json::json!({ "bytes": bytes.len() }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn al_export_p12(
+    path: *const c_char,
+    password: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let p = opt_str(path, "");
+    let pw = opt_str(password, "");
+    let res = guarded("al_export_p12", move || runtime().block_on(export_p12(p, pw)));
+    write_result(res, out_json, out_error)
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn al_container_sign_file(
     path: *const c_char,
