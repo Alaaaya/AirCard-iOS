@@ -188,11 +188,13 @@ struct AppsTab: View {
         } message: { Text(L.t("repair.body")) }
         .overlay(alignment: .top) { toast }
         .task {
-            if let e = store.lastLaunchError {
-                store.error = e
+            let launchErr = store.lastLaunchError
+            if launchErr != nil {
                 UserDefaults.standard.removeObject(forKey: "aircard.guest.lastError")
+                store.forceResignContainer()
             }
             if store.account == nil && store.hasSavedLogin { await store.refreshAccount() }
+            if let e = launchErr { store.error = store.signingDiagnostics + "\n\n" + e }
             store.scheduleExpiryReminders()
             if GitHubWatcher.shared.autoInstall && !GitHubWatcher.shared.sources.isEmpty && store.networkReady(vm) {
                 Task { await GitHubWatcher.shared.checkAll(install: true) }

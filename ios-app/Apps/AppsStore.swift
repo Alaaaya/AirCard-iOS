@@ -461,6 +461,23 @@ final class AppsStore: ObservableObject {
         }
     }
 
+    /// After a failed load, sign every container app again on its next launch.
+    func forceResignContainer() {
+        for var a in containerApps { a.signedSerial = nil; upsert(a) }
+    }
+
+    /// Short report shown above a load error, to see which certificate is which.
+    var signingDiagnostics: String {
+        let n = { (s: String?) in String((s ?? "").uppercased().drop(while: { $0 == "0" })) }
+        var lines = ["[Mirsa diag]"]
+        lines.append("Mirsa team: \(ownTeamID ?? "none")  ·  Apple ID team: \(account?.teamID ?? "none")")
+        lines.append("Mirsa profile certs: \(ownProfileCertSerials.isEmpty ? "none" : ownProfileCertSerials.joined(separator: ", "))")
+        lines.append("Signing cert: \(n(account?.certSerial).isEmpty ? "none" : n(account?.certSerial))")
+        for a in containerApps { lines.append("\(a.name) signed with: \(n(a.signedSerial).isEmpty ? "re-sign pending" : n(a.signedSerial))") }
+        lines.append("Setup mode: \(Self.isSetupMode ? "yes" : "no")  ·  bundle: \(Bundle.main.bundleIdentifier ?? "?")")
+        return lines.joined(separator: "\n")
+    }
+
     /// After the development certificate changes, re-sign every container app.
     func resignContainerIfCertChanged() async {
         guard let serial = account?.certSerial, !serial.isEmpty else { return }
