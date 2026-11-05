@@ -68,3 +68,53 @@ jobs:
           gh release create "build-${{ github.run_number }}" build/Mirsa.ipa \
             --title "Mirsa build ${{ github.run_number }}" --notes-file notes.txt \
             --target "${{ github.sha }}" --latest
+
+      # Mirsa Setup for ESign/Feather: a fixed "setup" release (never "latest",
+      # so Mirsa's own updater is not affected) holding Mirsa-Setup.ipa and an
+      # AltStore-format source.json that Feather/ESign read for updates.
+      - name: Publish Mirsa Setup + Feather source
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          set -e
+          VER="1.3.${RUN}"
+          rm -rf setup && mkdir setup && cd setup
+          unzip -q ../build/AirCard-iOS.ipa
+          P=$(ls -d Payload/*.app)/Info.plist
+          PB=/usr/libexec/PlistBuddy
+          $PB -c "Set :CFBundleIdentifier com.alaa.mirsa.setup" "$P"
+          $PB -c "Set :CFBundleDisplayName Mirsa Setup" "$P" || $PB -c "Add :CFBundleDisplayName string Mirsa Setup" "$P"
+          $PB -c "Set :CFBundleName Mirsa Setup" "$P"
+          $PB -c "Delete :MirsaSetupMode" "$P" 2>/dev/null || true
+          $PB -c "Add :MirsaSetupMode bool true" "$P"
+          $PB -c "Set :CFBundleShortVersionString $VER" "$P"
+          $PB -c "Set :CFBundleVersion $VER" "$P"
+          zip -qry ../build/Mirsa-Setup.ipa Payload
+          cd ..
+          SIZE=$(stat -f%z build/Mirsa-Setup.ipa)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/setup/Mirsa-Setup.ipa"
+          ICON="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon-60@3x.png"
+          NOTES=$(git log -1 --pretty=%s)
+          python3 - "$VER" "$DATE" "$URL" "$SIZE" "$ICON" "$NOTES" <<'PY'
+          import json, sys
+          ver, date, url, size, icon, notes = sys.argv[1:7]
+          src = {
+            "name": "Mirsa", "identifier": "com.alaa.mirsa.source",
+            "apps": [{
+              "name": "Mirsa Setup", "bundleIdentifier": "com.alaa.mirsa.setup",
+              "developerName": "Alaa", "iconURL": icon,
+              "localizedDescription": "Installs Mirsa with your Apple ID.",
+              "version": ver, "versionDate": date, "downloadURL": url, "size": int(size),
+              "versions": [{"version": ver, "buildVersion": ver, "date": date,
+                            "downloadURL": url, "size": int(size),
+                            "localizedDescription": notes, "minOSVersion": "18.0"}]
+            }],
+            "news": []
+          }
+          json.dump(src, open("build/source.json", "w"), indent=2)
+          PY
+          gh release view setup >/dev/null 2>&1 || gh release create setup --title "Mirsa Setup (Feather source)" --notes "Add this source in Feather/ESign: https://github.com/${GITHUB_REPOSITORY}/releases/download/setup/source.json" --latest=false
+          gh release upload setup build/Mirsa-Setup.ipa build/source.json --clobber

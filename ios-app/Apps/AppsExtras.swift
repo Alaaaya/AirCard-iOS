@@ -464,7 +464,7 @@ final class MirsaUpdater: ObservableObject {
         let assets: [Asset]
         var id: String { tag_name }
         var build: Int { Int(tag_name.filter(\.isNumber)) ?? 0 }
-        var ipa: URL? { assets.first(where: { $0.name.lowercased().hasSuffix(".ipa") })?.browser_download_url }
+        var ipa: URL? { (assets.first(where: { $0.name == "Mirsa.ipa" }) ?? assets.first(where: { $0.name.lowercased().hasSuffix(".ipa") && !$0.name.contains("Setup") }))?.browser_download_url }
     }
 
     @Published var available: Release?
