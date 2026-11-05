@@ -256,14 +256,6 @@ enum SideloadService {
         if rc != 0 { throw SideloadError.message(e ?? "Signing failed") }
     }
 
-    static func exportP12(path: String, password: String) throws {
-        var out: UnsafeMutablePointer<CChar>? = nil
-        var err: UnsafeMutablePointer<CChar>? = nil
-        let rc = al_export_p12(path, password, &out, &err)
-        _ = take(out); let e = take(err)
-        if rc != 0 { throw SideloadError.message(e ?? "Export failed") }
-    }
-
     static func unzip(_ archive: String, to dir: String) -> Bool {
         al_zip_extract_all(archive, dir) == 0
     }

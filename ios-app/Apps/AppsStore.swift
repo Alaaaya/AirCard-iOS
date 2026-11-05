@@ -508,15 +508,6 @@ final class AppsStore: ObservableObject {
         let a = dir.appendingPathComponent("a-\(UUID().uuidString).dylib")
         let b = dir.appendingPathComponent("b-\(UUID().uuidString).dylib")
         var out = ["[self-test]"]
-        // Certificate for LiveContainer: Files → Mirsa → Mirsa-Certificate.p12
-        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("Mirsa-Certificate.p12")
-        let p12Pass = "mirsa1234"
-        do {
-            try? fm.removeItem(at: docs)
-            let dp = docs.path
-            try await Task.detached { try SideloadService.exportP12(path: dp, password: p12Pass) }.value
-            out.append("p12: Files → Mirsa → Mirsa-Certificate.p12 · password: \(p12Pass)")
-        } catch { out.append("p12 export failed: \(error.localizedDescription)") }
         if let f = MirsaProcessFlags() { out.append("process: " + String(cString: f)); free(f) }
         out.append("iOS \(UIDevice.current.systemVersion)")
         out.append("0 (in Mirsa bundle): " + Self.kernelCheck(probe.path))
