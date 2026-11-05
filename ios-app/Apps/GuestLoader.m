@@ -46,7 +46,7 @@ static void AirCardGuestFail(NSString *msg) {
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
     [d setObject:msg forKey:kErrorKey];
     [d synchronize];
-    NSLog(@"[AirCard Container] %@", msg);
+    NSLog(@"[Mirsa Container] %@", msg);
 }
 
 static const struct mach_header_64 *AirCardFindImage(const char *path) {
@@ -200,7 +200,7 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
 
         char *gargv[2] = { (char *)exe.fileSystemRepresentation, NULL };
         char *apple[1] = { NULL };
-        NSLog(@"[AirCard Container] launching %@", guest.bundleIdentifier);
+        NSLog(@"[Mirsa Container] launching %@", guest.bundleIdentifier);
         int rc = entry(1, gargv, *_NSGetEnviron(), apple);
         exit(rc);
     }
