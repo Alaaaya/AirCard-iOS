@@ -473,13 +473,13 @@ final class MirsaUpdater: ObservableObject {
     static var currentBuild: Int {
         Int((Bundle.main.object(forInfoDictionaryKey: "MirsaBuild") as? String ?? "").filter(\.isNumber)) ?? 0
     }
-    private var skipped: String? {
-        get { UserDefaults.standard.string(forKey: "mirsa.update.skipped") }
-        set { UserDefaults.standard.set(newValue, forKey: "mirsa.update.skipped") }
-    }
+    /// "Later" only hides the prompt until Mirsa is opened again.
+    private var snoozedUntil: Date?
+    @Published var checking = false
 
     func check(force: Bool = false) async {
-        guard !AppsStore.isSetupMode, available == nil else { return }
+        guard !AppsStore.isSetupMode, available == nil, !installing else { return }
+        if !force, let u = snoozedUntil, u > Date() { return }
         var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
@@ -487,11 +487,33 @@ final class MirsaUpdater: ObservableObject {
               (r as? HTTPURLResponse)?.statusCode == 200,
               let rel = try? JSONDecoder().decode(Release.self, from: d),
               rel.ipa != nil, rel.build > Self.currentBuild else { return }
-        if !force, rel.tag_name == skipped { return }
         available = rel
     }
 
-    func later(_ rel: Release) { skipped = rel.tag_name; available = nil }
+    /// Hide the prompt for now; it comes back the next time Mirsa is opened.
+    func later(_ rel: Release) { snoozedUntil = Date().addingTimeInterval(60); available = nil }
+
+    /// Settings button: check now and, if there's a newer build, install it straight away.
+    func updateNow(vm: AppViewModel) async {
+        let store = AppsStore.shared
+        checking = true; defer { checking = false }
+        available = nil
+        snoozedUntil = nil
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
+        guard let (d, r) = try? await URLSession.shared.data(for: req),
+              (r as? HTTPURLResponse)?.statusCode == 200,
+              let rel = try? JSONDecoder().decode(Release.self, from: d), rel.ipa != nil else {
+            store.error = tr("Couldn't check for updates. Check your internet.", "ما قدرت أفحص التحديثات. تأكد من الإنترنت.")
+            return
+        }
+        guard rel.build > Self.currentBuild else {
+            store.error = tr("Mirsa is up to date (build \(Self.currentBuild)).", "مرسى محدّث، معك آخر نسخة (\(Self.currentBuild)).")
+            return
+        }
+        await install(rel, vm: vm)
+    }
 
     func install(_ rel: Release, vm: AppViewModel) async {
         guard let url = rel.ipa else { return }
@@ -519,7 +541,6 @@ final class MirsaUpdater: ObservableObject {
                 throw NSError(domain: "Mirsa", code: 1, userInfo: [NSLocalizedDescriptionKey: "The update file is not a valid IPA"])
             }
             store.busy = nil
-            skipped = nil
             await store.installSelf(vm: vm, from: app)
         } catch {
             store.busy = nil

@@ -113,6 +113,7 @@ struct AppsTab: View {
     @EnvironmentObject var vm: AppViewModel
     @StateObject private var store = AppsStore.shared
     @StateObject private var updater = MirsaUpdater.shared
+    @Environment(\.scenePhase) private var scenePhaseForUpdates
     @State private var segment: AppsSegment = .container
     @State private var showPicker = false
     @State private var showLogin = false
@@ -177,6 +178,9 @@ struct AppsTab: View {
         .sheet(isPresented: $showSettings) {
             AppsSettingsSheet(store: store, onSignIn: { showSettings = false; showLogin = true })
                 .environmentObject(vm)
+        }
+        .onChange(of: scenePhaseForUpdates) { _, ph in
+            if ph == .active { Task { await updater.check() } }
         }
         .sheet(item: $updater.available) { rel in
             MirsaUpdateSheet(release: rel, updater: updater) { Task { await updater.install(rel, vm: vm) } }
@@ -950,6 +954,16 @@ struct AppsSettingsSheet: View {
                     Toggle(L.t("settings.autoRefresh"), isOn: $store.autoRefresh)
                 } footer: { Text(L.t("settings.limitFoot")) }
 
+                Section {
+                    Button {
+                        dismiss()
+                        Task { await MirsaUpdater.shared.updateNow(vm: vm) }
+                    } label: { Label(tr("Update Mirsa", "حدّث مرسى"), systemImage: "arrow.triangle.2.circlepath") }
+                    .disabled(store.account == nil && !store.hasSavedLogin)
+                } footer: {
+                    Text(tr("Checks for a newer build and installs it right away. Current build: \(MirsaUpdater.currentBuild).",
+                            "بيفحص إذا في نسخة أحدث وبيثبّتها فوراً. نسختك الحالية: \(MirsaUpdater.currentBuild)."))
+                }
                 Section {
                     Button {
                         dismiss()
