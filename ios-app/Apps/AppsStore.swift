@@ -483,6 +483,44 @@ final class AppsStore: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
+    /// Self-test for the container signer, shown with a load error:
+    /// A = Mirsa's own (installd-accepted) executable copied into the data
+    /// container; B = the same copy re-signed by the container signer.
+    /// If A passes and B fails, the signer output is at fault; if both fail,
+    /// iOS refuses developer-signed code loaded from the data container.
+    func signerSelfTest() async -> String {
+        guard let exe = Bundle.main.executablePath else { return "[self-test] no executable" }
+        let fm = FileManager.default
+        let dir = Self.appDir("selftest")
+        try? fm.removeItem(at: dir)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let a = dir.appendingPathComponent("a-\(UUID().uuidString)")
+        let b = dir.appendingPathComponent("b-\(UUID().uuidString)")
+        var out = ["[self-test]"]
+        do {
+            try fm.copyItem(at: URL(fileURLWithPath: exe), to: a)
+            out.append("A (Mirsa copy): " + Self.kernelCheck(a.path))
+            try fm.copyItem(at: URL(fileURLWithPath: exe), to: b)
+            let bp = b.path, ident = Bundle.main.bundleIdentifier ?? ""
+            if await ensureSession() {
+                try await Task.detached { try SideloadService.containerSignFile(path: bp, ident: ident) }.value
+                let fresh = dir.appendingPathComponent("c-\(UUID().uuidString)")
+                try fm.copyItem(at: b, to: fresh)
+                out.append("B (re-signed by Mirsa): " + Self.kernelCheck(fresh.path))
+            } else {
+                out.append("B: not signed in")
+            }
+        } catch { out.append("error: \(error.localizedDescription)") }
+        try? fm.removeItem(at: dir)
+        return out.joined(separator: "\n")
+    }
+
+    static func kernelCheck(_ path: String) -> String {
+        guard let p = MirsaKernelCheck(path) else { return "?" }
+        defer { free(p) }
+        return String(cString: p)
+    }
+
     /// After the development certificate changes, re-sign every container app.
     func resignContainerIfCertChanged() async {
         guard let serial = account?.certSerial, !serial.isEmpty else { return }
@@ -751,3 +789,6 @@ final class AppsStore: ObservableObject {
         try? BGTaskScheduler.shared.submit(req)
     }
 }
+
+@_silgen_name("MirsaKernelCheck")
+func MirsaKernelCheck(_ path: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?

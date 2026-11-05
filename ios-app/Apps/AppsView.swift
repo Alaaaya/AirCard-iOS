@@ -200,7 +200,10 @@ struct AppsTab: View {
                 store.forceResignContainer()
             }
             if store.account == nil && store.hasSavedLogin { await store.refreshAccount() }
-            if let e = launchErr { store.error = store.signingDiagnostics + "\n\n" + e }
+            if let e = launchErr {
+                let t = await store.signerSelfTest()
+                store.error = store.signingDiagnostics + "\n" + t + "\n\n" + e
+            }
             store.scheduleExpiryReminders()
             await updater.check()
             if GitHubWatcher.shared.autoInstall && !GitHubWatcher.shared.sources.isEmpty && store.networkReady(vm) {

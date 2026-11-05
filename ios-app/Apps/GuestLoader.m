@@ -79,7 +79,7 @@ static char *gOrigHome, *gOrigFixed, *gOrigTmp;
 
 /// Asks the kernel to validate the guest's signature and returns its reason
 /// (F_ADDFILESIGS_RETURN + F_CHECK_LV), for the error shown in Mirsa.
-static NSString *AirCardKernelSignatureCheck(const char *path) {
+NSString *AirCardKernelSignatureCheck(const char *path) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) return [NSString stringWithFormat:@"open errno=%d", errno];
     struct mach_header_64 h;
@@ -202,4 +202,9 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
         int rc = entry(1, gargv, *_NSGetEnviron(), apple);
         exit(rc);
     }
+}
+
+/// For Swift (via @_silgen_name): the kernel's verdict on a file's signature.
+char *MirsaKernelCheck(const char *path) {
+    return strdup(AirCardKernelSignatureCheck(path).UTF8String);
 }

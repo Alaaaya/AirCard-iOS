@@ -519,6 +519,41 @@ fn signer_for(id: &CertificateIdentity) -> Result<apple_codesign_quick::RustCryp
     ))
 }
 
+/// The CMS signer for container code: the certificate chain built from this
+/// app's own provisioning profile, like the real-app signer (falls back to the
+/// bundled Apple CAs when there is no profile).
+fn container_signer(id: &CertificateIdentity) -> Result<apple_codesign_quick::RustCryptoCmsSigner, String> {
+    Ok(match std::env::current_exe().ok()
+        .and_then(|e| e.parent().map(|p| p.join("embedded.mobileprovision")))
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|d| apple_codesign_quick::ProvisioningProfile::parse(&d).ok())
+        .and_then(|prof| id.profile_to_certificate_chain(&prof).ok())
+    {
+        Some(chain) => apple_codesign_quick::RustCryptoCmsSigner::new(
+            id.private_key.clone(), id.certificate.clone(), chain),
+        None => signer_for(id)?,
+    })
+}
+
+/// Signs one Mach-O file as-is (no patching) with the container signer.
+async fn container_sign_file(path: String, ident: String) -> Result<serde_json::Value, String> {
+    let (id, team_id) = {
+        let mut guard = session_lock().lock().await;
+        let s = guard.as_mut().ok_or_else(|| "Sign in with your Apple ID first".to_string())?;
+        (identity(s).await?, s.team.team_id.clone())
+    };
+    tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
+        let signer = container_signer(&id)?;
+        let empty = plist::Dictionary::new();
+        let cfg = apple_codesign_quick::MachOSigningConfig::new(&ident, &team_id, &empty, Some(&signer));
+        apple_codesign_quick::sign_macho_file(std::path::Path::new(&path), &cfg)
+            .map_err(|e| format!("Signing failed: {e}"))?;
+        Ok(serde_json::json!({ "ok": true }))
+    })
+    .await
+    .map_err(|e| format!("signing task failed: {e}"))?
+}
+
 async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<serde_json::Value, String> {
     let (id, team_id) = {
         let mut guard = session_lock().lock().await;
@@ -529,19 +564,7 @@ async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<s
     let serial = id.get_serial_number();
     let team = team_id.clone();
     tokio::task::spawn_blocking(move || -> Result<serde_json::Value, String> {
-        // Use the same certificate chain the real-app signer uses: the one
-        // built from this app's own provisioning profile (falls back to the
-        // bundled Apple CAs when there is no profile).
-        let signer = match std::env::current_exe().ok()
-            .and_then(|e| e.parent().map(|p| p.join("embedded.mobileprovision")))
-            .and_then(|p| std::fs::read(p).ok())
-            .and_then(|d| apple_codesign_quick::ProvisioningProfile::parse(&d).ok())
-            .and_then(|prof| id.profile_to_certificate_chain(&prof).ok())
-        {
-            Some(chain) => apple_codesign_quick::RustCryptoCmsSigner::new(
-                id.private_key.clone(), id.certificate.clone(), chain),
-            None => signer_for(&id)?,
-        };
+        let signer = container_signer(&id)?;
         let prepared = crate::container::prepare_bundle(&dir)?;
         let empty = plist::Dictionary::new();
         let mut signed = 0usize;
@@ -746,5 +769,18 @@ pub unsafe extern "C" fn al_container_sign_as(
     let id = opt_str(ident, "");
     let host = if id.is_empty() { None } else { Some(id) };
     let res = guarded("al_container_sign_as", move || runtime().block_on(container_sign(dir, host)));
+    write_result(res, out_json, out_error)
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn al_container_sign_file(
+    path: *const c_char,
+    ident: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let p = opt_str(path, "");
+    let id = opt_str(ident, "");
+    let res = guarded("al_container_sign_file", move || runtime().block_on(container_sign_file(p, id)));
     write_result(res, out_json, out_error)
 }

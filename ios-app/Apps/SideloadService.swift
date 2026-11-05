@@ -248,6 +248,14 @@ enum SideloadService {
         return json(o)
     }
 
+    static func containerSignFile(path: String, ident: String) throws {
+        var out: UnsafeMutablePointer<CChar>? = nil
+        var err: UnsafeMutablePointer<CChar>? = nil
+        let rc = al_container_sign_file(path, ident, &out, &err)
+        _ = take(out); let e = take(err)
+        if rc != 0 { throw SideloadError.message(e ?? "Signing failed") }
+    }
+
     static func unzip(_ archive: String, to dir: String) -> Bool {
         al_zip_extract_all(archive, dir) == 0
     }
