@@ -203,7 +203,7 @@ struct DonateView: View {
                 )
             }
 
-            Text("Thank you so much for supporting AirCard-iOS development! ❤️")
+            Text("Thank you for supporting the original developers! ❤️")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -1108,7 +1108,7 @@ struct PairingTab: View {
                                             .tint(.orange)
                                         }
 
-                                        Text("Settings › Privacy & Security › Developer Mode › Pair with AirCard-iOS")
+                                        Text("Settings › Privacy & Security › Developer Mode › Pair with Mirsa")
                                             .font(.footnote.weight(.semibold))
                                             .foregroundStyle(.primary)
 
