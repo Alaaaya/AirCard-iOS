@@ -73,6 +73,12 @@ final class SourcesStore: ObservableObject {
     @discardableResult
     func refresh(_ url: String) async -> Bool {
         guard let u = URL(string: url) else { return false }
+        // A copied GitHub download link is a signed URL that expires within an hour.
+        if u.host?.contains("release-assets.githubusercontent.com") == true || u.host?.contains("objects.githubusercontent.com") == true {
+            error = tr("That's a temporary GitHub download link and it expires. Use the release link (github.com/…/releases/download/…) instead.",
+                       "هاد رابط تحميل مؤقت من GitHub وبينتهي. استعمل رابط الإصدار github.com/…/releases/download/… بداله.")
+            return false
+        }
         loading.insert(url)
         defer { loading.remove(url) }
         do {
@@ -242,8 +248,10 @@ private struct SourceRow: View {
             Spacer()
             if loading { ProgressView().tint(.white) }
             else {
-                Text("\(source.appCount)").font(.headline).foregroundStyle(.white)
-                    .frame(width: 36, height: 36).background(.white.opacity(0.2), in: Circle())
+                Text("\(source.appCount)").font(.subheadline.weight(.bold)).foregroundStyle(.white)
+                    .lineLimit(1).fixedSize()
+                    .padding(.horizontal, 10).frame(minWidth: 36, minHeight: 36)
+                    .background(.white.opacity(0.2), in: Capsule())
             }
         }
         .padding(16)
