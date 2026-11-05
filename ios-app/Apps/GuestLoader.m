@@ -72,6 +72,14 @@ static uint64_t AirCardEntryOffset(const struct mach_header_64 *h) {
     return 0;
 }
 
+static char *gOrigHome, *gOrigFixed, *gOrigTmp;
+
+static void AirCardRestoreEnv(void) {
+    if (gOrigHome) setenv("HOME", gOrigHome, 1); else unsetenv("HOME");
+    if (gOrigFixed) setenv("CFFIXED_USER_HOME", gOrigFixed, 1); else unsetenv("CFFIXED_USER_HOME");
+    if (gOrigTmp) setenv("TMPDIR", gOrigTmp, 1); else unsetenv("TMPDIR");
+}
+
 static void AirCardPrepareDataDir(NSString *data) {
     NSFileManager *fm = NSFileManager.defaultManager;
     for (NSString *sub in @[@"Documents", @"Library/Preferences", @"Library/Caches",
@@ -106,6 +114,12 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
             return -1;
         }
 
+        // Remember Mirsa's own environment so a failed launch can put it back;
+        // otherwise Mirsa keeps running with the guest's HOME and nests its files.
+        const char *oh = getenv("HOME"), *oc = getenv("CFFIXED_USER_HOME"), *ot = getenv("TMPDIR");
+        gOrigHome = oh ? strdup(oh) : NULL;
+        gOrigFixed = oc ? strdup(oc) : NULL;
+        gOrigTmp = ot ? strdup(ot) : NULL;
         if (dataPath.length) AirCardPrepareDataDir(dataPath);
 
         // +[NSBundle mainBundle] -> guest bundle (Info.plist, resources, bundle id).
@@ -120,6 +134,7 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
             // Restore so AirCard itself keeps working.
             gGuestBundle = nil;
             method_setImplementation(m, original);
+            AirCardRestoreEnv();
             return -1;
         }
 
@@ -129,6 +144,7 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
             AirCardGuestFail(@"Guest has no LC_MAIN entry point");
             gGuestBundle = nil;
             method_setImplementation(m, original);
+            AirCardRestoreEnv();
             return -1;
         }
 

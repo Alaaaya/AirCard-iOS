@@ -134,6 +134,25 @@ final class AppsStore: ObservableObject {
     }
     private var dbURL: URL { Self.root.appendingPathComponent("apps.json") }
 
+    /// iOS caches a file's code signature by inode, so a binary re-signed in
+    /// place can keep failing with "code signature invalid". Copying the bundle
+    /// gives every file a new inode.
+    static func freshInodes(_ dir: URL) {
+        let fm = FileManager.default
+        let tmp = dir.deletingLastPathComponent().appendingPathComponent(".fresh-\(UUID().uuidString)", isDirectory: true)
+        guard (try? fm.copyItem(at: dir, to: tmp)) != nil else { return }
+        try? fm.removeItem(at: dir)
+        if (try? fm.moveItem(at: tmp, to: dir)) == nil { try? fm.removeItem(at: tmp) }
+    }
+
+    /// Removes folders a failed launch nested inside a guest's data folder.
+    static func cleanNestedLeftovers() {
+        let fm = FileManager.default
+        for d in (try? fm.contentsOfDirectory(at: containerData, includingPropertiesForKeys: nil)) ?? [] {
+            try? fm.removeItem(at: d.appendingPathComponent("Library/Application Support/AirCardApps"))
+        }
+    }
+
     static func appDir(_ id: String) -> URL { containerApps.appendingPathComponent("\(id).app", isDirectory: true) }
     static func dataDir(_ id: String) -> URL { containerData.appendingPathComponent(id, isDirectory: true) }
     static func originalIPA(_ id: String) -> URL { originals.appendingPathComponent("\(id).ipa") }
@@ -142,6 +161,7 @@ final class AppsStore: ObservableObject {
     // MARK: Lifecycle
 
     private init() {
+        Self.cleanNestedLeftovers()
         SideloadService.configure()
         PromptBridge.shared.present = { [weak self] p in self?.prompt = p }
         load()
@@ -426,6 +446,7 @@ final class AppsStore: ObservableObject {
             }
             let path = dest.path
             let o = try await Task.detached { try SideloadService.containerSign(appDir: path) }.value
+            Self.freshInodes(dest)
             app.signedSerial = o["cert_serial"] as? String
             app.location = .container
             app.installedBundleID = nil
@@ -446,6 +467,7 @@ final class AppsStore: ObservableObject {
         for var a in containerApps where a.signedSerial != serial {
             let path = Self.appDir(a.id).path
             if let o = try? await Task.detached(operation: { try SideloadService.containerSign(appDir: path) }).value {
+                Self.freshInodes(Self.appDir(a.id))
                 a.signedSerial = o["cert_serial"] as? String
                 upsert(a)
             }
@@ -614,6 +636,28 @@ final class AppsStore: ObservableObject {
         case .container:
             if containerTeamMismatch { error = L.t("err.teamMismatch"); return }
             if containerCertMismatch { error = L.t("err.certMismatch"); return }
+            // Signed with an older certificate (or never re-signed since Mirsa
+            // changed): sign again with the current one before loading it.
+            let norm = { (s: String?) in String((s ?? "").uppercased().drop(while: { $0 == "0" })) }
+            if let cur = account?.certSerial, !cur.isEmpty, norm(app.signedSerial) != norm(cur) {
+                Task {
+                    var a = app
+                    busy = L.t("busy.signing")
+                    let path = Self.appDir(a.id).path
+                    do {
+                        let o = try await Task.detached { try SideloadService.containerSign(appDir: path) }.value
+                        Self.freshInodes(Self.appDir(a.id))
+                        a.signedSerial = o["cert_serial"] as? String
+                        upsert(a)
+                        busy = nil
+                        launchCandidate = a
+                    } catch {
+                        busy = nil
+                        self.error = error.localizedDescription
+                    }
+                }
+                return
+            }
             launchCandidate = app
         }
     }
