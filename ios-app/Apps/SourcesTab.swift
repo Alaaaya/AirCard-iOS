@@ -42,8 +42,9 @@ final class SourcesStore: ObservableObject {
         ("https://repository.apptesters.org", "AppTesters IPA Repo"),
         ("https://github.com/Alaaaya/Mirsa/releases/download/setup/source.json", "Mirsa"),
         ("https://itslevii.dev/repo.json", "itslevii"),
+        ("https://raw.githubusercontent.com/Sami-Wali/ryP0-repository/main/repo.json", "ryP0"),
     ]
-    private let seededKey = "mirsa.sources.builtin.v1"
+    private let seededKey = "mirsa.sources.builtin.v2"
 
     init() {
         var list: [RepoSource] = []
