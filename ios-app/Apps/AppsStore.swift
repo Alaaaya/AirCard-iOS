@@ -749,7 +749,7 @@ final class AppsStore: ObservableObject {
                         a.signedSerial = o["cert_serial"] as? String
                         upsert(a)
                         busy = nil
-                        launchCandidate = a
+                        confirmLaunch(a)
                     } catch {
                         busy = nil
                         self.error = error.localizedDescription
@@ -757,7 +757,7 @@ final class AppsStore: ObservableObject {
                 }
                 return
             }
-            launchCandidate = app
+            confirmLaunch(app)
         }
     }
 
@@ -769,8 +769,21 @@ final class AppsStore: ObservableObject {
         d.removeObject(forKey: "aircard.guest.lastError")
         d.synchronize()
 
-        // Ask iOS to bring us back: a local notification the user can tap if
-        // the system does not relaunch AirCard by itself.
+        // Like LiveContainer: ask iOS to open Mirsa again and end this
+        // process; it comes straight back with the guest app.
+        // If we are still alive after a moment, fall back to the notification.
+        if MirsaRelaunchSelf() != 0 {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                self.relaunchViaNotification(app)
+            }
+            return
+        }
+        relaunchViaNotification(app)
+    }
+
+    private func relaunchViaNotification(_ app: ManagedApp) {
+        // Fallback: a notification the user taps to come back.
         let center = UNUserNotificationCenter.current()
         center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
             if granted {
@@ -828,6 +841,9 @@ final class AppsStore: ObservableObject {
 
 @_silgen_name("MirsaKernelCheck")
 func MirsaKernelCheck(_ path: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+
+@_silgen_name("MirsaRelaunchSelf")
+func MirsaRelaunchSelf() -> Int32
 
 @_silgen_name("MirsaProcessFlags")
 func MirsaProcessFlags() -> UnsafeMutablePointer<CChar>?

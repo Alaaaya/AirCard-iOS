@@ -23,6 +23,8 @@
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
 #import <objc/runtime.h>
+#import <objc/message.h>
+#import <signal.h>
 #import <mach-o/dyld.h>
 #import <mach-o/loader.h>
 #import <crt_externs.h>
@@ -221,4 +223,33 @@ char *MirsaProcessFlags(void) {
 
 char *MirsaKernelCheck(const char *path) {
     return strdup(AirCardKernelSignatureCheck(path).UTF8String);
+}
+
+// Relaunch Mirsa straight into the guest app: ask LaunchServices to open our
+// own bundle, then end this process. FrontBoard starts us again right away
+// and the loader takes over. Returns 0 when the request could not be made.
+int MirsaRelaunchSelf(void) {
+    Class wsClass = NSClassFromString(@"LSApplicationWorkspace");
+    id ws = [wsClass performSelector:NSSelectorFromString(@"defaultWorkspace")];
+    NSString *bid = NSBundle.mainBundle.bundleIdentifier;
+    SEL withConfig = NSSelectorFromString(@"openApplicationWithBundleIdentifier:configuration:completionHandler:");
+    Class cfgClass = NSClassFromString(@"_LSOpenConfiguration");
+    if (!ws || !bid) return 0;
+    void (^done)(BOOL, NSError *) = ^(BOOL ok, NSError *err) {
+        if (ok) { raise(SIGKILL); }
+    };
+    if (cfgClass && [ws respondsToSelector:withConfig]) {
+        id cfg = [[cfgClass alloc] init];
+        for (int i = 0; i < 2; i++) {
+            ((void (*)(id, SEL, NSString *, id, id))objc_msgSend)(ws, withConfig, bid, cfg, done);
+        }
+        return 1;
+    }
+    SEL simple = NSSelectorFromString(@"openApplicationWithBundleID:");
+    if ([ws respondsToSelector:simple]) {
+        ((BOOL (*)(id, SEL, NSString *))objc_msgSend)(ws, simple, bid);
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{ raise(SIGKILL); });
+        return 1;
+    }
+    return 0;
 }
