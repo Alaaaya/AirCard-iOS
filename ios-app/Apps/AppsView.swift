@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 
 extension View {
     @ViewBuilder
-    func appsGlass(cornerRadius: CGFloat = 24, tint: Color? = nil, interactive: Bool = false) -> some View {
+    func appsGlassClassic(cornerRadius: CGFloat = 24, tint: Color? = nil, interactive: Bool = false) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             let g: Glass = tint.map { Glass.regular.tint($0.opacity(0.25)) } ?? .regular
@@ -19,7 +19,7 @@ extension View {
     }
 
     @ViewBuilder
-    func appsGlassCapsule(tint: Color? = nil) -> some View {
+    func appsGlassCapsuleClassic(tint: Color? = nil) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             let g: Glass = tint.map { Glass.regular.tint($0.opacity(0.35)) } ?? .regular
@@ -57,7 +57,12 @@ extension View {
 // MARK: - Aurora background
 
 struct AuroraBackground: View {
+    @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     var body: some View {
+        if theme == MirsaTheme.liquid.rawValue { LiquidBackground() } else { classic }
+    }
+
+    private var classic: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { ctx in
             let t = Float(ctx.date.timeIntervalSinceReferenceDate)
             let s = sin(t * 0.25) * 0.08
@@ -118,7 +123,8 @@ struct AppsTab: View {
     @ObservedObject private var downloads = DownloadsLibrary.shared
     @Namespace private var segNS
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 18), count: 3)
+    @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
+    private var columns: [GridItem] { Array(repeating: GridItem(.flexible(), spacing: theme == MirsaTheme.liquid.rawValue ? 14 : 18), count: theme == MirsaTheme.liquid.rawValue ? 4 : 3) }
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -140,7 +146,7 @@ struct AppsTab: View {
 
             fab
                 .padding(.trailing, 22)
-                .padding(.bottom, 26)
+                .padding(.bottom, theme == MirsaTheme.liquid.rawValue ? 18 : 26)
 
             if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress) }
         }
@@ -507,6 +513,8 @@ struct RenewalRing: View {
 
 struct AppTile: View {
     let app: ManagedApp
+    @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
+    private var liquid: Bool { theme == MirsaTheme.liquid.rawValue }
     private var icon: UIImage? { UIImage(contentsOfFile: AppsStore.iconURL(app.id).path) }
 
     var body: some View {
@@ -531,20 +539,20 @@ struct AppTile: View {
                         }
                     }
                 }
-                .frame(width: 64, height: 64)
+                .frame(width: liquid ? 54 : 64, height: liquid ? 54 : 64)
                 .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
                 .shadow(color: .black.opacity(0.35), radius: 6, y: 4)
             }
-            .frame(width: 96, height: 96)
-            .appsGlass(cornerRadius: 26, tint: tint)
+            .frame(width: liquid ? 76 : 96, height: liquid ? 76 : 96)
+            .appsGlass(cornerRadius: liquid ? 24 : 26, tint: liquid ? nil : tint)
             .overlay(alignment: .topTrailing) { badges }
 
             Text(app.name)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
-                .frame(maxWidth: 96)
+                .frame(maxWidth: liquid ? 82 : 96)
         }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
@@ -909,6 +917,7 @@ struct PromptSheet: View {
 
 struct AppsSettingsSheet: View {
     @EnvironmentObject var vm: AppViewModel
+    @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     @ObservedObject var store: AppsStore
     let onSignIn: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -927,6 +936,12 @@ struct AppsSettingsSheet: View {
                     } else {
                         Button(L.t("hero.signIn"), action: onSignIn)
                     }
+                }
+                Section(tr("Theme", "الثيم")) {
+                    Picker(tr("Theme", "الثيم"), selection: $theme) {
+                        ForEach(MirsaTheme.allCases) { t in Text(t.title).tag(t.rawValue) }
+                    }
+                    .pickerStyle(.segmented)
                 }
                 Section {
                     Stepper(value: $store.realLimit, in: 1...100) {

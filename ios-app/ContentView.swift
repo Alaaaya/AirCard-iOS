@@ -836,20 +836,35 @@ struct ContentView: View {
     @EnvironmentObject var vm: AppViewModel
     @AppStorage("aircard.dont_show_support_on_launch") private var dontShowSupportOnLaunch: Bool = false
     @State private var showSupportPopup: Bool = false
+    @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
+    private var liquidTheme: Bool { theme == MirsaTheme.liquid.rawValue }
 
     var body: some View {
         TabView(selection: $vm.selectedTab) {
             AppsTab()
+                .modifier(LiquidTabChrome(liquid: liquidTheme))
                 .tabItem { Label(L.t("tab"), systemImage: "square.grid.3x3.fill") }
                 .tag(AppTab.apps)
 
             SourcesTab()
+                .modifier(LiquidTabChrome(liquid: liquidTheme))
                 .tabItem { Label(tr("Sources", "السورسات"), systemImage: "shippingbox.fill") }
                 .tag(AppTab.sources)
 
             ToolsTab()
+                .modifier(LiquidTabChrome(liquid: liquidTheme))
                 .tabItem { Label(L.t("tools.tab"), systemImage: "wand.and.stars") }
                 .tag(AppTab.pairing)
+        }
+        .overlay(alignment: .bottom) {
+            if liquidTheme {
+                LiquidTabBar(selection: $vm.selectedTab, items: [
+                    LiquidTabItem(tab: .apps, title: L.t("tab"), icon: "square.grid.2x2"),
+                    LiquidTabItem(tab: .sources, title: tr("Sources", "السورسات"), icon: "shippingbox"),
+                    LiquidTabItem(tab: .pairing, title: L.t("tools.tab"), icon: "wand.and.stars"),
+                ])
+                .ignoresSafeArea(.keyboard)
+            }
         }
         .onOpenURL { url in
             // mirsa://launch?bundle=… from a Home Screen shortcut.
@@ -2829,5 +2844,22 @@ struct KeypadPreviewView: View {
             }
         }
         .frame(width: btnD, height: btnD)
+    }
+}
+
+
+/// Liquid Glass theme: hide the system tab bar (a floating glass bar replaces it)
+/// and keep content clear of it.
+struct LiquidTabChrome: ViewModifier {
+    let liquid: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if liquid {
+            content
+                .toolbar(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: 76) }
+        } else {
+            content
+        }
     }
 }

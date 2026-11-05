@@ -234,10 +234,17 @@ struct SourcesTab: View {
 private struct SourceRow: View {
     let source: RepoSource
     let loading: Bool
+    @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     var body: some View {
         let tint = Color(hex: source.tint) ?? Color(red: 0.45, green: 0.38, blue: 0.95)
         HStack(spacing: 14) {
-            RemoteIcon(url: source.iconURL.flatMap(URL.init(string:)), size: 48, corner: 24)
+            if theme == MirsaTheme.liquid.rawValue {
+                RemoteIcon(url: source.iconURL.flatMap(URL.init(string:)), size: 36, corner: 9)
+                    .frame(width: 58, height: 58)
+                    .appsGlass(cornerRadius: 18)
+            } else {
+                RemoteIcon(url: source.iconURL.flatMap(URL.init(string:)), size: 48, corner: 24)
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text(source.name).font(.title3.weight(.semibold)).foregroundStyle(.white)
                 if let d = source.updated {
@@ -255,7 +262,7 @@ private struct SourceRow: View {
             }
         }
         .padding(16)
-        .background(tint.opacity(0.85), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .modifier(SourceRowBackground(liquid: theme == MirsaTheme.liquid.rawValue, tint: tint))
     }
 }
 
@@ -375,5 +382,19 @@ struct RemoteIcon: View {
             .frame(width: size, height: size)
             .background(.white.opacity(0.08))
             .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+    }
+}
+
+
+private struct SourceRowBackground: ViewModifier {
+    let liquid: Bool
+    let tint: Color
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if liquid {
+            content.appsGlass(cornerRadius: 30, tint: tint)
+        } else {
+            content.background(tint.opacity(0.85), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
     }
 }
