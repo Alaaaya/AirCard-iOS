@@ -242,7 +242,7 @@ enum SideloadService {
     static func containerSign(appDir: String) throws -> [String: Any] {
         var out: UnsafeMutablePointer<CChar>?
         var err: UnsafeMutablePointer<CChar>?
-        let rc = al_container_sign(appDir, &out, &err)
+        let rc = al_container_sign_as(appDir, Bundle.main.bundleIdentifier ?? "", &out, &err)
         let o = take(out), e = take(err)
         if rc != 0 { throw SideloadError.message(e ?? "Signing failed") }
         return json(o)

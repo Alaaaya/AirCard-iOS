@@ -165,6 +165,11 @@ final class AppsStore: ObservableObject {
         SideloadService.configure()
         PromptBridge.shared.present = { [weak self] p in self?.prompt = p }
         load()
+        // Signing scheme v2: guests are signed under Mirsa's own bundle id.
+        if UserDefaults.standard.integer(forKey: "container.signRev") < 2 {
+            for var a in apps where a.location == .container { a.signedSerial = nil; upsert(a) }
+            UserDefaults.standard.set(2, forKey: "container.signRev")
+        }
     }
 
     private func load() {

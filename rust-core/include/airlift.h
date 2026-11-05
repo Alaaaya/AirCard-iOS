@@ -207,6 +207,7 @@ int32_t al_sl_uninstall(const char *pairing_path, const char *bundle_id,
 // Mach-O in the extracted .app with the session's development certificate.
 // JSON: executable, signed_files, cert_serial, team_id
 int32_t al_container_sign(const char *app_dir, char **out_json, char **out_error);
+int32_t al_container_sign_as(const char *app_dir, const char *ident, char **out_json, char **out_error);
 
 #ifdef __cplusplus
 }

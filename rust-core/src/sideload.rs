@@ -519,7 +519,7 @@ fn signer_for(id: &CertificateIdentity) -> Result<apple_codesign_quick::RustCryp
     ))
 }
 
-async fn container_sign(app_dir: String) -> Result<serde_json::Value, String> {
+async fn container_sign(app_dir: String, host_ident: Option<String>) -> Result<serde_json::Value, String> {
     let (id, team_id) = {
         let mut guard = session_lock().lock().await;
         let s = guard.as_mut().ok_or_else(|| "Sign in with your Apple ID first".to_string())?;
@@ -534,6 +534,10 @@ async fn container_sign(app_dir: String) -> Result<serde_json::Value, String> {
         let empty = plist::Dictionary::new();
         let mut signed = 0usize;
         for (path, ident) in &prepared.macho_files {
+            // iOS validates a free developer signature against the host app's
+            // provisioning profile, whose App ID is the host's bundle id, so
+            // every guest Mach-O is signed under the host's identifier.
+            let ident: &str = host_ident.as_deref().unwrap_or(ident.as_str());
             let cfg = apple_codesign_quick::MachOSigningConfig::new(ident, &team, &empty, Some(&signer));
             apple_codesign_quick::sign_macho_file(path, &cfg)
                 .map_err(|e| format!("Signing {} failed: {e}", path.display()))?;
@@ -713,6 +717,22 @@ pub unsafe extern "C" fn al_container_sign(
     out_error: *mut *mut c_char,
 ) -> i32 {
     let dir = opt_str(app_dir, "");
-    let res = guarded("al_container_sign", move || runtime().block_on(container_sign(dir)));
+    let res = guarded("al_container_sign", move || runtime().block_on(container_sign(dir, None)));
+    write_result(res, out_json, out_error)
+}
+
+/// Same as `al_container_sign`, signing every Mach-O under `ident`
+/// (the host app's bundle id). BLOCKS.
+#[no_mangle]
+pub unsafe extern "C" fn al_container_sign_as(
+    app_dir: *const c_char,
+    ident: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let dir = opt_str(app_dir, "");
+    let id = opt_str(ident, "");
+    let host = if id.is_empty() { None } else { Some(id) };
+    let res = guarded("al_container_sign_as", move || runtime().block_on(container_sign(dir, host)));
     write_result(res, out_json, out_error)
 }

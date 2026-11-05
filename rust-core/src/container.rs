@@ -183,8 +183,10 @@ pub fn patch_main_executable(mut d: Vec<u8>) -> Result<Vec<u8>, String> {
         off += cmdsize;
     }
 
-    // MH_EXECUTE -> MH_DYLIB
+    // MH_EXECUTE -> MH_DYLIB, not position-independent-executable any more
     wr32(&mut d, 12, MH_DYLIB);
+    let flags = rd32(&d, 24);
+    wr32(&mut d, 24, (flags & !0x0020_0000) | 0x0010_0000); // clear MH_PIE, set MH_NO_REEXPORTED_DYLIBS
 
     if let (Some(pz), Some(text)) = (pagezero, text_vmaddr) {
         if text >= 0x4000 {
