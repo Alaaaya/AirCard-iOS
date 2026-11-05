@@ -36,9 +36,28 @@ final class SourcesStore: ObservableObject {
     @Published var loading: Set<String> = []
     @Published var error: String?
 
+    /// Sources that ship with Mirsa: present on first launch (added once, so a
+    /// user who deletes one keeps it deleted).
+    static let builtIn: [(url: String, name: String)] = [
+        ("https://repository.apptesters.org", "AppTesters IPA Repo"),
+        ("https://github.com/Alaaaya/Mirsa/releases/download/setup/source.json", "Mirsa"),
+        ("https://itslevii.dev/repo.json", "itslevii"),
+    ]
+    private let seededKey = "mirsa.sources.builtin.v1"
+
     init() {
+        var list: [RepoSource] = []
         if let d = UserDefaults.standard.data(forKey: key),
-           let s = try? JSONDecoder().decode([RepoSource].self, from: d) { sources = s }
+           let s = try? JSONDecoder().decode([RepoSource].self, from: d) { list = s }
+        if !UserDefaults.standard.bool(forKey: seededKey) {
+            func norm(_ u: String) -> String { u.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+            for b in Self.builtIn where !list.contains(where: { norm($0.url) == norm(b.url) }) {
+                list.append(RepoSource(url: b.url, name: b.name))
+            }
+            UserDefaults.standard.set(true, forKey: seededKey)
+        }
+        sources = list
+        save()
     }
 
     private func save() {
