@@ -210,6 +210,12 @@ int32_t al_container_sign(const char *app_dir, char **out_json, char **out_error
 int32_t al_container_sign_as(const char *app_dir, const char *ident, char **out_json, char **out_error);
 int32_t al_container_sign_file(const char *path, const char *ident, char **out_json, char **out_error);
 
+// Device tools over the pairing tunnel. kind: battery, storage, profiles,
+// profile_remove (arg uuid), crashes (arg dir), crash_pull (arg name, out_path),
+// afc_ls (arg path), afc_pull (arg path, out_path), afc_remove (arg path).
+int32_t al_dev_tool(const char *pairing_path, const char *kind, const char *arg,
+                    const char *out_path, char **out_json, char **out_error);
+
 #ifdef __cplusplus
 }
 #endif

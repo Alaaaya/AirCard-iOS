@@ -8,6 +8,8 @@ struct RefreshAppsIntent: AppIntent {
     static var description = IntentDescription("Re-signs and reinstalls every app Mirsa installed as a real app, and re-signs Container apps when the certificate changed.")
     static var openAppWhenRun: Bool = false
 
+    @Parameter(title: "Only when expiring within (days, 0 = all)", default: 2) var withinDays: Int
+
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let store = AppsStore.shared
@@ -15,7 +17,7 @@ struct RefreshAppsIntent: AppIntent {
             return .result(dialog: IntentDialog(stringLiteral: L.t("err.notSignedIn")))
         }
         await store.refreshAccount()
-        let n = await store.refreshAll(vm: AppViewModel.shared)
+        let n = await store.refreshAll(vm: AppViewModel.shared, withinDays: withinDays > 0 ? withinDays : nil)
         if let e = store.error, n == 0, !store.realApps.isEmpty {
             store.error = nil
             return .result(dialog: IntentDialog(stringLiteral: e))

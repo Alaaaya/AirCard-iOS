@@ -4,11 +4,12 @@ import SwiftUI
 struct ToolsTab: View {
     @EnvironmentObject var vm: AppViewModel
     enum Section: String, CaseIterable, Identifiable {
-        case pairing, wallet, passcode, wallpapers
+        case pairing, device, wallet, passcode, wallpapers
         var id: String { rawValue }
         var icon: String {
             switch self {
             case .pairing: return "antenna.radiowaves.left.and.right"
+            case .device: return "iphone.gen3"
             case .wallet: return "creditcard.fill"
             case .passcode: return "lock.circle.fill"
             case .wallpapers: return "photo.stack.fill"
@@ -27,6 +28,7 @@ struct ToolsTab: View {
             Group {
                 switch section {
                 case .pairing: SetupPairingSheet(showsClose: false)
+                case .device: DeviceToolsView()
                 case .wallet: WalletCardsTab()
                 case .passcode: PasscodeThemeTab()
                 case .wallpapers: TendiesView()
@@ -45,7 +47,7 @@ struct ToolsTab: View {
                 } label: {
                     VStack(spacing: 4) {
                         Image(systemName: s.icon).font(.system(size: 16, weight: .semibold))
-                        Text(L.t("tools.\(s.rawValue)")).font(.caption2.weight(.semibold)).lineLimit(1)
+                        Text(s == .device ? tr("Device", "الجهاز") : L.t("tools.\(s.rawValue)")).font(.caption2.weight(.semibold)).lineLimit(1)
                     }
                     .foregroundStyle(section == s ? .white : .white.opacity(0.6))
                     .frame(maxWidth: .infinity)

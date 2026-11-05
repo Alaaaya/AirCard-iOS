@@ -256,6 +256,17 @@ enum SideloadService {
         if rc != 0 { throw SideloadError.message(e ?? "Signing failed") }
     }
 
+    /// Device tools (battery, storage, profiles, crash logs, Media files). BLOCKS.
+    static func devTool(_ kind: String, arg: String = "", outPath: String = "") throws -> Any? {
+        var out: UnsafeMutablePointer<CChar>? = nil
+        var err: UnsafeMutablePointer<CChar>? = nil
+        let rc = al_dev_tool(pairingPath(), kind, arg, outPath, &out, &err)
+        let o = take(out), e = take(err)
+        if rc != 0 { throw SideloadError.message(e ?? "Device tool failed") }
+        guard let o, let d = o.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: d, options: [.fragmentsAllowed])
+    }
+
     static func unzip(_ archive: String, to dir: String) -> Bool {
         al_zip_extract_all(archive, dir) == 0
     }

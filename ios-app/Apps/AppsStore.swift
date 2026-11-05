@@ -622,14 +622,24 @@ final class AppsStore: ObservableObject {
     /// Re-install every real app (new 7-day profile). Used by the button,
     /// the App Intent and the background task.
     @discardableResult
-    func refreshAll(vm: AppViewModel?) async -> Int {
+    /// `withinDays`: only renew apps that expire within that many days (nil = all).
+    /// When Mirsa itself is due too, it renews itself last (which relaunches it).
+    func refreshAll(vm: AppViewModel?, withinDays: Int? = nil) async -> Int {
         var n = 0
-        for app in realApps {
+        let due = { (exp: Date?) -> Bool in
+            guard let w = withinDays, let exp else { return true }
+            return exp.timeIntervalSinceNow <= Double(w) * 86_400
+        }
+        for app in realApps where due(app.expires) {
             var a = app
             if await installAsReal(&a, vm: vm) { upsert(a); n += 1 }
         }
         await resignContainerIfCertChanged()
         if n > 0 { toast = L.f("toast.refreshed", n) }
+        if withinDays != nil, let own = ownExpiry, due(own) {
+            scheduleExpiryReminders()
+            await installSelf(vm: vm)
+        }
         return n
     }
 
@@ -823,7 +833,7 @@ final class AppsStore: ObservableObject {
         BGTaskScheduler.shared.register(forTaskWithIdentifier: bgTaskID, using: nil) { task in
             let work = Task { @MainActor in
                 if GitHubWatcher.shared.autoInstall { await GitHubWatcher.shared.checkAll(install: true) }
-                let n = await AppsStore.shared.refreshAll(vm: AppViewModel.shared)
+                let n = await AppsStore.shared.refreshAll(vm: AppViewModel.shared, withinDays: 2)
                 AppsStore.shared.scheduleBackgroundRefresh()
                 task.setTaskCompleted(success: n >= 0)
             }

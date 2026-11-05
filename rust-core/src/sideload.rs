@@ -858,3 +858,186 @@ pub unsafe extern "C" fn al_container_sign_file(
     let res = guarded("al_container_sign_file", move || runtime().block_on(container_sign_file(p, id)));
     write_result(res, out_json, out_error)
 }
+
+// ---------------------------------------------------------------------------
+// Device tools over the same tunnel: battery, storage, provisioning profiles,
+// crash logs and the Media folder (AFC). Each call opens its own tunnel.
+
+async fn dev_connect<T>(tunnel: &mut AppDeviceTunnel) -> Result<T, String>
+where
+    T: idevice::RsdService + idevice::IdeviceService,
+{
+    match tunnel {
+        AppDeviceTunnel::Rsd { adapter, handshake } => handshake
+            .connect::<T>(adapter)
+            .await
+            .map_err(|e| format!("{}: {e:?}", T::rsd_service_name())),
+        AppDeviceTunnel::Lockdown { provider, .. } => T::connect(&*provider)
+            .await
+            .map_err(|e| format!("{}: {e:?}", T::service_name())),
+    }
+}
+
+fn plist_to_json(v: &plist::Value) -> serde_json::Value {
+    use serde_json::Value as J;
+    match v {
+        plist::Value::Dictionary(d) => J::Object(d.iter().map(|(k, v)| (k.clone(), plist_to_json(v))).collect()),
+        plist::Value::Array(a) => J::Array(a.iter().map(plist_to_json).collect()),
+        plist::Value::Boolean(b) => J::Bool(*b),
+        plist::Value::Integer(i) => i
+            .as_signed()
+            .map(|x| J::from(x))
+            .or_else(|| i.as_unsigned().map(J::from))
+            .unwrap_or(J::Null),
+        plist::Value::Real(f) => J::from(*f),
+        plist::Value::String(s) => J::String(s.clone()),
+        plist::Value::Date(d) => J::String(d.to_xml_format()),
+        plist::Value::Data(d) => J::String(format!("<{} bytes>", d.len())),
+        _ => J::Null,
+    }
+}
+
+/// The plist embedded in a CMS-signed .mobileprovision.
+fn profile_plist(bytes: &[u8]) -> Option<plist::Dictionary> {
+    let start = bytes.windows(5).position(|w| w == b"<?xml")?;
+    let end_tag = b"</plist>";
+    let end = bytes.windows(end_tag.len()).rposition(|w| w == end_tag)? + end_tag.len();
+    plist::from_bytes::<plist::Dictionary>(&bytes[start..end]).ok()
+}
+
+async fn dev_tool(pairing_path: String, kind: String, arg: String, out_path: String, logger: &Logger) -> Result<serde_json::Value, String> {
+    use idevice::services::afc::{AfcClient, opcode::AfcFopenMode};
+    use idevice::services::crashreportcopymobile::CrashReportCopyMobileClient;
+    use idevice::services::diagnostics_relay::DiagnosticsRelayClient;
+    use idevice::services::installation_proxy::InstallationProxyClient;
+    use idevice::services::misagent::MisagentClient;
+    use serde_json::json;
+
+    let pairing = std::fs::read(&pairing_path).map_err(|e| format!("Read pairing file: {e}"))?;
+    let mut tunnel = exploit::connect_tunnel(&pairing, logger).await?;
+
+    match kind.as_str() {
+        "battery" => {
+            let mut c: DiagnosticsRelayClient = dev_connect(&mut tunnel).await?;
+            let io = c
+                .ioregistry(None, None, Some("IOPMPowerSource"))
+                .await
+                .map_err(|e| format!("IORegistry: {e:?}"))?;
+            let gas = c.gasguage().await.ok().flatten();
+            let _ = c.goodbye().await;
+            Ok(json!({
+                "ioreg": io.map(|d| plist_to_json(&plist::Value::Dictionary(d))),
+                "gasgauge": gas.map(|d| plist_to_json(&plist::Value::Dictionary(d))),
+            }))
+        }
+        "storage" => {
+            let mut c: InstallationProxyClient = dev_connect(&mut tunnel).await?;
+            let opts = plist::Value::Dictionary({
+                let mut d = plist::Dictionary::new();
+                d.insert("ApplicationType".into(), "User".into());
+                d.insert(
+                    "ReturnAttributes".into(),
+                    plist::Value::Array(
+                        ["CFBundleIdentifier", "CFBundleDisplayName", "CFBundleName", "StaticDiskUsage", "DynamicDiskUsage"]
+                            .iter()
+                            .map(|s| plist::Value::String(s.to_string()))
+                            .collect(),
+                    ),
+                );
+                d
+            });
+            let apps = c.browse(Some(opts)).await.map_err(|e| format!("Browse: {e:?}"))?;
+            Ok(serde_json::Value::Array(apps.iter().map(plist_to_json).collect()))
+        }
+        "profiles" => {
+            let mut c: MisagentClient = dev_connect(&mut tunnel).await?;
+            let all = c.copy_all().await.map_err(|e| format!("misagent: {e:?}"))?;
+            let list: Vec<serde_json::Value> = all
+                .iter()
+                .filter_map(|b| profile_plist(b))
+                .map(|d| {
+                    let get = |k: &str| d.get(k).map(plist_to_json).unwrap_or(serde_json::Value::Null);
+                    json!({
+                        "uuid": get("UUID"),
+                        "name": get("Name"),
+                        "appIDName": get("AppIDName"),
+                        "team": get("TeamName"),
+                        "expires": get("ExpirationDate"),
+                        "created": get("CreationDate"),
+                    })
+                })
+                .collect();
+            Ok(serde_json::Value::Array(list))
+        }
+        "profile_remove" => {
+            let mut c: MisagentClient = dev_connect(&mut tunnel).await?;
+            c.remove(&arg).await.map_err(|e| format!("misagent remove: {e:?}"))?;
+            Ok(serde_json::Value::Null)
+        }
+        "crashes" => {
+            if let AppDeviceTunnel::Lockdown { provider, .. } = &tunnel {
+                let _ = idevice::services::crashreportcopymobile::flush_reports(provider).await;
+            }
+            let mut c: CrashReportCopyMobileClient = dev_connect(&mut tunnel).await?;
+            let dir = if arg.is_empty() { None } else { Some(arg.as_str()) };
+            let names = c.ls(dir).await.map_err(|e| format!("crash list: {e:?}"))?;
+            Ok(json!(names.into_iter().filter(|n| n != "." && n != "..").collect::<Vec<_>>()))
+        }
+        "crash_pull" => {
+            let mut c: CrashReportCopyMobileClient = dev_connect(&mut tunnel).await?;
+            let bytes = c.pull(arg.clone()).await.map_err(|e| format!("crash pull: {e:?}"))?;
+            std::fs::write(&out_path, &bytes).map_err(|e| format!("write: {e}"))?;
+            Ok(json!({ "size": bytes.len() }))
+        }
+        "afc_ls" => {
+            let mut c: AfcClient = dev_connect(&mut tunnel).await?;
+            let path = if arg.is_empty() { "/".to_string() } else { arg.clone() };
+            let names = c.list_dir(path.clone()).await.map_err(|e| format!("list: {e:?}"))?;
+            let mut out = Vec::new();
+            for n in names.into_iter().filter(|n| n != "." && n != "..") {
+                let full = if path.ends_with('/') { format!("{path}{n}") } else { format!("{path}/{n}") };
+                let (dir, size, modified) = match c.get_file_info(full.clone()).await {
+                    Ok(i) => (i.st_ifmt == "S_IFDIR", i.size, i.modified.to_string()),
+                    Err(_) => (false, 0, String::new()),
+                };
+                out.push(json!({ "name": n, "path": full, "dir": dir, "size": size, "modified": modified }));
+            }
+            Ok(serde_json::Value::Array(out))
+        }
+        "afc_pull" => {
+            let mut c: AfcClient = dev_connect(&mut tunnel).await?;
+            let mut f = c.open(arg.clone(), AfcFopenMode::RdOnly).await.map_err(|e| format!("open: {e:?}"))?;
+            let bytes = f.read_entire().await.map_err(|e| format!("read: {e:?}"))?;
+            let _ = f.close().await;
+            std::fs::write(&out_path, &bytes).map_err(|e| format!("write: {e}"))?;
+            Ok(json!({ "size": bytes.len() }))
+        }
+        "afc_remove" => {
+            let mut c: AfcClient = dev_connect(&mut tunnel).await?;
+            c.remove(arg.clone()).await.map_err(|e| format!("remove: {e:?}"))?;
+            Ok(serde_json::Value::Null)
+        }
+        other => Err(format!("unknown tool {other}")),
+    }
+}
+
+/// Device tools (see dev_tool). BLOCKS. Returns 0 and JSON in out_json, or 1 and out_error.
+#[no_mangle]
+pub unsafe extern "C" fn al_dev_tool(
+    pairing_path: *const c_char,
+    kind: *const c_char,
+    arg: *const c_char,
+    out_path: *const c_char,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let pairing = opt_str(pairing_path, "");
+    let kind = opt_str(kind, "");
+    let arg = opt_str(arg, "");
+    let out = opt_str(out_path, "");
+    let res = guarded("al_dev_tool", move || {
+        let logger = Logger { cb: None, ctx: std::ptr::null_mut() };
+        runtime().block_on(dev_tool(pairing, kind, arg, out, &logger))
+    });
+    write_result(res, out_json, out_error)
+}
