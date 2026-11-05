@@ -31,6 +31,11 @@ cp -R "$APP_PATH" build/AirCard-iOS.app
 rm -rf build/AirCard-iOS.app/_CodeSignature
 rm -rf build/AirCard-iOS.app/embedded.mobileprovision
 
+# Control library for the container signer self-test.
+mkdir -p build/AirCard-iOS.app/Frameworks
+xcrun -sdk iphoneos clang -arch arm64 -dynamiclib -miphoneos-version-min=16.0 \
+    -install_name @rpath/MirsaProbe.dylib -o build/AirCard-iOS.app/Frameworks/MirsaProbe.dylib ios-app/Probe/probe.c
+
 mkdir -p build/Payload
 cp -R build/AirCard-iOS.app build/Payload/AirCard-iOS.app
 

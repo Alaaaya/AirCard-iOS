@@ -489,22 +489,24 @@ final class AppsStore: ObservableObject {
     /// If A passes and B fails, the signer output is at fault; if both fail,
     /// iOS refuses developer-signed code loaded from the data container.
     func signerSelfTest() async -> String {
-        guard let exe = Bundle.main.executablePath else { return "[self-test] no executable" }
+        let probe = Bundle.main.bundleURL.appendingPathComponent("Frameworks/MirsaProbe.dylib")
         let fm = FileManager.default
+        guard fm.fileExists(atPath: probe.path) else { return "[self-test] probe library missing" }
         let dir = Self.appDir("selftest")
         try? fm.removeItem(at: dir)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        let a = dir.appendingPathComponent("a-\(UUID().uuidString)")
-        let b = dir.appendingPathComponent("b-\(UUID().uuidString)")
+        let a = dir.appendingPathComponent("a-\(UUID().uuidString).dylib")
+        let b = dir.appendingPathComponent("b-\(UUID().uuidString).dylib")
         var out = ["[self-test]"]
+        out.append("0 (in Mirsa bundle): " + Self.kernelCheck(probe.path))
         do {
-            try fm.copyItem(at: URL(fileURLWithPath: exe), to: a)
-            out.append("A (Mirsa copy): " + Self.kernelCheck(a.path))
-            try fm.copyItem(at: URL(fileURLWithPath: exe), to: b)
+            try fm.copyItem(at: probe, to: a)
+            out.append("A (copied as-is): " + Self.kernelCheck(a.path))
+            try fm.copyItem(at: probe, to: b)
             let bp = b.path, ident = Bundle.main.bundleIdentifier ?? ""
             if await ensureSession() {
                 try await Task.detached { try SideloadService.containerSignFile(path: bp, ident: ident) }.value
-                let fresh = dir.appendingPathComponent("c-\(UUID().uuidString)")
+                let fresh = dir.appendingPathComponent("c-\(UUID().uuidString).dylib")
                 try fm.copyItem(at: b, to: fresh)
                 out.append("B (re-signed by Mirsa): " + Self.kernelCheck(fresh.path))
             } else {
