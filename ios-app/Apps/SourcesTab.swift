@@ -84,16 +84,19 @@ final class SourcesStore: ObservableObject {
                 throw NSError(domain: "Mirsa", code: h.statusCode,
                               userInfo: [NSLocalizedDescriptionKey: tr("Source answered \(h.statusCode).", "السورس ردّ بـ \(h.statusCode).")])
             }
-            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            let json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+            let root: [String: Any]? = (json as? [String: Any]) ?? ((json as? [[String: Any]]).map { ["apps": $0] })
+            guard let root else {
                 throw NSError(domain: "Mirsa", code: 0, userInfo: [NSLocalizedDescriptionKey: tr("Not a source file.", "هذا مو ملف سورس.")])
             }
             let parsed = Self.parseApps(root, base: u)
             apps[url] = parsed
             if let i = sources.firstIndex(where: { $0.url == url }) {
                 var s = sources[i]
-                s.name = (root["name"] as? String) ?? s.name
-                s.iconURL = (root["iconURL"] as? String) ?? (root["icon"] as? String) ?? s.iconURL
-                s.tint = (root["tintColor"] as? String) ?? s.tint
+                let meta = (root["META"] as? [String: Any]) ?? (root["meta"] as? [String: Any]) ?? [:]
+                s.name = (root["name"] as? String) ?? (meta["repoName"] as? String) ?? (meta["name"] as? String) ?? s.name
+                s.iconURL = (root["iconURL"] as? String) ?? (root["icon"] as? String) ?? (meta["repoIcon"] as? String) ?? s.iconURL
+                s.tint = (root["tintColor"] as? String) ?? (root["tint"] as? String) ?? s.tint
                 s.updated = parsed.compactMap { $0.date }.compactMap(Self.date).max() ?? s.updated
                 s.appCount = parsed.count
                 sources[i] = s
@@ -117,7 +120,17 @@ final class SourcesStore: ObservableObject {
     }
 
     static func parseApps(_ root: [String: Any], base: URL) -> [RepoApp] {
-        let list = (root["apps"] as? [[String: Any]]) ?? (root["Apps"] as? [[String: Any]]) ?? []
+        // AltStore / SideStore / Feather / ESign: "apps". Scarlet and others:
+        // apps grouped in arrays under any key. A bare array also works.
+        var list: [[String: Any]] = []
+        let appKeys = ["apps", "Apps", "applications", "items", "data"]
+        for k in appKeys { if let a = root[k] as? [[String: Any]] { list = a; break } }
+        if list.isEmpty {
+            for (k, v) in root where k != "news" && k != "featuredApps" {
+                if let a = v as? [[String: Any]] { list += a }
+                if let d = v as? [String: Any], let a = d["apps"] as? [[String: Any]] { list += a }
+            }
+        }
         func url(_ v: Any?) -> URL? {
             guard let s = v as? String, !s.isEmpty else { return nil }
             return URL(string: s, relativeTo: base)?.absoluteURL
@@ -131,24 +144,28 @@ final class SourcesStore: ObservableObject {
             if let s = v as? String { return Int64(s) }
             return nil
         }
-        return list.compactMap { a in
+        var seen = Set<String>()
+        return list.compactMap { a -> RepoApp? in
             let latest = (a["versions"] as? [[String: Any]])?.first
-            guard let dl = url(latest?["downloadURL"]) ?? url(a["downloadURL"]) ?? url(a["down"]) ?? url(a["url"])
-            else { return nil }
+            let dlKeys = ["downloadURL", "downloadUrl", "download_url", "down", "download", "ipa", "ipaURL", "ipa_url", "link", "url"]
+            var dl: URL? = nil
+            for k in dlKeys where dl == nil { dl = url(latest?[k]) ?? url(a[k]) }
+            guard let dl else { return nil }
             let name = str(a, "name", "title") ?? "App"
-            return RepoApp(
+            let app = RepoApp(
                 name: name,
-                bundleID: str(a, "bundleIdentifier", "bundleID", "bundleId") ?? name,
-                developer: str(a, "developerName", "developer") ?? "",
+                bundleID: str(a, "bundleIdentifier", "bundleID", "bundleId", "bundle", "identifier", "bundle_id") ?? name,
+                developer: str(a, "developerName", "developer", "dev", "author") ?? "",
                 subtitle: str(a, "subtitle") ?? "",
-                description: str(a, "localizedDescription", "description") ?? "",
+                description: str(a, "localizedDescription", "description", "desc", "subtitle") ?? "",
                 version: (latest.flatMap { str($0, "version") }) ?? str(a, "version") ?? "",
-                iconURL: url(a["iconURL"]) ?? url(a["icon"]),
+                iconURL: url(a["iconURL"]) ?? url(a["icon"]) ?? url(a["iconUrl"]) ?? url(a["image"]) ?? url(a["icon_url"]),
                 downloadURL: dl,
-                size: int(latest?["size"]) ?? int(a["size"]),
-                date: (latest.flatMap { str($0, "date") }) ?? str(a, "versionDate")
+                size: int(latest?["size"]) ?? int(a["size"]) ?? int(a["fileSize"]),
+                date: (latest.flatMap { str($0, "date") }) ?? str(a, "versionDate", "date", "updated")
             )
-        }
+            return app
+        }.filter { seen.insert($0.id).inserted }
     }
 }
 
