@@ -72,11 +72,12 @@ struct PersonalAppsHome<Menu: View, Overlay: View>: View {
     }
 
     private func tile(_ a: PersonalLibraryApp) -> some View {
-        Button { if !editing { onOpen(a) } } label: {
+        MirsaHomeTileShell(appID: a.id.uuidString, name: a.name, enabled: !editing, onTap: { onOpen(a) }) {
             VStack(spacing: 8) {
                 PersonalHomeIcon(app: a, library: library)
                     .frame(width: 64, height: 64)
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay { MirsaHomeOperationBadge(appID: a.id.uuidString) }
                     .overlay { iconOverlay(a) }
                     .shadow(color: .black.opacity(0.2), radius: 6, y: 4)
                 Text(a.name).font(.system(size: 13, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
@@ -85,8 +86,6 @@ struct PersonalAppsHome<Menu: View, Overlay: View>: View {
             .frame(maxWidth: .infinity).frame(height: 110)
             .background { RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial) }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(a.name)
         .rotationEffect(.degrees(editing ? (jiggle ? 1.6 : -1.6) : 0))
         .animation(editing ? .easeInOut(duration: 0.12).repeatForever(autoreverses: true) : .default, value: jiggle)
         .onLongPressGesture(minimumDuration: 0.5) { startEditing() }

@@ -196,7 +196,7 @@ struct MirsaHomeScreen<Menu: View>: View {
     }
 
     private func tile(_ app: ManagedApp, compact: Bool) -> some View {
-        Button { if !editing { onLaunch(app) } } label: {
+        MirsaHomeTileShell(appID: app.id, name: app.name, enabled: !editing, onTap: { onLaunch(app) }) {
             VStack(spacing: 8) {
                 Group {
                     if let icon = UIImage(contentsOfFile: AppsStore.iconURL(app.id).path) {
@@ -207,6 +207,7 @@ struct MirsaHomeScreen<Menu: View>: View {
                 }
                 .frame(width: compact ? 48 : 64, height: compact ? 48 : 64)
                 .clipShape(RoundedRectangle(cornerRadius: compact ? 12 : 16, style: .continuous))
+                .overlay { MirsaHomeOperationBadge(appID: app.id, cornerRadius: compact ? 12 : 16) }
                 .shadow(color: .black.opacity(0.2), radius: 6, y: 4)
                 if !compact {
                     Text(app.name).font(.system(size: 13, weight: .medium))
@@ -220,8 +221,6 @@ struct MirsaHomeScreen<Menu: View>: View {
                 if !compact { RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial) }
             }
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(app.name)
         .rotationEffect(.degrees(editing ? (jiggle ? 1.6 : -1.6) : 0))
         .animation(editing ? .easeInOut(duration: 0.12).repeatForever(autoreverses: true) : .default, value: jiggle)
         .modifier(DockDrag(enabled: editing && compact, id: app.id))
@@ -449,6 +448,74 @@ struct MirsaFolderOverlay<Tile: View>: View {
             .transition(.opacity)
         } else {
             Color.clear.onAppear(perform: onClose)
+        }
+    }
+}
+
+
+// MARK: - Operation progress (shared by main and personal homes)
+
+/// Tappable tile without an outer Button, so the cancel button inside the badge is not nested.
+/// Tapping is ignored while an operation is active for this app.
+struct MirsaHomeTileShell<Content: View>: View {
+    let appID: String
+    let name: String
+    let enabled: Bool
+    let onTap: () -> Void
+    @ViewBuilder let content: () -> Content
+    @ObservedObject private var progress = MirsaOperationProgress.shared
+
+    var body: some View {
+        let entry = progress.entry(for: appID)
+        let busy = entry != nil
+        content()
+            .contentShape(Rectangle())
+            .onTapGesture { if enabled && !busy { onTap() } }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(entry.map { MirsaHomeOperationBadge.label(name: name, entry: $0) } ?? name)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction(.default) { if enabled && !busy { onTap() } }
+    }
+}
+
+/// Dim + real fraction (or indeterminate spinner) + cancel button when cancellation is allowed.
+struct MirsaHomeOperationBadge: View {
+    let appID: String
+    var cornerRadius: CGFloat = 16
+    @ObservedObject private var progress = MirsaOperationProgress.shared
+
+    static func label(name: String, entry e: MirsaOperationProgress.Entry) -> String {
+        let phase: String
+        switch e.phase {
+        case .downloading: phase = tr("Downloading", "جاري التنزيل")
+        case .preparing: phase = tr("Preparing", "جاري التحضير")
+        case .signing: phase = tr("Signing", "جاري التوقيع")
+        case .installing: phase = tr("Installing", "جاري التثبيت")
+        case .updating: phase = tr("Updating", "جاري التحديث")
+        }
+        let pct = e.fraction.map { " \(Int($0 * 100))%" } ?? ""
+        return name + ", " + phase + pct + (e.canCancel ? "" : ", " + tr("cannot be cancelled", "ما بيتلغى"))
+    }
+
+    var body: some View {
+        if let e = progress.entry(for: appID) {
+            ZStack {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(.black.opacity(0.5))
+                if let f = e.fraction {
+                    Circle().stroke(.white.opacity(0.25), lineWidth: 3).frame(width: 30, height: 30)
+                    Circle().trim(from: 0, to: f).stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .frame(width: 30, height: 30).rotationEffect(.degrees(-90))
+                } else { ProgressView().tint(.white) }
+                if e.canCancel {
+                    Button { progress.cancel(e.id) } label: {
+                        Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 44, height: 44).contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tr("Cancel download", "إلغاء التنزيل"))
+                }
+            }
+            .environment(\.layoutDirection, .leftToRight)
         }
     }
 }
