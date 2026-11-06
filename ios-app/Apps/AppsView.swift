@@ -361,9 +361,6 @@ struct AppsTab: View {
             Button { shortcutGuideApp = app } label: {
                 Label(tr("Home Screen Shortcut (no profile)", "اختصار رئيسية بدون بروفايل"), systemImage: "square.and.arrow.up")
             }
-            Button { shortcutError = HomeShortcut.add(app) } label: {
-                Label(tr("Home Screen (profile)", "الشاشة الرئيسية (بروفايل)"), systemImage: "plus.app")
-            }
         } else {
             Button { Task { await store.move(app, to: .container, vm: vm) } } label: {
                 Label(L.t("menu.toContainer"), systemImage: "shippingbox")
