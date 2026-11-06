@@ -15,7 +15,14 @@ struct PersonalProjectOptions: Sendable {
     var additionalProfiles: [Data] = []
     var removeExtensions = false
     var removeAppClips = false
+    var gameMode: PersonalGameMode = .keep
+    var fixWhiteIcon = false
+    var newTweaksFirst = false
+    var customEntitlements: Data? = nil
+    var exportExtension = "ipa"
 }
+
+enum PersonalGameMode: String, Codable, CaseIterable, Sendable { case keep, on, off }
 
 func personalText(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
 
@@ -35,4 +42,14 @@ struct PersonalProjectDraft: Codable, Equatable {
     var removeExtensions: Bool? = nil
     var removeAppClips: Bool? = nil
     var additionalProfileIDs: [String]? = nil
+    var gameMode: PersonalGameMode? = nil
+    var fixWhiteIcon: Bool? = nil
+    var fixDarkIcon: Bool? = nil
+    var newTweaksFirst: Bool? = nil
+    var workspaceNote: String? = nil
+    var exportExtension: String? = nil
+    var customEntitlements: Data? = nil
+    var customEntitlementsName: String? = nil
+    var directInjection: Bool? = nil
+    var appliedTweakIDs: [UUID]? = nil
 }

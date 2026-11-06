@@ -2,7 +2,7 @@ name: Personal certificate validation
 on:
   workflow_dispatch:
   push:
-    branches: [kat/cert-bundle-rewrite]
+    branches: [kat/cert-bundle-rewrite, kat/project-workspace-86]
 permissions:
   contents: read
 jobs:

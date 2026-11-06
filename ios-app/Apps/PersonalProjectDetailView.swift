@@ -17,7 +17,13 @@ struct PersonalProjectDetailView: View {
     @State private var output: URL?
     @State private var sharing = false
     @State private var icon: UIImage?
+    @State private var extensionCount: Int?
+    @State private var deps: [String]?
+    @State private var showDeps = false
+    @State private var pickingEntitlements = false
+    @State private var inspectRoot: URL?
 
+    private var configOnly: Bool { selected == nil }
     private var selected: PersonalIdentityVault.SavedIdentity? {
         identities.first { $0.id == selectedID } ?? identities.first
     }
@@ -42,10 +48,11 @@ struct PersonalProjectDetailView: View {
                     outputCard
                     tweaksCard
                     settingsCard
+                    depsCard
                     certificateCard
-                    Text(personalText("Custom entitlements import is not available yet. Retained extensions, Watch apps and App Clips require matching profiles for the connected device.",
-                                      "استيراد Entitlements مخصّصة مو متاح حالياً. الإضافات وتطبيقات Watch وApp Clips اللي بتحتفظ فيها بدها بروفايلات مطابقة للجهاز المتصل."))
-                        .font(.caption).foregroundStyle(.secondary)
+                    Button { openWorkspace() } label: {
+                        Label(personalText("Browse workspace folder", "تصفّح مجلد المشروع"), systemImage: "folder")
+                    }.buttonStyle(.bordered)
                     if let message { Text(message).font(.footnote).textSelection(.enabled) }
                 }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
             }.scrollIndicators(.hidden)
@@ -54,11 +61,11 @@ struct PersonalProjectDetailView: View {
             Button { sign() } label: {
                 HStack(spacing: 8) {
                     if busy { ProgressView() } else { Image(systemName: "hammer.fill") }
-                    Text(personalText("Sign and export IPA", "توقيع وتصدير IPA")).fontWeight(.semibold)
+                    Text(configOnly ? personalText("Export configuration only", "تصدير الإعدادات فقط") : personalText("Sign & Install", "توقيع وتثبيت")).fontWeight(.semibold)
                 }.frame(maxWidth: .infinity).padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent).tint(.green)
-            .disabled(busy || selected == nil)
+            .disabled(busy)
             .padding(.horizontal, 20).padding(.bottom, 12).padding(.top, 12)
             .background(.ultraThinMaterial)
         }
@@ -75,10 +82,20 @@ struct PersonalProjectDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $pickingEntitlements) {
+            DocumentPickerView(allowedContentTypes: [.propertyList, .xml, .data]) { url in
+                guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 64 * 1024,
+                      let data = try? Data(contentsOf: url),
+                      (try? PropertyListSerialization.propertyList(from: data, format: nil)) is [String: Any] else {
+                    message = personalText("Invalid or too large entitlements file (max 64 KB plist).", "ملف Entitlements غير صالح أو كبير (الحد 64KB)."); return
+                }
+                draft.customEntitlements = data; draft.customEntitlementsName = url.lastPathComponent
+            }
+        }
         .sheet(isPresented: $sharing, onDismiss: cleanOutput) {
             if let output { PersonalSignedShare(url: output) }
         }
-        .task { await load() }
+        .task { await load(); await inspect() }
         .onChange(of: draft) { _ in if loaded { saveDraft() } }
         .onDisappear { if !sharing { cleanOutput() } }
     }
@@ -93,8 +110,17 @@ struct PersonalProjectDetailView: View {
                 field(personalText("Name", "الاسم"), $draft.name)
                 field(personalText("Bundle ID", "معرّف التطبيق"), $draft.bundleID, mono: true)
                 field(personalText("Version", "الإصدار"), $draft.version)
+                field(personalText("Workspace note", "ملاحظة المشروع"), Binding(get: { draft.workspaceNote ?? "" }, set: { draft.workspaceNote = String($0.prefix(300)) }))
+                HStack(spacing: 8) {
+                    chip("puzzlepiece.extension", extensionCount.map { "\($0) " + personalText("extensions", "إضافات") } ?? "…")
+                    chip("arrow.triangle.branch", personalText("Main executable", "الملف الرئيسي"))
+                }
             }
         }.padding(16).appsGlass(cornerRadius: 24)
+    }
+    private func chip(_ icon: String, _ text: String) -> some View {
+        Label(text, systemImage: icon).font(.caption2.weight(.medium)).padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
     private func field(_ title: String, _ binding: Binding<String>, mono: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -108,8 +134,10 @@ struct PersonalProjectDetailView: View {
             Label(personalText("Output file name", "اسم ملف الإخراج"), systemImage: "doc.fill").font(.subheadline.weight(.semibold))
             HStack {
                 TextField("Mirsa-Signed", text: $draft.outputFilename).autocorrectionDisabled().textInputAutocapitalization(.never)
-                Text(".ipa").foregroundStyle(.secondary)
             }.padding(12).background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            Picker("", selection: Binding(get: { draft.exportExtension ?? "ipa" }, set: { draft.exportExtension = $0 })) {
+                Text("IPA").tag("ipa"); Text("TIPA").tag("tipa")
+            }.pickerStyle(.segmented)
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).appsGlass(cornerRadius: 24)
     }
     private var tweaksCard: some View {
@@ -126,6 +154,13 @@ struct PersonalProjectDetailView: View {
                 } label: { Label(personalText("Add", "إضافة"), systemImage: "plus") }
             }
             let ids = draft.tweakIDs.filter { tweak($0) != nil }
+            let applied = Set(draft.appliedTweakIDs ?? [])
+            let added = ids.filter { !applied.contains($0) }.count
+            let removed = applied.filter { !ids.contains($0) }.count
+            if added + removed > 0 {
+                Label(personalText("Pending changes: \(added) added, \(removed) removed. Applied on next export.", "تغييرات معلّقة: أُضيف \(added)، حُذف \(removed). بتنطبق عند التصدير."), systemImage: "exclamationmark.circle.fill")
+                    .font(.caption).foregroundStyle(.yellow)
+            }
             if ids.isEmpty {
                 Text(personalText("No tweaks. Add .dylib, .deb or .framework files.", "ما في إضافات. ضيف ملفات .dylib أو .deb أو .framework."))
                     .font(.footnote).foregroundStyle(.secondary)
@@ -137,9 +172,15 @@ struct PersonalProjectDetailView: View {
                     }.buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(tweak(id)?.name ?? "").font(.subheadline).lineLimit(1)
-                        Text(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي")).font(.caption2).foregroundStyle(.secondary)
+                        Menu {
+                            Button { } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: "checkmark") }
+                            Button { } label: { Text(personalText("Via LoadControl (unavailable)", "عبر LoadControl (غير متاح)")) }.disabled(true)
+                        } label: {
+                            Text(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي") + " ▾").font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer()
+                    if let url = try? tweaks.urls(for: [id]).first { ShareLink(item: url) { Image(systemName: "square.and.arrow.up") } }
                     Button { move(id, -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0)
                     Button { move(id, 1) } label: { Image(systemName: "arrow.down") }.disabled(index == ids.count - 1)
                 }.buttonStyle(.plain).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -159,12 +200,38 @@ struct PersonalProjectDetailView: View {
             toggle(personalText("Remove extensions", "إزالة الإضافات المضمّنة"), personalText("Removes PlugIns before signing.", "بيحذف مجلد PlugIns قبل التوقيع."), Binding(get: { draft.removeExtensions ?? false }, set: { draft.removeExtensions = $0 }))
             toggle(personalText("Remove App Clips", "إزالة App Clips"), personalText("Removes AppClips before signing.", "بيحذف مجلد AppClips قبل التوقيع."), Binding(get: { draft.removeAppClips ?? false }, set: { draft.removeAppClips = $0 }))
             toggle(personalText("Remove Watch app", "إزالة تطبيق الساعة"), personalText("Deletes the Watch folder before signing.", "بيحذف مجلد الساعة قبل التوقيع."), $draft.removeWatchApp)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(personalText("Minimum iOS version", "أدنى إصدار iOS")).font(.subheadline)
-                TextField(personalText("Keep original, or e.g. 15.0", "الأصلي، أو مثلاً 15.0"), text: $draft.minimumOS)
-                    .keyboardType(.numbersAndPunctuation).padding(12)
-                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            toggle(personalText("Fix white/blank icon", "إصلاح الأيقونة البيضاء"), personalText("Flattens transparent icon PNGs onto black.", "بيحوّل أيقونات PNG الشفافة لخلفية سودا."), Binding(get: { draft.fixWhiteIcon ?? false }, set: { draft.fixWhiteIcon = $0 }))
+            toggle(personalText("Fix dark icon (iOS 18)", "إصلاح الأيقونة الداكنة (iOS 18)"), personalText("Unavailable: needs Assets.car rewriting.", "غير متاح: بدو تعديل Assets.car."), .constant(false)).disabled(true).opacity(0.5)
+            toggle(personalText("Direct injection (main executable)", "حقن مباشر بالملف الرئيسي"), personalText("LoadControl mode is not available in Mirsa yet.", "وضع LoadControl مو متاح بميرسا حالياً."), .constant(true)).disabled(true)
+            toggle(personalText("New tweaks first", "الإضافات الجديدة أولاً"), personalText("Injected libraries load before the app's own.", "المكتبات المحقونة بتتحمّل قبل مكتبات التطبيق."), Binding(get: { draft.newTweaksFirst ?? false }, set: { draft.newTweaksFirst = $0 }))
+            HStack {
+                Text(personalText("Game Mode", "وضع الألعاب")).font(.subheadline)
+                Spacer()
+                Picker("", selection: Binding(get: { draft.gameMode ?? .keep }, set: { draft.gameMode = $0 })) {
+                    Text(personalText("Keep", "إبقاء")).tag(PersonalGameMode.keep)
+                    Text(personalText("On", "تشغيل")).tag(PersonalGameMode.on)
+                    Text(personalText("Off", "إيقاف")).tag(PersonalGameMode.off)
+                }.pickerStyle(.menu)
             }
+            HStack {
+                Text(personalText("Minimum iOS", "أدنى إصدار iOS")).font(.subheadline)
+                Spacer()
+                Picker("", selection: $draft.minimumOS) {
+                    Text(personalText("Keep", "إبقاء")).tag("")
+                    ForEach(["12.0", "13.0", "14.0", "15.0", "16.0", "17.0", "18.0"], id: \.self) { Text($0).tag($0) }
+                }.pickerStyle(.menu)
+            }
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(personalText("Custom entitlements", "Entitlements مخصّصة")).font(.subheadline)
+                    Text(draft.customEntitlementsName ?? personalText("None. Still limited by the profile.", "ما في. وبتبقى محدودة بالبروفايل.")).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if draft.customEntitlements != nil {
+                    Button { draft.customEntitlements = nil; draft.customEntitlementsName = nil } label: { Image(systemName: "trash") }
+                }
+                Button { pickingEntitlements = true } label: { Image(systemName: "square.and.arrow.down") }
+            }.buttonStyle(.plain)
         }.padding(16).appsGlass(cornerRadius: 24)
     }
     private func toggle(_ title: String, _ sub: String, _ value: Binding<Bool>) -> some View {
@@ -174,6 +241,40 @@ struct PersonalProjectDetailView: View {
                 Text(sub).font(.caption).foregroundStyle(.secondary)
             }
         }.tint(.green)
+    }
+    private var depsCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button { withAnimation(.easeOut(duration: 0.25)) { showDeps.toggle() } } label: {
+                HStack {
+                    Label(personalText("Main binary dependencies", "اعتماديات الملف الرئيسي"), systemImage: "link").font(.subheadline.weight(.semibold))
+                    Spacer()
+                    Text(deps.map { "\($0.count)" } ?? "…").foregroundStyle(.secondary)
+                    Image(systemName: showDeps ? "chevron.up" : "chevron.down")
+                }
+            }.buttonStyle(.plain)
+            if showDeps { ForEach(deps ?? [], id: \.self) { Text($0).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(2) } }
+        }.padding(16).frame(maxWidth: .infinity, alignment: .leading).appsGlass(cornerRadius: 24)
+    }
+    private var rootURL: URL { library.root }
+    private func openWorkspace() {
+        if let url = URL(string: "shareddocuments://" + rootURL.path) { UIApplication.shared.open(url) }
+    }
+    private func inspect() async {
+        let input = library.url(app)
+        let result: (Int, [String])? = await Task.detached(priority: .utility) {
+            let fm = FileManager.default
+            let dir = fm.temporaryDirectory.appendingPathComponent("inspect-\(UUID().uuidString)")
+            defer { try? fm.removeItem(at: dir) }
+            do {
+                try IPAEditorService.run("extract", input: input, output: dir)
+                let appDir = try IPAEditorService.app(in: dir)
+                let info = try IPAEditorService.info(in: appDir)
+                let plugs = (try? fm.contentsOfDirectory(atPath: appDir.appendingPathComponent("PlugIns").path))?.filter { $0.hasSuffix(".appex") }.count ?? 0
+                let list = try IPAEditorService.dependencies(of: appDir.appendingPathComponent(info["CFBundleExecutable"] as! String))
+                return (plugs, list)
+            } catch { return nil }
+        }.value
+        if let result { extensionCount = result.0; deps = result.1 } else { extensionCount = 0; deps = [] }
     }
     private var certificateCard: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -201,6 +302,15 @@ struct PersonalProjectDetailView: View {
                 })) {
                     Text(personalText("Nested profile", "بروفايل للتطبيقات المضمّنة") + " · " + identity.name).font(.caption)
                 }
+            }
+            if identities.count > 1 {
+                Menu {
+                    ForEach(identities) { i in Button(i.name + " · " + i.teamID) { try? PersonalIdentityVault.select(i.id); reloadIdentities() } }
+                } label: { Label(personalText("Choose certificate", "اختيار الشهادة"), systemImage: "checkmark.seal") }
+            }
+            if selected == nil {
+                Label(personalText("No certificate: export will apply the configuration only and the IPA stays UNSIGNED.", "بدون شهادة: التصدير بيطبّق الإعدادات بس والـ IPA بيضل غير موقّع."), systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange)
             }
             Button { showCertificates = true } label: {
                 Label(personalText("Manage certificates", "إدارة الشهادات"), systemImage: "slider.horizontal.3")
@@ -233,7 +343,7 @@ struct PersonalProjectDetailView: View {
     }
 
     private func sign() {
-        guard let material = selected?.material else { return }
+        let material = selected?.material
         cleanOutput(); message = nil
         var options = PersonalProjectOptions()
         options.displayName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -246,6 +356,11 @@ struct PersonalProjectDetailView: View {
         options.removeWatchApp = draft.removeWatchApp
         options.removeExtensions = draft.removeExtensions ?? false
         options.removeAppClips = draft.removeAppClips ?? false
+        options.gameMode = draft.gameMode ?? .keep
+        options.fixWhiteIcon = draft.fixWhiteIcon ?? false
+        options.newTweaksFirst = draft.newTweaksFirst ?? false
+        options.customEntitlements = draft.customEntitlements
+        options.exportExtension = draft.exportExtension ?? "ipa"
         options.additionalProfiles = identities.filter { (draft.additionalProfileIDs ?? []).contains($0.id) }.map { $0.material.profile }
         let minimum = draft.minimumOS.trimmingCharacters(in: .whitespacesAndNewlines)
         options.minimumOS = minimum.isEmpty ? nil : minimum
@@ -259,18 +374,34 @@ struct PersonalProjectDetailView: View {
         Task {
             do {
                 let pairingPath = await MainActor.run { PairingController.pairingFilePath() }
+                guard let material else {
+                    let url = try await Task.detached(priority: .userInitiated) {
+                        try PersonalCertificateSigner.exportConfigurationOnly(ipa: input, options: signingOptions)
+                    }.value
+                    output = url; draft.appliedTweakIDs = draft.tweakIDs
+                    message = personalText("Configuration applied. This IPA is NOT signed.", "انطبقت الإعدادات. هاد الـ IPA غير موقّع.")
+                    sharing = true
+                    MirsaOperationProgress.shared.finish(operation)
+                    busy = false
+                    return
+                }
                 let result = try await Task.detached(priority: .userInitiated) {
-                    try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairingPath, options: signingOptions)
+                    try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairingPath, options: signingOptions, install: true)
                 }.value
                 output = result.url
-                message = personalText("Signed locally. Exporting does not install the app.", "تم التوقيع على جهازك. التصدير ما بيثبّت التطبيق.")
+                draft.appliedTweakIDs = draft.tweakIDs
+                if result.installed { message = personalText("Signed and installed.", "تم التوقيع والتثبيت.") }
+                else {
+                    message = personalText("Signed locally but install failed: ", "تم التوقيع بس التثبيت فشل: ") + (result.installError ?? "")
+                        + "\n" + personalText("The signed IPA was kept for sharing.", "الـ IPA الموقّع انحفظ للمشاركة.")
+                }
                 if result.bundleIdentifierChanged {
                     message = (message ?? "") + "\n" + "تم تغيير المعرّف ليطابق البروفايل"
                 }
                 if !result.verification.isVerified {
                     message = (message ?? "") + "\n" + result.verification.warningText
                 }
-                sharing = true
+                sharing = !result.installed
                 MirsaOperationProgress.shared.finish(operation)
                 MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: .success)
             } catch {

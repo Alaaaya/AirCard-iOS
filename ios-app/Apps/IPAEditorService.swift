@@ -10,11 +10,12 @@ enum IPAEditorService {
     static let maximumFileSize: Int64 = 512 * 1024 * 1024
 
     static func run(_ operation: String, input: URL, output: URL? = nil,
-                    executable: String? = nil, libraries: [URL] = []) throws {
+                    executable: String? = nil, libraries: [URL] = [], newFirst: Bool = false) throws {
         var request: [String: Any] = ["operation": operation, "input": input.path]
         if let output { request["output"] = output.path }
         if let executable { request["executable"] = executable }
         request["libraries"] = libraries.map(\.path)
+        if newFirst { request["new_first"] = true }
         let data = try JSONSerialization.data(withJSONObject: request)
         guard let text = String(data: data, encoding: .utf8),
               let response = text.withCString({ al_ipa_editor_run($0) }) else {
@@ -27,6 +28,16 @@ enum IPAEditorService {
             let result = try? JSONSerialization.jsonObject(with: resultData) as? [String: Any]
             throw SideloadError.message(result?["error"] as? String ?? "IPA editor failed.")
         }
+    }
+
+    /// Dylib load-command names of the main executable (read-only).
+    static func dependencies(of executable: URL) throws -> [String] {
+        let out = FileManager.default.temporaryDirectory.appendingPathComponent("deps-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: out) }
+        try run("dependencies", input: executable, output: out)
+        guard let size = try? out.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 1_000_000,
+              let list = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as? [String] else { return [] }
+        return list
     }
 
     static func validBundleID(_ value: String) -> Bool {

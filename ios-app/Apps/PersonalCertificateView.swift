@@ -53,6 +53,8 @@ enum PersonalIdentityVault {
         let expiry: Date?
         let profileType: String
         let verification: PersonalProfileVerification
+        var installed = false
+        var installError: String? = nil
     }
     private struct Entry: Codable { let id: String; let material: Material }
     private struct Collection: Codable { var entries: [Entry]; var selected: String? }
@@ -177,18 +179,33 @@ enum PersonalIdentityVault {
     }
 }
 
+enum PersonalIconFixer {
+    /// Opaque (alpha-free) copies of the app icon PNGs; iOS shows transparent icons on a white/blank tile.
+    static func flattenAlpha(app: URL, info: [String: Any]) throws {
+        let fm = FileManager.default
+        let files = try fm.contentsOfDirectory(at: app, includingPropertiesForKeys: [.fileSizeKey])
+        for url in files where url.pathExtension.lowercased() == "png" && url.lastPathComponent.hasPrefix("AppIcon") {
+            guard (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 <= 8 * 1024 * 1024,
+                  let image = UIImage(contentsOfFile: url.path), image.size.width > 0, image.size.width <= 4096 else { continue }
+            let format = UIGraphicsImageRendererFormat(); format.opaque = true; format.scale = 1
+            let flat = UIGraphicsImageRenderer(size: CGSize(width: image.size.width * image.scale, height: image.size.height * image.scale), format: format).image { ctx in
+                UIColor.black.setFill(); ctx.fill(CGRect(origin: .zero, size: ctx.format.bounds.size))
+                image.draw(in: CGRect(origin: .zero, size: ctx.format.bounds.size))
+            }
+            if let png = flat.pngData() { try png.write(to: url, options: .atomic) }
+        }
+    }
+}
+
 enum PersonalCertificateSigner {
     struct Result {
         let url: URL
         let bundleIdentifierChanged: Bool
         let verification: PersonalProfileVerification
     }
-    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init()) throws -> Result {
+    /// Extract and apply every non-signing edit. Shared by signed and configuration-only export.
+    private static func prepare(ipa: URL, stage: URL, options: PersonalProjectOptions) throws -> (root: URL, app: URL, info: [String: Any]) {
         let fm = FileManager.default
-        let stage = fm.temporaryDirectory.appendingPathComponent("personal-sign-\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: stage, withIntermediateDirectories: true,
-                               attributes: [.protectionKey: FileProtectionType.complete])
-        defer { try? fm.removeItem(at: stage) }
         let root = stage.appendingPathComponent("archive", isDirectory: true)
         try IPAEditorService.run("extract", input: ipa, output: root)
         let app = try IPAEditorService.app(in: root)
@@ -208,6 +225,11 @@ enum PersonalCertificateSigner {
             guard !version.isEmpty, version.count <= 64 else { throw SideloadError.message("رقم الإصدار غير صالح.") }
             info["CFBundleShortVersionString"] = version
         }
+        switch options.gameMode {
+        case .keep: break
+        case .on: info["GCSupportsGameMode"] = true
+        case .off: info["GCSupportsGameMode"] = false
+        }
         if options.fileSharing { info["UIFileSharingEnabled"] = true; info["LSSupportsOpeningDocumentsInPlace"] = true }
         if options.removeURLSchemes { info.removeValue(forKey: "CFBundleURLTypes") }
         if let minimum = options.minimumOS, !minimum.isEmpty {
@@ -224,6 +246,7 @@ enum PersonalCertificateSigner {
             let embedded = app.appendingPathComponent("embedded.mobileprovision")
             if fm.fileExists(atPath: embedded.path) { try fm.removeItem(at: embedded) }
         }
+        if options.fixWhiteIcon { try PersonalIconFixer.flattenAlpha(app: app, info: info) }
         try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
             .write(to: app.appendingPathComponent("Info.plist"), options: .atomic)
         if options.displayName != nil {
@@ -237,8 +260,52 @@ enum PersonalCertificateSigner {
             }
         }
         if !options.libraries.isEmpty {
-            try IPAEditorService.run("inject", input: app, executable: info["CFBundleExecutable"] as? String, libraries: options.libraries)
+            try IPAEditorService.run("inject", input: app, executable: info["CFBundleExecutable"] as? String, libraries: options.libraries, newFirst: options.newTweaksFirst)
         }
+        return (root, app, info)
+    }
+    /// Configuration-only export: same edits, NO signing. Caller must label the result unsigned.
+    static func exportConfigurationOnly(ipa: URL, options: PersonalProjectOptions) throws -> URL {
+        let fm = FileManager.default
+        let stage = fm.temporaryDirectory.appendingPathComponent("personal-config-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stage, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+        defer { try? fm.removeItem(at: stage) }
+        let (root, app, info) = try prepare(ipa: ipa, stage: stage, options: options)
+        try IPAEditorService.run("validate", input: app.appendingPathComponent(info["CFBundleExecutable"] as! String))
+        return try pack(root: root, options: options, suffix: "-unsigned")
+    }
+    private static func pack(root: URL, options: PersonalProjectOptions, suffix: String = "") throws -> URL {
+        let fm = FileManager.default
+        let exports = fm.temporaryDirectory.appendingPathComponent("Mirsa-Signed-\(UUID().uuidString)", isDirectory: true)
+        var filename = options.outputFilename.trimmingCharacters(in: .whitespacesAndNewlines)
+        for known in [".ipa", ".tipa"] where filename.lowercased().hasSuffix(known) { filename = String(filename.dropLast(known.count)) }
+        guard !filename.isEmpty, filename.count <= 120, !filename.contains("/"), !filename.contains("\\"),
+              !filename.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              filename != ".", filename != ".." else { throw SideloadError.message("اسم ملف التصدير غير صالح.") }
+        try fm.createDirectory(at: exports, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+        let ext = options.exportExtension == "tipa" ? "tipa" : "ipa"
+        let output = exports.appendingPathComponent(filename + suffix + "." + ext)
+        do { try IPAEditorService.run("pack", input: root, output: output) }
+        catch { try? fm.removeItem(at: exports); throw error }
+        return output
+    }
+    private static func customEntitlementsPath(_ options: PersonalProjectOptions, stage: URL) throws -> String {
+        guard let data = options.customEntitlements else { return "" }
+        guard data.count <= 64 * 1024,
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil), plist is [String: Any] else {
+            throw SideloadError.message("ملف Entitlements غير صالح.")
+        }
+        let url = stage.appendingPathComponent("custom.entitlements")
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return url.path
+    }
+    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init(), install: Bool = false) throws -> Result {
+        let fm = FileManager.default
+        let stage = fm.temporaryDirectory.appendingPathComponent("personal-sign-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: stage, withIntermediateDirectories: true,
+                               attributes: [.protectionKey: FileProtectionType.complete])
+        defer { try? fm.removeItem(at: stage) }
+        let (root, app, info) = try prepare(ipa: ipa, stage: stage, options: options)
         // Reject FairPlay/encrypted code, including embedded libraries, before signing.
         let executable = app.appendingPathComponent(info["CFBundleExecutable"] as! String)
         try IPAEditorService.run("validate", input: executable)
@@ -252,6 +319,7 @@ enum PersonalCertificateSigner {
                                       "remove_extensions": options.removeExtensions,
                                       "remove_watch": options.removeWatchApp,
                                       "remove_app_clips": options.removeAppClips,
+                                      "custom_entitlements_path": try customEntitlementsPath(options, stage: stage),
                                       "profiles": try options.additionalProfiles.enumerated().map { index, data in
                                           let url = stage.appendingPathComponent("profile-extra-\(index).mobileprovision")
                                           try data.write(to: url, options: [.atomic, .completeFileProtection])
@@ -270,23 +338,17 @@ enum PersonalCertificateSigner {
         }
         // Export artifact contains signed application and public profile only,
         // never P12, password or private key.
-        let exports = fm.temporaryDirectory.appendingPathComponent("Mirsa-Signed-\(UUID().uuidString)", isDirectory: true)
-        let filename = options.outputFilename.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !filename.isEmpty, filename.count <= 120, !filename.contains("/"), !filename.contains("\\"),
-              !filename.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-              filename != ".", filename != ".." else { throw SideloadError.message("اسم ملف التصدير غير صالح.") }
-        try fm.createDirectory(at: exports, withIntermediateDirectories: true,
-                               attributes: [.protectionKey: FileProtectionType.complete])
-        var retained = false
-        defer { if !retained { try? fm.removeItem(at: exports) } }
-        let output = exports.appendingPathComponent(filename.lowercased().hasSuffix(".ipa") ? filename : filename + ".ipa")
-        do { try IPAEditorService.run("pack", input: root, output: output) }
-        catch { try? fm.removeItem(at: exports); throw error }
+        let output = try pack(root: root, options: options)
         let signedInfo = try IPAEditorService.info(in: app)
-        retained = true
-        return Result(url: output, bundleIdentifierChanged:
+        var r = Result(url: output, bundleIdentifierChanged:
             (signedInfo["CFBundleIdentifier"] as? String) != (info["CFBundleIdentifier"] as? String),
             verification: PersonalProfileVerification.parse(result ?? [:]))
+        if install {
+            // Real device install of the just-signed bundle. The packed IPA is kept on failure.
+            do { _ = try SideloadService.installSigned(appPath: app.path, progress: { _, _ in }); r.installed = true }
+            catch { r.installError = error.localizedDescription }
+        }
+        return r
     }
 }
 

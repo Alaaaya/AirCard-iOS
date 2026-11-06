@@ -18,7 +18,7 @@ final class PersonalAppsLibrary: ObservableObject {
     static let shared = PersonalAppsLibrary()
     @Published private(set) var apps: [PersonalLibraryApp] = []
     @Published private(set) var loadError: String?
-    private let root: URL
+    let root: URL
     private let index: URL
     private var triedIcons = Set<UUID>()
     private let iconCache = NSCache<NSString, UIImage>()
