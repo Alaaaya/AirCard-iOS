@@ -320,9 +320,13 @@ struct PersonalAppsHub: View {
                         .buttonStyle(.plain)
                     ForEach(selected) { item in
                         HStack(spacing: 5) {
-                            Button(item.name) { detail = app }.buttonStyle(.plain).lineLimit(1)
+                            Button { detail = app } label: {
+                                Text(item.name).lineLimit(1).truncationMode(.middle)
+                                    .frame(maxWidth: 150, alignment: .leading)
+                            }.buttonStyle(.plain)
                             Button { removeTweak(item.id, from: app) } label: {
                                 Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                                    .frame(width: 28, height: 28).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityLabel(personalText("Remove ", "إزالة ") + item.name)
                         }.font(.caption2).padding(.horizontal, 9).padding(.vertical, 5)
                             .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))

@@ -651,7 +651,7 @@ struct AppTile: View {
     private var operationOverlay: some View {
         if let e = progress.entry(for: app.id) {
             ZStack {
-                RoundedRectangle(cornerRadius: 15, style: .continuous).fill(.black.opacity(0.45)).frame(width: 54, height: 54)
+                RoundedRectangle(cornerRadius: 15, style: .continuous).fill(.black.opacity(0.92)).frame(width: 54, height: 54)
                 if let f = e.fraction {
                     Circle().stroke(.white.opacity(0.25), lineWidth: 3).frame(width: 30, height: 30)
                     Circle().trim(from: 0, to: f).stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
