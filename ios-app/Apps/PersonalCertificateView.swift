@@ -118,6 +118,7 @@ enum PersonalCertificateSigner {
 }
 
 struct PersonalCertificateView: View {
+    var initialIPA: URL? = nil
     @State private var p12: Data?
     @State private var profile: Data?
     @State private var password = ""
@@ -206,6 +207,7 @@ struct PersonalCertificateView: View {
             }
         }
         .task {
+            if let initialIPA, ipa == nil { receive(initialIPA, kind: .ipa) }
             do { saved = try PersonalIdentityVault.load() != nil }
             catch { message = error.localizedDescription }
         }
@@ -259,7 +261,10 @@ struct PersonalCertificateView: View {
                 let signed = try await Task.detached(priority: .userInitiated) {
                     try PersonalCertificateSigner.sign(ipa: ipa, material: material)
                 }.value
-                output = signed; message = text("Signed locally. Ready to export.", "تم التوقيع على جهازك. جاهز للتصدير.")
+                output = signed
+                do { try await PersonalAppsLibrary.shared.add(signed, signed: true) }
+                catch { message = text("Signed, but saving to the personal library failed. Export remains available.", "تم التوقيع بس الحفظ بالمكتبة فشل. التصدير لسا متاح."); busy = false; return }
+                message = text("Signed locally. Ready to export.", "تم التوقيع على جهازك. جاهز للتصدير.")
             } catch { message = error.localizedDescription }
             busy = false
         }
@@ -282,21 +287,3 @@ private struct PersonalSignedShare: UIViewControllerRepresentable {
 }
 
 
-// Independent bottom-navigation destination. Signing implementation above is
-// unchanged; the shared card owns its existing secure import/export lifecycle.
-struct PersonalCertificateTab: View {
-    var body: some View {
-        ZStack {
-            AuroraBackground()
-            ScrollView {
-                PersonalCertificateView()
-                    .padding(.horizontal, 20)
-                    .padding(.top, 20)
-                    .padding(.bottom, 120)
-            }
-            .scrollIndicators(.hidden)
-        }
-        .preferredColorScheme(.dark)
-        .environment(\.layoutDirection, .leftToRight)
-    }
-}

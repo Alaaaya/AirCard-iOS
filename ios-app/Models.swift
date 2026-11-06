@@ -89,7 +89,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case wallpapers = "Wallpapers"
     case apps = "Apps"
     case sources = "Sources"
-    case certificateSigning = "Certificate Signing"
+    case personalHub = "Personal Apps Hub"
     var id: String { rawValue }
 }
 
