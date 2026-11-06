@@ -132,10 +132,14 @@ struct WebBackendConfig: Equatable {
     var endpoint: URL? { projectURL?.appendingPathComponent("functions/v1/discovery-search") }
     var isConfigured: Bool { projectURL != nil && !(publishableKey ?? "").isEmpty && !WebBackendConfig.looksSecret(publishableKey ?? "") }
 
+    /// Public values only (project URL + publishable key). Safe to ship; the key grants nothing beyond anonymous sign-in.
+    static let defaultProject = "https://hirebeofomiyumwysppj.supabase.co"
+    static let defaultPublishableKey = "sb_publishable_o3dt8riPdpZHazjpPgG25Q_HgGfnub5"
+
     static func load(defaults: UserDefaults = .standard) -> WebBackendConfig {
-        let u = defaults.string(forKey: projectKey).flatMap(URL.init(string:))
-        return WebBackendConfig(projectURL: u.flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil },
-                                publishableKey: defaults.string(forKey: publishableKeyKey))
+        let u = (defaults.string(forKey: projectKey) ?? defaultProject)
+        let k = defaults.string(forKey: publishableKeyKey) ?? defaultPublishableKey
+        return WebBackendConfig(projectURL: URL(string: u).flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }, publishableKey: k)
     }
 }
 

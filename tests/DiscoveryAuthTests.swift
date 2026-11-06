@@ -136,3 +136,13 @@ final class DiscoveryAuthTests: XCTestCase {
         XCTAssertEqual(WebBackendConfig(projectURL: project, publishableKey: "k").endpoint?.absoluteString, "https://abc.supabase.co/functions/v1/discovery-search")
     }
 }
+
+final class DiscoveryDefaultsTests: XCTestCase {
+    func testShippedDefaultsAreConfiguredAndPublicOnly() {
+        let d = UserDefaults(suiteName: "disc-test-" + UUID().uuidString)!
+        let c = WebBackendConfig.load(defaults: d)
+        XCTAssertTrue(c.isConfigured)
+        XCTAssertFalse(WebBackendConfig.looksSecret(c.publishableKey ?? ""))
+        XCTAssertTrue((c.publishableKey ?? "").hasPrefix("sb_publishable_"))
+    }
+}

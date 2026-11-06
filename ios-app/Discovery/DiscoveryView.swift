@@ -119,8 +119,8 @@ struct DiscoveryView: View {
     @Environment(\.dismiss) private var dismissSheet
     @State private var pendingTrust: DiscoveryCandidate?
     @State private var showWeb = false
-    @State private var project = UserDefaults.standard.string(forKey: WebBackendConfig.projectKey) ?? ""
-    @State private var publishable = UserDefaults.standard.string(forKey: WebBackendConfig.publishableKeyKey) ?? ""
+    @State private var project = UserDefaults.standard.string(forKey: WebBackendConfig.projectKey) ?? WebBackendConfig.defaultProject
+    @State private var publishable = UserDefaults.standard.string(forKey: WebBackendConfig.publishableKeyKey) ?? WebBackendConfig.defaultPublishableKey
     @State private var webError: String?
 
     var body: some View {
