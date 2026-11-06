@@ -280,3 +280,23 @@ private struct PersonalSignedShare: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
+
+
+// Independent bottom-navigation destination. Signing implementation above is
+// unchanged; the shared card owns its existing secure import/export lifecycle.
+struct PersonalCertificateTab: View {
+    var body: some View {
+        ZStack {
+            AuroraBackground()
+            ScrollView {
+                PersonalCertificateView()
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 120)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .preferredColorScheme(.dark)
+        .environment(\.layoutDirection, .leftToRight)
+    }
+}

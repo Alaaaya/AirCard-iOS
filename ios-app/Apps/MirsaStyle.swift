@@ -173,6 +173,8 @@ struct LiquidTabBar: View {
                     VStack(spacing: 3) {
                         Image(systemName: item.icon).font(.system(size: 19, weight: on ? .semibold : .regular))
                         Text(item.title).font(.system(size: 12, weight: on ? .semibold : .regular)).lineLimit(1)
+                            .minimumScaleFactor(0.65)
+                            .allowsTightening(true)
                     }
                     .foregroundStyle(on ? .white : .white.opacity(0.68))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -193,6 +195,7 @@ struct LiquidTabBar: View {
         }
         .padding(6)
         .frame(height: 72)
+        .environment(\.layoutDirection, .leftToRight)
         .modifier(LiquidGlass(shape: Capsule(), tint: nil, depth: 1.1))
         .padding(.horizontal, 18)
         .padding(.bottom, 8)
