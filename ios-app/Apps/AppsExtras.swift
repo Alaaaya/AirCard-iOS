@@ -8,6 +8,83 @@ import UIKit
 /// Bilingual helper for the extras below.
 @inline(__always) func tr(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
 
+/// Task-scoped delegate: progress comes from bytes written, never a timer.
+private final class IPADownloadProgress: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    let update: @Sendable (Int64, Int64) -> Void
+    init(update: @escaping @Sendable (Int64, Int64) -> Void) { self.update = update }
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
+                    totalBytesExpectedToWrite: Int64) {
+        update(totalBytesWritten, totalBytesExpectedToWrite)
+    }
+    // The async download API owns its completion and temporary file.
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
+                    didFinishDownloadingTo location: URL) {}
+}
+
+extension AppsStore {
+    func cancelDownload() {
+        downloadTask?.cancel()
+        isDownloading = false
+        downloadHasKnownSize = false
+        progress = 0
+        busy = nil
+    }
+
+    /// URLSession deletes partial downloads on cancellation (no resume data).
+    /// The returned complete file belongs to the caller and must be removed.
+    func downloadIPA(from url: URL, message: String) async throws -> URL {
+        guard downloadTask == nil, busy == nil else { throw CancellationError() }
+        let id = UUID()
+        downloadID = id
+        busy = message
+        progress = 0
+        downloadHasKnownSize = false
+        isDownloading = true
+        let delegate = IPADownloadProgress { [weak self] received, expected in
+            Task { @MainActor [weak self] in
+                guard let self, self.downloadID == id, self.isDownloading else { return }
+                self.downloadHasKnownSize = expected > 0
+                self.progress = expected > 0 ? min(1, max(0, Double(received) / Double(expected))) : 0
+            }
+        }
+        let task = Task<URL, Error> {
+            let (tmp, response) = try await URLSession.shared.download(from: url, delegate: delegate)
+            defer { try? FileManager.default.removeItem(at: tmp) }
+            try Task.checkCancellation()
+            if let h = response as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
+                throw NSError(domain: "Mirsa", code: h.statusCode,
+                              userInfo: [NSLocalizedDescriptionKey: tr("Download failed (\(h.statusCode))", "فشل التنزيل (\(h.statusCode))")])
+            }
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString).ipa")
+            try FileManager.default.moveItem(at: tmp, to: file)
+            return file
+        }
+        downloadTask = task
+        defer {
+            downloadID = nil
+            downloadTask = nil
+            isDownloading = false
+            downloadHasKnownSize = false
+            progress = 0
+            busy = nil
+        }
+        return try await withTaskCancellationHandler {
+            let file = try await task.value
+            do {
+                try Task.checkCancellation()
+                if task.isCancelled { throw CancellationError() }
+                return file
+            } catch {
+                try? FileManager.default.removeItem(at: file)
+                throw error
+            }
+        } onCancel: {
+            task.cancel()
+        }
+    }
+}
+
 // MARK: - Install from a link + expiry reminders
 
 extension AppsStore {
@@ -17,17 +94,15 @@ extension AppsStore {
     @discardableResult
     func installFromURL(_ url: URL, location: AppLocation? = nil, vm: AppViewModel? = nil) async -> Bool {
         let vm = vm ?? AppViewModel.shared
-        busy = tr("Downloading…", "عم ينزّل…")
+        guard downloadTask == nil, busy == nil else { return false }
         let file: URL
         do {
-            let (tmp, resp) = try await URLSession.shared.download(from: url)
-            if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
-                busy = nil; error = tr("Download failed (\(h.statusCode))", "فشل التنزيل (\(h.statusCode))"); return false
-            }
-            file = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString).ipa")
-            try FileManager.default.moveItem(at: tmp, to: file)
+            file = try await downloadIPA(from: url, message: tr("Downloading…", "عم ينزّل…"))
         } catch {
-            busy = nil; self.error = error.localizedDescription; return false
+            if !(error is CancellationError) && (error as? URLError)?.code != .cancelled {
+                self.error = error.localizedDescription
+            }
+            return false
         }
         busy = nil
         defer { try? FileManager.default.removeItem(at: file) }
@@ -520,18 +595,15 @@ final class MirsaUpdater: ObservableObject {
         let store = AppsStore.shared
         installing = true; defer { installing = false }
         available = nil
-        store.busy = tr("Downloading update…", "عم ينزّل التحديث…")
+        guard store.downloadTask == nil, store.busy == nil else { return }
         let fm = FileManager.default
         let work = fm.temporaryDirectory.appendingPathComponent("upd-\(UUID().uuidString)", isDirectory: true)
         defer { try? fm.removeItem(at: work) }
         do {
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
-            let (tmp, resp) = try await URLSession.shared.download(from: url)
-            if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
-                throw NSError(domain: "Mirsa", code: h.statusCode, userInfo: [NSLocalizedDescriptionKey: "Download failed (\(h.statusCode))"])
-            }
-            let ipa = work.appendingPathComponent("u.ipa")
-            try fm.moveItem(at: tmp, to: ipa)
+            let ipa = try await store.downloadIPA(from: url, message: tr("Downloading update…", "عم ينزّل التحديث…"))
+            defer { try? fm.removeItem(at: ipa) }
+            store.busy = tr("Importing…", "عم يجهّز الملف…")
             let out = work.appendingPathComponent("x", isDirectory: true)
             try fm.createDirectory(at: out, withIntermediateDirectories: true)
             let ok = await Task.detached { SideloadService.unzip(ipa.path, to: out.path) }.value
@@ -544,7 +616,9 @@ final class MirsaUpdater: ObservableObject {
             await store.installSelf(vm: vm, from: app)
         } catch {
             store.busy = nil
-            store.error = error.localizedDescription
+            if !(error is CancellationError) && (error as? URLError)?.code != .cancelled {
+                store.error = error.localizedDescription
+            }
         }
     }
 }

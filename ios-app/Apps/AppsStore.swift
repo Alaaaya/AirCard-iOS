@@ -63,6 +63,10 @@ final class AppsStore: ObservableObject {
     @Published var account: AccountState? = nil
     @Published var busy: String? = nil
     @Published var progress: Double = 0
+    @Published var isDownloading = false
+    @Published var downloadHasKnownSize = false
+    var downloadTask: Task<URL, Error>?
+    var downloadID: UUID?
     @Published var pending: PendingImport? = nil
     @Published var prompt: SideloadPrompt? = nil
     @Published var error: String? = nil

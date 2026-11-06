@@ -149,7 +149,7 @@ struct AppsTab: View {
                 .padding(.trailing, 22)
                 .padding(.bottom, theme == MirsaTheme.liquid.rawValue ? 18 : 26)
 
-            if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress) }
+            if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress, isDownloading: store.isDownloading, hasKnownSize: store.downloadHasKnownSize, onCancel: { store.cancelDownload() }) }
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showPicker) {
@@ -601,16 +601,34 @@ struct WarningPill: View {
 struct BusyOverlay: View {
     let text: String
     let progress: Double
+    var isDownloading = false
+    var hasKnownSize = false
+    var onCancel: (() -> Void)? = nil
     var body: some View {
         ZStack {
             Color.black.opacity(0.35).ignoresSafeArea()
             VStack(spacing: 14) {
-                if progress > 0.01 && progress < 1 {
+                if isDownloading && hasKnownSize {
+                    Text("\(Int(min(1, max(0, progress)) * 100))%")
+                        .font(.title2.monospacedDigit().bold()).foregroundStyle(.white)
+                    ProgressView(value: progress).tint(.white).frame(width: 160)
+                        .environment(\.layoutDirection, .leftToRight)
+                } else if progress > 0.01 && progress < 1 {
                     ProgressView(value: progress).tint(.white).frame(width: 160)
                 } else {
                     ProgressView().tint(.white).controlSize(.large)
                 }
                 Text(text).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                if isDownloading, let onCancel {
+                    Button(action: onCancel) {
+                        Text(tr("Cancel", "إلغاء"))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 160).padding(.vertical, 10)
+                            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(28)
             .appsGlass(cornerRadius: 26)

@@ -50,7 +50,7 @@ struct SetupView: View {
             }
             .scrollIndicators(.hidden)
 
-            if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress) }
+            if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress, isDownloading: store.isDownloading, hasKnownSize: store.downloadHasKnownSize, onCancel: { store.cancelDownload() }) }
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showPairing, onDismiss: {
