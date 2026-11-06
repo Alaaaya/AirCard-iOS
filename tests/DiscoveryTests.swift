@@ -95,11 +95,11 @@ final class DiscoveryTests: XCTestCase {
         })
     }
 
-    func testBundleSearchIsVerified() {
+    func testSourceMetadataIsNotArchiveVerified() {
         let s = [snap("S1", "https://s1.example/source.json", [("DramaWave", "com.dramabuzz.app", "2.0")])]
         let r = SourcesDiscovery.search(s, name: nil, bundleID: "com.dramabuzz.app")
         XCTAssertEqual(r.count, 1)
-        XCTAssertEqual(r.first?.identity, .bundleVerified)
+        XCTAssertEqual(r.first?.identity, .nameOnly)
     }
 
     func testNameSearchIsNameOnlyAndAmbiguityDetected() {
@@ -228,4 +228,14 @@ final class DiscoveryTests: XCTestCase {
     func testProvenanceStripsQuery() {
         XCTAssertEqual(DiscoveryProvenance.strip(u("https://cdn.example.com/a/b.ipa?token=SECRET&exp=1")), "cdn.example.com/a/b.ipa")
     }
+    func testWebMetadataNeverVerifiesBundleAndFiltersAndroid() {
+        let data = Data(#"{"results":[{"name":"App","bundleId":"com.requested.app","pageURL":"https://example.com/p"},{"name":"App APK for Android","bundleId":"","pageURL":"https://apkpure.com/a"},{"name":"App iOS","bundleId":"","pageURL":"https://example.com/app","downloadURL":"https://example.com/app.ipa"}]}"#.utf8)
+        let r = WebBackendProvider.parse(data)
+        XCTAssertEqual(r.count, 2)
+        XCTAssertEqual(r[0].identity, .reference)
+        XCTAssertEqual(r[1].identity, .nameOnly)
+        XCTAssertTrue(r[1].isDownloadable)
+        XCTAssertEqual(r[1].bundleID, "")
+    }
+
 }

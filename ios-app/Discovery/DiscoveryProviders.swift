@@ -148,7 +148,10 @@ enum WebBackendProvider {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let results = root["results"] as? [[String: Any]] else { return [] }
         return results.prefix(30).compactMap { r in
-            guard let name = r["name"] as? String, let bid = r["bundleId"] as? String else { return nil }
+            guard let name = r["name"] as? String else { return nil }
+            let bid = (r["bundleId"] as? String) ?? ""
+            let searchable = [name, (r["pageURL"] as? String) ?? "", (r["downloadURL"] as? String) ?? ""].joined(separator: " ").lowercased()
+            if searchable.range(of: #"android|\bapk(?:s|m|x)?\b|apkpure|apkmirror|apkcombo|uptodown|play\.google\.com"#, options: .regularExpression) != nil { return nil }
             let dlRaw = (r["downloadURL"] as? String).flatMap(URL.init(string:))
             if dlRaw != nil, !DiscoveryURLPolicy.isSafe(dlRaw!) { return nil }
             let dl = dlRaw
@@ -231,17 +234,12 @@ enum DiscoveryEngine {
         } else {
             for b in bundleIDs { found += SourcesDiscovery.search(sources, name: apple.listings.first { $0.bundleID == b }?.name, bundleID: b) }
         }
-        // For name queries, a source hit whose bundle ID equals an Apple result is bundle-verified.
-        if nameQuery != nil {
-            let apple = Set(apple.listings.map { $0.bundleID.lowercased() })
-            found = found.map { var c = $0; if apple.contains(c.bundleID.lowercased()) { c.identity = .bundleVerified }; return c }
-        }
         reports.append(ProviderReport(provider: "Your sources", status: .ok(count: found.count)))
 
         let webRes = await WebBackendProvider.search(web, name: nameQuery ?? apple.listings.first?.name,
                                                      bundleID: bundleIDs.first, auth: auth, http: http)
         reports.append(webRes.report)
-        found += webRes.candidates.map { var c = $0; if bundleIDs.contains(where: { $0.caseInsensitiveCompare(c.bundleID) == .orderedSame }) { c.identity = .bundleVerified }; return c }
+        found += webRes.candidates // Search metadata is not proof of an IPA archive identity.
         reports.append(TelegramProvider.report)
 
         var downloadable = DiscoveryMatcher.dedupe(found)

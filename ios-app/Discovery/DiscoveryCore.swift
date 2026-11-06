@@ -226,7 +226,7 @@ enum SourcesDiscovery {
                     iconURL: a.iconURL.flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }, downloadURL: a.downloadURL,
                     sourceName: s.name, sourceURL: s.url,
                     origin: s.isBuiltIn ? .builtInSource : .userSource,
-                    identity: byBundle ? .bundleVerified : .nameOnly,
+                    identity: .nameOnly, // Source JSON is metadata, not archive verification.
                     score: byBundle ? 1 : nameScore))
             }
         }

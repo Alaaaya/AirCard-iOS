@@ -2,9 +2,11 @@
 // Auth: each app install signs in anonymously (Supabase Auth) and sends its own user JWT; verified server-side.
 // No shared token is embedded in the app. Abuse limits are durable and global (Postgres, see schema.sql).
 // Secrets (names only): TAVILY_API_KEY or BRAVE_API_KEY, IP_SALT. SUPABASE_* are provided by the platform.
-// Never fetches result pages (no SSRF surface). Results are metadata, never files.
+// Bounded public HTML resolution; IPA files are never fetched on the server.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { bearerJwt, buildSearchQuery, cleanBundle, cleanQuery, Hit, ipBucket, limitFromError, toResults } from "./logic.ts";
+
+import { resolveResults } from "./resolver.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const json = (o: unknown, status = 200) =>
@@ -51,6 +53,6 @@ Deno.serve(async (req) => {
   try {
     const q = buildSearchQuery(name, bundle);
     const hits = tk ? await tavily(q, tk) : await brave(q, bk!);
-    return json({ results: toResults(hits, bundle), provider: tk ? "tavily" : "brave" });
+    return json({ results: await resolveResults(toResults(hits, bundle)), provider: tk ? "tavily" : "brave" });
   } catch { return json({ error: "provider_failed" }, 502); }
 });

@@ -117,6 +117,7 @@ final class DiscoveryStore: ObservableObject {
 struct DiscoveryView: View {
     @StateObject private var store = DiscoveryStore()
     @Environment(\.dismiss) private var dismissSheet
+    @Environment(\.openURL) private var openURL
     @State private var pendingTrust: DiscoveryCandidate?
     @State private var showWeb = false
     @State private var project = UserDefaults.standard.string(forKey: WebBackendConfig.projectKey) ?? WebBackendConfig.defaultProject
@@ -150,7 +151,7 @@ struct DiscoveryView: View {
                 ToolbarItem(placement: .topBarTrailing) { Button { showWeb = true } label: { Image(systemName: "network") } }
             }
             .sheet(isPresented: $showWeb) { webSettings }
-            .confirmationDialog(tr("This source isn't marked as authorized", "هالسورس مو معلّم كمصرّح"), isPresented: Binding(get: { pendingTrust != nil }, set: { if !$0 { pendingTrust = nil } }), titleVisibility: .visible) {
+            .confirmationDialog(tr("Download this app?", "تنزيل هالتطبيق؟"), isPresented: Binding(get: { pendingTrust != nil }, set: { if !$0 { pendingTrust = nil } }), titleVisibility: .visible) {
                 if let c = pendingTrust {
                     Button(tr("Download once", "نزّل مرة وحدة")) { Task { await store.accept(c) } }
                     Button(tr("I confirm this source may distribute it, remember", "أؤكد إنو السورس مصرّح، تذكّر")) { store.trust(c); Task { await store.accept(c) } }
@@ -207,7 +208,7 @@ struct DiscoveryView: View {
                 switch c.identity {
                 case .bundleVerified: badge(tr("Bundle ID matches", "المعرّف مطابق"), .green, "checkmark.seal")
                 case .nameOnly: badge(tr("Identity unverified, name only", "الهوية غير مؤكدة، الاسم فقط"), .orange, "questionmark.circle")
-                case .reference: badge(tr("Reference only, no download", "مرجع فقط، بدون تنزيل"), .gray, "info.circle")
+                case .reference: badge(tr("Reference page", "صفحة مرجعية"), .gray, "info.circle")
                 }
                 if c.isDownloadable {
                     if store.isAuthorized(c) { badge(tr("You authorized this source", "إنت صرّحت هالسورس"), .green, "person.badge.shield.checkmark") }
@@ -242,8 +243,8 @@ struct DiscoveryView: View {
         case .idle, .dismissed:
             if c.isDownloadable {
                 HStack(spacing: 10) {
-                    Button { if store.isAuthorized(c) { Task { await store.accept(c) } } else { pendingTrust = c } } label: {
-                        Text(tr("Yes, download", "إي، نزّل")).font(.subheadline.weight(.bold)).foregroundStyle(.white)
+                    Button { pendingTrust = c } label: {
+                        Text(tr("Download", "تنزيل")).font(.subheadline.weight(.bold)).foregroundStyle(.white)
                             .frame(maxWidth: .infinity).padding(.vertical, 9)
                     }
                     .appsGlassCapsule(tint: .green)
@@ -254,7 +255,12 @@ struct DiscoveryView: View {
                     .appsGlassCapsule(tint: .red)
                 }
             } else {
-                Button { store.dismiss(c) } label: { Text(tr("Dismiss", "إخفاء")).font(.caption.weight(.bold)) }
+                HStack(spacing: 16) {
+                    if let url = URL(string: c.sourceURL), DiscoveryURLPolicy.isSafe(url) {
+                        Button(tr("Open page", "فتح الصفحة")) { openURL(url) }.font(.subheadline.weight(.bold))
+                    }
+                    Button { store.dismiss(c) } label: { Text(tr("Dismiss", "إخفاء")).font(.caption.weight(.bold)) }
+                }
             }
         }
     }
