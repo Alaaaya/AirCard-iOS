@@ -258,8 +258,9 @@ struct PersonalProjectDetailView: View {
         let operation = MirsaOperationProgress.shared.begin(appID: app.id.uuidString, phase: .signing)
         Task {
             do {
+                let pairingPath = await MainActor.run { PairingController.pairingFilePath() }
                 let result = try await Task.detached(priority: .userInitiated) {
-                    try PersonalCertificateSigner.sign(ipa: input, material: material, options: signingOptions)
+                    try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairingPath, options: signingOptions)
                 }.value
                 output = result.url
                 message = personalText("Signed locally. Exporting does not install the app.", "تم التوقيع على جهازك. التصدير ما بيثبّت التطبيق.")

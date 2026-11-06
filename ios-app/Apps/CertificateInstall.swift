@@ -69,8 +69,9 @@ enum CertificateInstall {
         var options = PersonalProjectOptions()
         options.bundleID = profileBundleID(identity)
         let material = identity.material
+        let pairingPath = PairingController.pairingFilePath()
         let signed = try await Task.detached(priority: .userInitiated) {
-            try PersonalCertificateSigner.sign(ipa: input, material: material, options: options)
+            try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairingPath, options: options)
         }.value
         let exportDir = signed.url.deletingLastPathComponent()
         let kept: URL

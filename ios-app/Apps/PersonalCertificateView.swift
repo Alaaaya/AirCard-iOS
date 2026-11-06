@@ -183,7 +183,7 @@ enum PersonalCertificateSigner {
         let bundleIdentifierChanged: Bool
         let verification: PersonalProfileVerification
     }
-    static func sign(ipa: URL, material: PersonalIdentityVault.Material, options: PersonalProjectOptions = .init()) throws -> Result {
+    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init()) throws -> Result {
         let fm = FileManager.default
         let stage = fm.temporaryDirectory.appendingPathComponent("personal-sign-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: stage, withIntermediateDirectories: true,
@@ -248,7 +248,7 @@ enum PersonalCertificateSigner {
         let request: [String: Any] = ["operation": "personal_sign", "input": app.path,
                                       "profile": profile.path, "private_key": key.base64EncodedString(),
                                       "certificate": certificate.base64EncodedString(),
-                                      "pairing_path": PairingController.pairingFilePath(),
+                                      "pairing_path": pairingPath,
                                       "remove_extensions": options.removeExtensions,
                                       "remove_watch": options.removeWatchApp,
                                       "remove_app_clips": options.removeAppClips,
