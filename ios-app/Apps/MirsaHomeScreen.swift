@@ -500,7 +500,7 @@ struct MirsaHomeOperationBadge: View {
     var body: some View {
         if let e = progress.entry(for: appID) {
             ZStack {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(.black.opacity(0.5))
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(.black.opacity(0.92))
                 if let f = e.fraction {
                     Circle().stroke(.white.opacity(0.25), lineWidth: 3).frame(width: 30, height: 30)
                     Circle().trim(from: 0, to: f).stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
