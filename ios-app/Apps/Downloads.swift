@@ -233,7 +233,7 @@ enum HomeShortcut {
     /// mirsa://launch?bundle=<id>
     static func handle(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "mirsa", url.host == "launch",
-              let bid = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "bundle" })?.value
+              let bid = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "app" || $0.name == "bundle" })?.value
         else { return false }
         let store = AppsStore.shared
         guard let app = store.apps.first(where: { $0.id == bid }) else {

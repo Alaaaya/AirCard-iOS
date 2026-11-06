@@ -121,6 +121,7 @@ struct AppsTab: View {
     @State private var infoApp: ManagedApp?
     @State private var backupApp: ManagedApp?
     @State private var shortcutError: String?
+    @State private var shortcutGuideApp: ManagedApp?
     @ObservedObject private var downloads = DownloadsLibrary.shared
     @Namespace private var segNS
 
@@ -187,6 +188,7 @@ struct AppsTab: View {
                 .presentationDetents([.large])
                 .presentationBackground(.ultraThinMaterial)
         }
+        .sheet(item: $shortcutGuideApp) { app in NoProfileShortcutGuide(app: app) }
         .sheet(item: $backupApp) { a in BackupsSheet(app: a) }
         .alert(tr("Home Screen", "الشاشة الرئيسية"), isPresented: Binding(get: { shortcutError != nil }, set: { if !$0 { shortcutError = nil } })) {
             Button("OK") { shortcutError = nil }
@@ -356,8 +358,11 @@ struct AppsTab: View {
             .disabled(store.slotsLeft == 0)
             Button { Task { await store.resign(app) } } label: { Label(L.t("menu.resign"), systemImage: "signature") }
             Button { backupApp = app } label: { Label(tr("Data backups", "نسخ البيانات"), systemImage: "externaldrive") }
+            Button { shortcutGuideApp = app } label: {
+                Label(tr("Home Screen Shortcut (no profile)", "اختصار رئيسية بدون بروفايل"), systemImage: "square.and.arrow.up")
+            }
             Button { shortcutError = HomeShortcut.add(app) } label: {
-                Label(tr("Add to Home Screen", "إضافة للشاشة الرئيسية"), systemImage: "plus.app")
+                Label(tr("Home Screen (profile)", "الشاشة الرئيسية (بروفايل)"), systemImage: "plus.app")
             }
         } else {
             Button { Task { await store.move(app, to: .container, vm: vm) } } label: {
