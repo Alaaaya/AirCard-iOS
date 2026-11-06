@@ -811,7 +811,7 @@ struct InstallChoiceSheet: View {
                     optionCard(selected: false,
                                icon: "key.fill", iconTint: Color(red: 0.95, green: 0.7, blue: 0.2),
                                title: personalText("Install with certificate", "تثبيت عبر الشهادة"),
-                               sub: personalText("Uses your saved P12 and profile. No Apple ID.", "بيستخدم شهادتك المحفوظة. بدون Apple ID."),
+                               sub: personalText("Saved P12, no Apple ID. ∞ does not bypass certificate, profile or device limits.", "شهادتك المحفوظة، بدون Apple ID. علامة ∞ ما بتتجاوز حدود الشهادة أو البروفايل أو الجهاز."),
                                trailing: "∞", disabled: store.busy != nil) {
                         showCertificate = true
                     }
