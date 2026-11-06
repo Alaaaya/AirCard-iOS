@@ -10,6 +10,7 @@ import UIKit
 
 extension AppsStore {
     func cancelDownload() {
+        MirsaInstallActivity.shared.cancel()
         downloadTask?.cancel()
         isDownloading = false
         downloadHasKnownSize = false
@@ -27,6 +28,7 @@ extension AppsStore {
         progress = 0
         downloadHasKnownSize = false
         isDownloading = true
+        MirsaInstallActivity.shared.begin(title: message, phase: .downloading)
         let task = Task<URL, Error> {
             try await BackgroundIPADownloads.shared.download(url) { [weak self] received, expected in
                 guard let self, self.downloadID == id, self.isDownloading else { return }

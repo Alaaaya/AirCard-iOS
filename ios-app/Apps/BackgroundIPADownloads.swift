@@ -28,6 +28,7 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
         guard continuation == nil else { throw URLError(.cannotLoadFromNetwork) }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
         let task = session.downloadTask(with: url)
+        task.taskDescription = MirsaInstallActivity.shared.operationID
         activeID = task.taskIdentifier
         self.progress = progress
         return try await withTaskCancellationHandler {
@@ -50,6 +51,7 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
         if activeID == id {
             let pending = continuation
             continuation = nil; activeID = nil; progress = nil
+            MirsaInstallActivity.shared.cancel()
             pending?.resume(throwing: CancellationError())
         }
     }
@@ -58,6 +60,8 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
                                didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
                                totalBytesExpectedToWrite: Int64) {
         Task { @MainActor in
+            MirsaInstallActivity.shared.updateBytes(received: totalBytesWritten,
+                expected: totalBytesExpectedToWrite, operationID: downloadTask.taskDescription)
             guard self.activeID == downloadTask.taskIdentifier else { return }
             self.progress?(totalBytesWritten, totalBytesExpectedToWrite)
         }
@@ -106,6 +110,13 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
         }
         let pending = activeID == task.taskIdentifier ? continuation : nil
         if activeID == task.taskIdentifier { continuation = nil; activeID = nil; progress = nil }
+        if case .success = result {
+            MirsaInstallActivity.shared.downloadFinished(operationID: task.taskDescription,
+                continuing: pending != nil, success: true)
+        } else {
+            MirsaInstallActivity.shared.downloadFinished(operationID: task.taskDescription,
+                continuing: false, success: false)
+        }
         let content = UNMutableNotificationContent()
         content.title = "Mirsa"
         switch result {
@@ -125,7 +136,10 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
         MainActor.assumeIsolated {
             let completion = self.backgroundCompletion
             self.backgroundCompletion = nil
-            completion?()
+            Task { @MainActor in
+                await MirsaInstallActivity.shared.flush()
+                completion?()
+            }
         }
     }
 }

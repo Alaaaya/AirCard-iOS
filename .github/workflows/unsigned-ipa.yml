@@ -1,4 +1,4 @@
-name: Unsigned AirCard IPA
+name: Unsigned Mirsa IPA
 on:
   workflow_dispatch:
   push:
@@ -50,12 +50,14 @@ jobs:
         run: /usr/libexec/PlistBuddy -c "Add :MirsaBuild string ${{ github.run_number }}" ios-app/Info.plist
 
       - name: Build unsigned IPA
-        run: bash build-ipa.sh
+        run: |
+          bash build-ipa.sh
+          mv build/AirCard-iOS.ipa build/Mirsa.ipa
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AirCard-apps-sideloader-unsigned
-          path: build/AirCard-iOS.ipa
+          name: Mirsa-unsigned
+          path: build/Mirsa.ipa
 
       # Mirsa checks the latest release on launch and offers to update itself.
       - name: Publish release for in-app updates
@@ -63,7 +65,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp build/AirCard-iOS.ipa build/Mirsa.ipa
           git log -1 --pretty=%B > notes.txt
           gh release create "build-${{ github.run_number }}" build/Mirsa.ipa \
             --title "Mirsa build ${{ github.run_number }}" --notes-file notes.txt \
@@ -81,9 +82,25 @@ jobs:
           set -e
           VER="1.3.${RUN}"
           rm -rf setup && mkdir setup && cd setup
-          unzip -q ../build/AirCard-iOS.ipa
+          unzip -q ../build/Mirsa.ipa
           P=$(ls -d Payload/*.app)/Info.plist
           PB=/usr/libexec/PlistBuddy
+          # Extension bundle IDs must remain prefixed by the containing app ID.
+          # Keep extension versions in sync with Setup as well.
+          python3 - "$P" "$VER" <<'PYSETUP'
+          import pathlib, plistlib, sys
+          parent = pathlib.Path(sys.argv[1])
+          old_id = plistlib.loads(parent.read_bytes())["CFBundleIdentifier"]
+          for info in parent.parent.glob("PlugIns/**/*.appex/Info.plist"):
+              data = plistlib.loads(info.read_bytes())
+              bundle_id = data["CFBundleIdentifier"]
+              if not bundle_id.startswith(old_id + "."):
+                  raise SystemExit("Extension identifier is not prefixed by its parent")
+              data["CFBundleIdentifier"] = "com.alaa.mirsa.setup" + bundle_id[len(old_id):]
+              data["CFBundleShortVersionString"] = sys.argv[2]
+              data["CFBundleVersion"] = sys.argv[2]
+              info.write_bytes(plistlib.dumps(data))
+          PYSETUP
           $PB -c "Set :CFBundleIdentifier com.alaa.mirsa.setup" "$P"
           $PB -c "Set :CFBundleDisplayName Mirsa Setup" "$P" || $PB -c "Add :CFBundleDisplayName string Mirsa Setup" "$P"
           $PB -c "Set :CFBundleName Mirsa Setup" "$P"

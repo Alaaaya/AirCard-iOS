@@ -27,7 +27,10 @@ targets:
       - path: ios-app/VideoCAML
         type: folder
         buildPhase: resources
+      - path: LiveActivityShared
     dependencies:
+      - target: MirsaLiveActivity
+        embed: true
       - framework: AirliftFFI.xcframework
         embed: false
     settings:
@@ -39,6 +42,20 @@ targets:
         # idevice's static lib pulls in C++ symbols (aws-lc); link libc++.
         OTHER_LDFLAGS: "-lc++"
         GENERATE_INFOPLIST_FILE: NO
+  MirsaLiveActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: MirsaLiveActivity
+      - path: LiveActivityShared
+    settings:
+      base:
+        PRODUCT_NAME: MirsaLiveActivity
+        PRODUCT_BUNDLE_IDENTIFIER: com.alaa.mirsa.liveactivity
+        INFOPLIST_FILE: MirsaLiveActivity/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
   AirCard-iOSTests:
     type: bundle.unit-test
     platform: iOS

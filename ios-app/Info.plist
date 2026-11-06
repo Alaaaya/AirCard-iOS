@@ -26,6 +26,8 @@
 		<string>App-prefs</string>
 		<string>App-Prefs</string>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- Local Network: RPPairing host + loopback tunnel -->
