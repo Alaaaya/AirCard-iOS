@@ -228,6 +228,8 @@ private struct PersonalAppIcon: View {
 }
 
 struct PersonalAppsHub: View {
+    /// The store is injectable so tests can isolate from the (unsigned-simulator) keychain; production uses .shared and stays fail-closed.
+    init(hiddenStore: HiddenAppsStore = .shared) { _hiddenStore = ObservedObject(wrappedValue: hiddenStore) }
     @StateObject private var library = PersonalAppsLibrary.shared
     @State private var importing = false
     @State private var importingURL = false
@@ -240,7 +242,7 @@ struct PersonalAppsHub: View {
     @AppStorage("mirsa.personal.projects.sort") private var sort = "newest"
     @State private var drafts: [UUID: PersonalProjectDraft] = [:]
     @StateObject private var tweaks = IPATweakLibrary.shared
-    @ObservedObject private var hiddenStore = HiddenAppsStore.shared
+    @ObservedObject private var hiddenStore: HiddenAppsStore
     @State private var showHidden = false
     @State private var pendingHide: UUID?
     @Environment(\.scenePhase) private var scenePhase
@@ -453,7 +455,7 @@ private struct PersonalLibraryShare: UIViewControllerRepresentable {
 struct PersonalHiddenGrid: View {
     let apps: [PersonalLibraryApp]
     @Binding var pendingHide: UUID?
-    @ObservedObject private var hidden = HiddenAppsStore.shared
+    @ObservedObject var hidden: HiddenAppsStore = .shared
     var body: some View {
         let items = hidden.hiddenItems(apps, ns: .personal, id: { $0.id.uuidString })
         List {

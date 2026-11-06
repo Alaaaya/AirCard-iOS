@@ -2,8 +2,22 @@ import XCTest
 import SwiftUI
 @testable import AirCard_iOS
 
+private final class SnapshotSecrets: HiddenSecretStore {
+    var d: [String: Data] = [:]
+    func read(_ a: String) -> HiddenSecretRead { d[a].map { .found($0) } ?? .missing }
+    func write(_ a: String, _ x: Data) -> Bool { d[a] = x; return true }
+}
+
 @MainActor
-final class PersonalProjectIntegrationTests: XCTestCase {
+final class PersonalProjectIntegrationTests",: XCTestCase {
+    /// Production HiddenAppsStore fails closed when the unsigned simulator keychain errors, which blanked every list screenshot.
+    /// Snapshots use an isolated in-memory store; the assertion proves rows really are visible.
+    private func isolatedStore() -> HiddenAppsStore {
+        let store = HiddenAppsStore(secrets: SnapshotSecrets())
+        XCTAssertEqual(store.health, .ok)
+        return store
+    }
+
     func testURLValidation() throws {
         XCTAssertEqual(try PersonalIPAURL.validate(" https://example.com/test.ipa?token=public ").host, "example.com")
         for link in ["http://example.com/a.ipa", "https://localhost/a.ipa", "https://127.0.0.1/a.ipa",
@@ -44,7 +58,10 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             if let a = library.apps.first(where: { !known.contains($0.id) }) { extra.append(a) }
         }
         XCTAssertEqual(extra.count, 2)
-        try await snapshot(PersonalAppsHub(), name: "Arabic-projects-real-SwiftUI-multi-fixture")
+        let store = isolatedStore()
+        XCTAssertEqual(store.visible(library.apps, ns: .personal, id: { $0.id.uuidString }).count, library.apps.count, "populated rows must be visible")
+        XCTAssertGreaterThanOrEqual(library.apps.count, 3)
+        try await snapshot(PersonalAppsHub(hiddenStore: store), name: "Arabic-projects-real-SwiftUI-multi-fixture")
         // Real phone-size top and bottom scroll captures show the last settings row and sticky sign button.
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-top-430x932")
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-bottom-430x932-last-row-and-sign-button", scrollToBottom: true)
@@ -74,6 +91,8 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         try await tweaks.addFile(dylib)
         let tweak = try XCTUnwrap(tweaks.items.first { !beforeTweaks.contains($0.id) }, "Tweak import must create a real library item; no chip proof without it")
         XCTAssertEqual(tweak.roots, [dylib.lastPathComponent])
+        let store = isolatedStore()
+        XCTAssertFalse(store.visible(library.apps, ns: .personal, id: { $0.id.uuidString }).isEmpty)
         var draft = PersonalProjectDraft(name: "Fixture", bundleID: app.bundleID, version: "1.0")
         draft.tweakIDs = [tweak.id]
         try JSONEncoder().encode(draft).write(to: library.draftURL(app), options: .atomic)
@@ -84,19 +103,19 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         defer { progress.finish(op) }
         XCTAssertEqual(progress.entry(for: app.id.uuidString)?.id, op)
         XCTAssertNil(progress.entry(for: app.bundleID), "operations must key by library UUID, not bundleID")
-        try await snapshot(PersonalAppsHub(), name: "Personal-ring-indeterminate-fixture")
+        try await snapshot(PersonalAppsHub(hiddenStore: store), name: "Personal-ring-indeterminate-fixture")
         progress.update(op, phase: .signing, fraction: 0.5)
-        try await snapshot(PersonalAppsHub(), name: "Personal-ring-determinate-fixture")
+        try await snapshot(PersonalAppsHub(hiddenStore: store), name: "Personal-ring-determinate-fixture")
         let mainOp = progress.begin(appID: "com.example.main", phase: .downloading, cancel: {})
         defer { progress.finish(mainOp) }
         XCTAssertEqual(progress.entry(for: "com.example.main")?.canCancel, true)
         progress.cancel(mainOp)
         XCTAssertNil(progress.entry(for: "com.example.main"), "cancel must clear a cancellable operation")
         defaults.set(false, forKey: gridKey)
-        try await snapshot(PersonalAppsHub(), name: "Personal-list-default-tweak-chip-x")
+        try await snapshot(PersonalAppsHub(hiddenStore: store), name: "Personal-list-default-tweak-chip-x")
         defaults.set(true, forKey: gridKey)
-        try await snapshot(PersonalAppsHub(), name: "Personal-home-toggle-grid")
-        try await snapshot(HiddenAppsView(store: HiddenAppsStore.shared) { PersonalHiddenGrid(apps: library.apps, pendingHide: .constant(nil)) }, name: "Arabic-hidden-apps-PIN-UI")
+        try await snapshot(PersonalAppsHub(hiddenStore: store), name: "Personal-home-toggle-grid")
+        try await snapshot(HiddenAppsView(store: store) { PersonalHiddenGrid(apps: library.apps, pendingHide: .constant(nil), hidden: store) }, name: "Arabic-hidden-apps-PIN-UI")
     }
 
     /// SIMULATOR FIXTURE: seeded real MirsaOperationProgress state rendered by the real AppTile/MirsaHomeScreen.
@@ -122,6 +141,26 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                            name: "SIMULATOR-FIXTURE-main-home-50-percent")
         progress.cancel(op)
         XCTAssertNil(progress.entry(for: app.id))
+    }
+
+    /// Real populated folder that keeps a hidden member id; rendered through the real MirsaFolderOverlay.
+    func testPopulatedFolderPreservesHiddenMembership() async throws {
+        let ids = ["com.example.a", "com.example.b", "com.example.c"]
+        let apps = ids.enumerated().map { i, id in
+            ManagedApp(id: id, name: "Folder App \(i + 1)", version: "1.0", sizeBytes: 1, location: .container, installedBundleID: nil,
+                       expires: nil, signedSerial: nil, wantsNotifications: false, hasExtensions: false, addedAt: Date())
+        }
+        let suite = "mirsa.snapshot.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let layout = MirsaHomeLayoutStore(namespace: "snap", defaults: defaults)
+        layout.mutate { $0.items = [.folder(MirsaHomeFolder(id: "f1", name: "مجلد", appIDs: ids + ["com.example.hidden"]))] }
+        XCTAssertEqual(layout.layout.folder("f1")?.appIDs.count, 4, "hidden member must stay in the folder model")
+        let shown = Set(ids)
+        try await snapshot(MirsaFolderOverlay(store: layout, folderID: "f1", visible: shown, onClose: {},
+                                              tile: { id in Text(apps.first { $0.id == id }?.name ?? id).padding() }),
+                           name: "Arabic-folder-populated-hidden-member-preserved")
+        XCTAssertEqual(layout.layout.folder("f1")?.appIDs.count, 4)
     }
 
     private static let layoutKeys = ["mirsa.home.layout.v1.main", "mirsa.home.layout.v1.personal", "mirsa.home.orderIDs",
