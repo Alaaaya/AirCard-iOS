@@ -914,6 +914,22 @@ pub unsafe extern "C" fn al_ipa_editor_run(request: *const c_char) -> *mut c_cha
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ffi_invalid_requests_return_error_json() {
+        unsafe fn response(request: *const c_char) -> serde_json::Value {
+            let ptr = al_ipa_editor_run(request);
+            assert!(!ptr.is_null());
+            let owned = CString::from_raw(ptr);
+            serde_json::from_slice(owned.as_bytes()).unwrap()
+        }
+        assert_eq!(unsafe { response(std::ptr::null()) }["ok"], false);
+        for text in ["{", "null", "{}", r#"{"operation":"personal_sign","input":"/nonexistent/mirsa-test-app"}"#] {
+            let request = CString::new(text).unwrap();
+            let result = unsafe { response(request.as_ptr()) };
+            assert_eq!(result["ok"], false);
+            assert!(result["error"].as_str().is_some());
+        }
+    }
     fn fixture() -> Vec<u8> {
         let mut d = vec![0u8; 4096];
         put32(&mut d, 0, 0xfeedfacf);

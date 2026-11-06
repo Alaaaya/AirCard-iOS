@@ -113,6 +113,12 @@ fn validate_key_certificate(key: &[u8], cert: &x509_cert::Certificate) -> Result
     Ok(())
 }
 fn actual_udid(pairing_path: &str) -> Result<String,String> {
+    // This API is blocking. Swift calls it on a detached worker, but direct
+    // callers must not nest block_on in an active Tokio runtime. Return an
+    // actionable error instead of relying on the outer FFI panic handler.
+    if tokio::runtime::Handle::try_current().is_ok() {
+        return Err("تعذّر التحقق من الجهاز ضمن مهمة شبكة شغّالة. أعد المحاولة من عامل توقيع مستقل.".into());
+    }
     if pairing_path.is_empty() { return Err("وصل الجهاز وفعّل الاقتران أولاً للتحقق من UDID الحقيقي.".into()); }
     let bytes = std::fs::read(pairing_path).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
     let logger = crate::exploit::Logger { cb: None, ctx: std::ptr::null_mut() };
@@ -220,6 +226,25 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Run in a subprocess so an unexpected native abort cannot kill the suite.
+    // Previously this fixture panicked in Tokio block_on (exit 101).
+    #[test]
+    fn nested_runtime_udid_is_recoverable() {
+        const CHILD: &str = "MIRSA_TEST_NESTED_UDID_CHILD";
+        if std::env::var_os(CHILD).is_some() {
+            let path = std::env::temp_dir().join(format!("mirsa-pairing-invalid-{}", std::process::id()));
+            std::fs::write(&path, b"invalid pairing fixture").unwrap();
+            let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            let result = runtime.block_on(async { actual_udid(path.to_str().unwrap()) });
+            std::fs::remove_file(path).unwrap();
+            assert!(result.is_err());
+            return;
+        }
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "personal_sign::tests::nested_runtime_udid_is_recoverable", "--nocapture"])
+            .env(CHILD, "1").output().unwrap();
+        assert!(output.status.success(), "child {:?}: {}", output.status, String::from_utf8_lossy(&output.stderr));
+    }
     #[test] fn explicit_profile_rewrites_only_bundle_suffix() {
         assert_eq!(resolved_bundle_id("OLDPREFIX.com.profile.app", "com.original.app").unwrap(), "com.profile.app");
         assert_eq!(resolved_bundle_id("TEAM.com.same", "com.same").unwrap(), "com.same");
