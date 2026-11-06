@@ -117,8 +117,9 @@ final class DiscoveryStore: ObservableObject {
 struct DiscoveryView: View {
     @StateObject private var store: DiscoveryStore
 
-    init(store: DiscoveryStore = DiscoveryStore()) {
-        _store = StateObject(wrappedValue: store)
+    @MainActor
+    init(store: DiscoveryStore? = nil) {
+        _store = StateObject(wrappedValue: store ?? DiscoveryStore())
     }
     @Environment(\.dismiss) private var dismissSheet
     @Environment(\.openURL) private var openURL
