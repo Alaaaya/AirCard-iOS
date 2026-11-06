@@ -26,9 +26,12 @@ Deno.test("limit error mapping", () => {
   assertEquals(limitFromError("limit:global-month"), "global-month");
   assertEquals(limitFromError("connection refused"), null); assertEquals(limitFromError(undefined), null);
 });
-Deno.test("ip bucket hashed, stable, salted", async () => {
-  const a = await ipBucket("1.2.3.4, 9.9.9.9", "saltsaltsaltsalt1");
-  assertEquals(a, await ipBucket("1.2.3.4", "saltsaltsaltsalt1"));
+Deno.test("ip bucket hashed, stable, salted, trusted header only", async () => {
+  const s = "saltsaltsaltsalt1";
+  const a = await ipBucket("1.2.3.4", s);
+  assertEquals(a, await ipBucket(" 1.2.3.4 ", s));
   assertEquals(a.includes("1.2.3.4"), false); assertEquals(a.length, 24);
   assertEquals(a === await ipBucket("1.2.3.4", "othersaltothersalt"), false);
+  const unknown = await ipBucket(null, s);
+  for (const bad of ["1.2.3.4, 9.9.9.9", "evil host", "", "x".repeat(100)]) assertEquals(await ipBucket(bad, s), unknown, bad);
 });

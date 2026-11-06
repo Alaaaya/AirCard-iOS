@@ -52,8 +52,12 @@ final class DiscoveryStore: ObservableObject {
         searching = true; outcome = nil; states = [:]
         defer { searching = false }
         if SourcesStore.shared.apps.isEmpty { await SourcesStore.shared.refreshAll() }
-        let web = WebBackendConfig.load(token: DiscoveryKeychain.token())
-        let result = await DiscoveryEngine.run(input: text, sources: snapshots(), web: web, http: http)
+        let web = WebBackendConfig.load()
+        var auth: DiscoveryTokenProvider?
+        if web.isConfigured, let p = web.projectURL, let k = web.publishableKey {
+            auth = DiscoveryAuthClient(projectURL: p, publishableKey: k, store: KeychainSessionStore(), http: http)
+        }
+        let result = await DiscoveryEngine.run(input: text, sources: snapshots(), web: web, auth: auth, http: http)
         outcome = result
     }
 
@@ -108,26 +112,6 @@ final class DiscoveryStore: ObservableObject {
     }
 }
 
-// MARK: - Keychain for the optional web backend token (nothing compiled in)
-
-enum DiscoveryKeychain {
-    private static let service = "com.alaa.mirsa.discovery"
-    static func token() -> String? {
-        let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                                kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
-        var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
-    }
-    static func setToken(_ t: String?) {
-        let base: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
-        SecItemDelete(base as CFDictionary)
-        guard let t, !t.isEmpty else { return }
-        var add = base; add[kSecValueData as String] = Data(t.utf8)
-        SecItemAdd(add as CFDictionary, nil)
-    }
-}
-
 // MARK: - View
 
 struct DiscoveryView: View {
@@ -135,8 +119,9 @@ struct DiscoveryView: View {
     @Environment(\.dismiss) private var dismissSheet
     @State private var pendingTrust: DiscoveryCandidate?
     @State private var showWeb = false
-    @State private var endpoint = UserDefaults.standard.string(forKey: WebBackendConfig.endpointKey) ?? ""
-    @State private var token = ""
+    @State private var project = UserDefaults.standard.string(forKey: WebBackendConfig.projectKey) ?? ""
+    @State private var publishable = UserDefaults.standard.string(forKey: WebBackendConfig.publishableKeyKey) ?? ""
+    @State private var webError: String?
 
     var body: some View {
         NavigationStack {
@@ -294,12 +279,13 @@ struct DiscoveryView: View {
         NavigationStack {
             Form {
                 Section(tr("Search backend (optional)", "باك إند البحث (اختياري)")) {
-                    TextField("https://…", text: $endpoint).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    SecureField(tr("Token (optional)", "التوكن (اختياري)"), text: $token)
+                    TextField(tr("Project URL (https://…supabase.co)", "رابط المشروع"), text: $project).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    TextField(tr("Public key (publishable / anon)", "المفتاح العام (publishable / anon)"), text: $publishable).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    if let webError { Text(webError).font(.footnote).foregroundStyle(.red) }
                 }
                 Section {
-                    Text(tr("Without a backend, discovery only searches your sources and Apple's public metadata. Telegram search is not available.",
-                            "بدون باك إند البحث بيكون بالسورسات وبيانات Apple العامة فقط. بحث تيليجرام مو متاح."))
+                    Text(tr("Web search is not configured until both fields are set. Only the public key goes here, never a secret or service key. Without it, discovery only searches your sources and Apple's public metadata. Telegram search is not available.",
+                            "البحث بالويب مو مفعّل لحد ما تعبّي الحقلين. حط المفتاح العام فقط، ولا تحط مفتاح سري. بدونه بيكون البحث بالسورسات وبيانات Apple العامة فقط. بحث تيليجرام مو متاح."))
                         .font(.footnote)
                 }
             }
@@ -307,8 +293,25 @@ struct DiscoveryView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(tr("Save", "حفظ")) {
-                        UserDefaults.standard.set(endpoint.trimmingCharacters(in: .whitespaces), forKey: WebBackendConfig.endpointKey)
-                        if !token.isEmpty { DiscoveryKeychain.setToken(token) }
+                        let p = project.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let k = publishable.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if p.isEmpty && k.isEmpty {
+                            UserDefaults.standard.removeObject(forKey: WebBackendConfig.projectKey)
+                            UserDefaults.standard.removeObject(forKey: WebBackendConfig.publishableKeyKey)
+                            KeychainSessionStore().save(nil)
+                        } else if WebBackendConfig.looksSecret(k) {
+                            webError = tr("That looks like a secret key. Use the public (publishable/anon) key.", "هذا مفتاح سري. استخدم المفتاح العام.")
+                            return
+                        } else if let u = URL(string: p), DiscoveryURLPolicy.isSafe(u), !k.isEmpty {
+                            UserDefaults.standard.set(p, forKey: WebBackendConfig.projectKey)
+                            UserDefaults.standard.set(k, forKey: WebBackendConfig.publishableKeyKey)
+                            KeychainSessionStore.removeLegacyToken()
+                            KeychainSessionStore().save(nil) // new project, new anonymous session
+                        } else {
+                            webError = tr("Enter an https project URL and the public key.", "اكتب رابط https للمشروع والمفتاح العام.")
+                            return
+                        }
+                        webError = nil
                         showWeb = false
                     }
                 }

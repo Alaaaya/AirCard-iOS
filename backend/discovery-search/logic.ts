@@ -76,9 +76,10 @@ export function limitFromError(message: string | undefined): string | null {
   return m ? m[1] : null;
 }
 
-/** Client IP from the platform header, hashed so raw addresses are never stored. */
-export async function ipBucket(xff: string | null, salt: string): Promise<string> {
-  const ip = (xff ?? "unknown").split(",")[0].trim().slice(0, 64);
+/** Client IP must come from the platform-set header (cf-connecting-ip, set by the Cloudflare edge in front of Supabase).
+ *  X-Forwarded-For is client-appendable and is never used. Anything that is not a plain IP maps to one shared "unknown" bucket (fail closed). */
+export async function ipBucket(trustedIp: string | null, salt: string): Promise<string> {
+  const ip = trustedIp && /^[0-9a-fA-F:.]{3,45}$/.test(trustedIp.trim()) ? trustedIp.trim() : "unknown";
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + "|" + ip));
   return Array.from(new Uint8Array(d).slice(0, 12)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }

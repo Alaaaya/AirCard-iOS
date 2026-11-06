@@ -12,7 +12,7 @@ struct DiscoveryHTTPError: Error, LocalizedError {
 }
 
 /// Metadata fetcher: HTTPS policy on the request and every redirect, small bounded bodies.
-final class SafeMetadataHTTP: NSObject, DiscoveryHTTP, URLSessionTaskDelegate {
+final class SafeMetadataHTTP: NSObject, DiscoveryHTTP, DiscoveryAuthHTTP, URLSessionTaskDelegate {
     static let maxBody = 2 * 1024 * 1024
     private lazy var session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
@@ -23,6 +23,18 @@ final class SafeMetadataHTTP: NSObject, DiscoveryHTTP, URLSessionTaskDelegate {
     }()
     private var hops: [Int: Int] = [:]
     private let lock = NSLock()
+
+    func post(_ url: URL, headers: [String: String], body: Data) async throws -> (Data, Int) {
+        if let v = DiscoveryURLPolicy.check(url) { throw DiscoveryHTTPError(message: v.description) }
+        guard body.count <= 4096 else { throw DiscoveryHTTPError(message: "Request too large.") }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.httpBody = body
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        let (data, resp) = try await session.data(for: req)
+        guard let h = resp as? HTTPURLResponse, data.count <= Self.maxBody else { throw DiscoveryHTTPError(message: "Bad response.") }
+        return (data, h.statusCode)
+    }
 
     func get(_ url: URL, headers: [String: String] = [:]) async throws -> (Data, Int) {
         if let v = DiscoveryURLPolicy.check(url) { throw DiscoveryHTTPError(message: v.description) }
@@ -108,18 +120,22 @@ enum AppleMetadata {
 
 // MARK: - Configurable web backend (optional)
 
-/// A backend the owner runs and configures. Contract: GET <endpoint>?q=<name>&bundle=<id>
-/// with optional "Authorization: Bearer <token>" returns
-/// {"results":[{"name","bundleId","developer","version","iconURL","downloadURL","sourceName","sourceURL"}]}.
-/// No endpoint configured means this provider reports "not configured". No secret is compiled in.
+/// The owner's search backend (Supabase Edge Function behind anonymous Auth). Contract: GET <project>/functions/v1/discovery-search?q=<name>&bundle=<id>
+/// with "Authorization: Bearer <per-install user JWT>" returns {"results":[...]}.
+/// Only the project URL and the PUBLIC publishable/anon key are configured. Nothing secret is compiled in or accepted.
 struct WebBackendConfig: Equatable {
-    var endpoint: URL?
-    var token: String?
-    static let endpointKey = "mirsa.discovery.web.endpoint"
+    var projectURL: URL?
+    var publishableKey: String?
+    static let projectKey = "mirsa.discovery.web.project"
+    static let publishableKeyKey = "mirsa.discovery.web.publishable"
 
-    static func load(defaults: UserDefaults = .standard, token: String? = nil) -> WebBackendConfig {
-        let u = defaults.string(forKey: endpointKey).flatMap(URL.init(string:))
-        return WebBackendConfig(endpoint: u.flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }, token: token)
+    var endpoint: URL? { projectURL?.appendingPathComponent("functions/v1/discovery-search") }
+    var isConfigured: Bool { projectURL != nil && !(publishableKey ?? "").isEmpty && !WebBackendConfig.looksSecret(publishableKey ?? "") }
+
+    static func load(defaults: UserDefaults = .standard) -> WebBackendConfig {
+        let u = defaults.string(forKey: projectKey).flatMap(URL.init(string:))
+        return WebBackendConfig(projectURL: u.flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil },
+                                publishableKey: defaults.string(forKey: publishableKeyKey))
     }
 }
 
@@ -143,25 +159,32 @@ enum WebBackendProvider {
         }
     }
 
-    static func search(_ config: WebBackendConfig, name: String?, bundleID: String?, http: DiscoveryHTTP) async -> ProviderResult {
-        guard let endpoint = config.endpoint else {
-            return ProviderResult(candidates: [], report: ProviderReport(provider: "Web search", status: .unavailable("Not configured. Set a search backend to enable it.")))
+    static func search(_ config: WebBackendConfig, name: String?, bundleID: String?, auth: DiscoveryTokenProvider?, http: DiscoveryHTTP) async -> ProviderResult {
+        func fail(_ m: String) -> ProviderResult { ProviderResult(candidates: [], report: ProviderReport(provider: "Web search", status: .unavailable(m))) }
+        guard config.isConfigured, let endpoint = config.endpoint, let auth else {
+            return fail("Not configured. Add your project URL and public key to enable it.")
         }
         var c = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
-        var items = c?.queryItems ?? []
+        var items: [URLQueryItem] = []
         if let name { items.append(URLQueryItem(name: "q", value: name)) }
         if let bundleID { items.append(URLQueryItem(name: "bundle", value: bundleID)) }
         c?.queryItems = items
-        guard let url = c?.url else { return ProviderResult(candidates: [], report: ProviderReport(provider: "Web search", status: .unavailable("Bad backend URL."))) }
+        guard let url = c?.url else { return fail("Bad backend URL.") }
         do {
-            let (data, code) = try await http.get(url, headers: config.token.map { ["Authorization": "Bearer " + $0] } ?? [:])
-            guard (200..<300).contains(code) else {
-                return ProviderResult(candidates: [], report: ProviderReport(provider: "Web search", status: .unavailable("Backend answered \(code).")))
+            var force = false
+            // At most two requests: the second only after a 401 with a freshly refreshed token. 429 and 5xx are never retried.
+            for _ in 0..<2 {
+                let token = try await auth.token(forceRefresh: force)
+                let (data, code) = try await http.get(url, headers: ["Authorization": "Bearer " + token])
+                if code == 401, !force { force = true; continue }
+                if code == 429 { return fail("Search limit reached for now. Try again later.") }
+                guard (200..<300).contains(code) else { return fail("Backend answered \(code).") }
+                let list = parse(data)
+                return ProviderResult(candidates: list, report: ProviderReport(provider: "Web search", status: .ok(count: list.count)))
             }
-            let list = parse(data)
-            return ProviderResult(candidates: list, report: ProviderReport(provider: "Web search", status: .ok(count: list.count)))
+            return fail("Sign-in was rejected by the backend.")
         } catch {
-            return ProviderResult(candidates: [], report: ProviderReport(provider: "Web search", status: .unavailable(error.localizedDescription)))
+            return fail(error.localizedDescription)
         }
     }
 }
@@ -181,7 +204,7 @@ struct DiscoveryOutcome {
 }
 
 enum DiscoveryEngine {
-    static func run(input: String, sources: [DiscoverySourceSnapshot], web: WebBackendConfig, http: DiscoveryHTTP) async -> DiscoveryOutcome {
+    static func run(input: String, sources: [DiscoverySourceSnapshot], web: WebBackendConfig, auth: DiscoveryTokenProvider? = nil, http: DiscoveryHTTP) async -> DiscoveryOutcome {
         let q = DiscoveryQuery.parse(input)
         if case .unsupported(let why) = q {
             return DiscoveryOutcome(query: q, candidates: [], reports: [], ambiguous: false, note: why)
@@ -212,7 +235,7 @@ enum DiscoveryEngine {
         reports.append(ProviderReport(provider: "Your sources", status: .ok(count: found.count)))
 
         let webRes = await WebBackendProvider.search(web, name: nameQuery ?? apple.listings.first?.name,
-                                                     bundleID: bundleIDs.first, http: http)
+                                                     bundleID: bundleIDs.first, auth: auth, http: http)
         reports.append(webRes.report)
         found += webRes.candidates.map { var c = $0; if bundleIDs.contains(where: { $0.caseInsensitiveCompare(c.bundleID) == .orderedSame }) { c.identity = .bundleVerified }; return c }
         reports.append(TelegramProvider.report)
