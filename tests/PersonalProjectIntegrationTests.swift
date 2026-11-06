@@ -1,4 +1,5 @@
 import XCTest
+import Vision
 import SwiftUI
 @testable import Mirsa
 
@@ -276,6 +277,25 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                 window.layoutIfNeeded(); host.view.layoutIfNeeded()
                 text = renderedAccessibilityText(host.view)
                 tries += 1
+            }
+            // NavigationStack content is not exposed through the hosted accessibility tree on the simulator
+            // (only the bar title is). Fall back to OCR of the actually drawn pixels; assertions stay unchanged.
+            if !requiredText.allSatisfy({ text.contains($0) }) {
+                let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 2
+                let shot = UIGraphicsImageRenderer(size: window.bounds.size, format: fmt).image { _ in
+                    _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                }
+                if let cg = shot.cgImage {
+                    let req = VNRecognizeTextRequest()
+                    req.recognitionLevel = .accurate
+                    req.usesLanguageCorrection = false
+                    if #available(iOS 18.0, *) { req.automaticallyDetectsLanguage = true }
+                    try? VNImageRequestHandler(cgImage: cg).perform([req])
+                    let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "
+")
+                    text += "
+" + ocr
+                }
             }
             XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
             for expected in requiredText { XCTAssertTrue(text.contains(expected), "Missing rendered text: \(expected); actual: \(text)") }
