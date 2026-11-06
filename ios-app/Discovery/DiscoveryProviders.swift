@@ -110,7 +110,12 @@ enum AppleMetadata {
             let (data, code) = try await http.get(url, headers: [:])
             if code == 429 || code == 403 { return ([], ProviderReport(provider: "Apple metadata", status: .unavailable("Apple is rate limiting lookups. Try again in a minute."))) }
             guard (200..<300).contains(code) else { return ([], ProviderReport(provider: "Apple metadata", status: .unavailable("Apple answered \(code)."))) }
-            let l = parse(data)
+            let l = parse(data).filter { listing in
+                guard !listing.name.isEmpty, !listing.bundleID.isEmpty else { return false }
+                if case .appStoreID(let id, _) = q { return listing.trackID == id }
+                if case .name(let name) = q { return DiscoveryMatcher.score(query: name, name: listing.name) >= DiscoveryMatcher.minScore }
+                return false
+            }
             return (l, ProviderReport(provider: "Apple metadata", status: .ok(count: l.count)))
         } catch {
             return ([], ProviderReport(provider: "Apple metadata", status: .unavailable(error.localizedDescription)))
@@ -155,6 +160,13 @@ enum WebBackendProvider {
             let dlRaw = (r["downloadURL"] as? String).flatMap(URL.init(string:))
             if dlRaw != nil, !DiscoveryURLPolicy.isSafe(dlRaw!) { return nil }
             let dl = dlRaw
+            if let source = r["sourceURL"] as? String {
+                guard let u = URL(string: source), DiscoveryURLPolicy.isSafe(u) else { return nil }
+            }
+            if let page = r["pageURL"] as? String {
+                guard let u = URL(string: page), DiscoveryURLPolicy.isSafe(u) else { return nil }
+            }
+            if searchable.range(of: #"\b(decrypted|cracked|crack|decrypt|drm)\b"#, options: .regularExpression) != nil { return nil }
             let pageRaw = (r["pageURL"] as? String).flatMap(URL.init(string:)).flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }
             if dl == nil && pageRaw == nil { return nil }
             let icon = (r["iconURL"] as? String).flatMap(URL.init(string:)).flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }
@@ -211,14 +223,17 @@ struct DiscoveryOutcome {
 }
 
 enum DiscoveryEngine {
-    static func run(input: String, sources: [DiscoverySourceSnapshot], web: WebBackendConfig, auth: DiscoveryTokenProvider? = nil, http: DiscoveryHTTP) async -> DiscoveryOutcome {
+    static let emptyMessage = "ما لقيت IPA لهالتطبيق"
+    static func run(input: String, sources: [DiscoverySourceSnapshot], web: WebBackendConfig, auth: DiscoveryTokenProvider? = nil, http: DiscoveryHTTP, verifier: DiscoveryIPAVerifying = DiscoveryIPAVerifier()) async -> DiscoveryOutcome {
         let q = DiscoveryQuery.parse(input)
         if case .unsupported(let why) = q {
             return DiscoveryOutcome(query: q, candidates: [], reports: [], ambiguous: false, note: why)
         }
         let apple = await AppleMetadata.resolve(q, http: http)
         var reports = [apple.report]
-        var identities = apple.listings.map(AppleMetadata.candidate)
+        if case .appStoreID = q, apple.listings.isEmpty {
+            return DiscoveryOutcome(query: q, candidates: [], reports: reports, ambiguous: false, note: emptyMessage)
+        }
         var bundleIDs: [String] = []
         var nameQuery: String?
         switch q {
@@ -242,17 +257,58 @@ enum DiscoveryEngine {
         found += webRes.candidates // Search metadata is not proof of an IPA archive identity.
         reports.append(TelegramProvider.report)
 
-        var downloadable = DiscoveryMatcher.dedupe(found)
-        downloadable = nameQuery.map { DiscoveryMatcher.rank(downloadable, query: $0) } ?? downloadable.sorted { $0.version.compare($1.version, options: .numeric) == .orderedDescending }
-
-        // Apple identity cards show only when no downloadable candidate carries that bundle ID.
-        let covered = Set(downloadable.map { $0.bundleID.lowercased() })
-        identities = identities.filter { !covered.contains($0.bundleID.lowercased()) }
-        let all = downloadable + identities
+        let matchingName = nameQuery ?? apple.listings.first?.name ?? ""
+        let expectedBundle = bundleIDs.first
+        let relevant = DiscoveryMatcher.dedupe(found).filter { c in
+            guard c.isDownloadable else { return false }
+            if let b = expectedBundle, !c.bundleID.isEmpty, c.bundleID.caseInsensitiveCompare(b) != .orderedSame { return false }
+            return DiscoveryMatcher.score(query: matchingName, name: c.name) >= DiscoveryMatcher.minScore ||
+                (expectedBundle != nil && c.bundleID.caseInsensitiveCompare(expectedBundle!) == .orderedSame)
+        }
+        // A suffix or a search provider's JSON is not evidence. Validate the actual archive
+        // before exposing a card. Keep sequential and bounded to avoid parallel large downloads.
+        var all: [DiscoveryCandidate] = []
+        for c in relevant.prefix(6) {
+            if let verified = await verifier.verify(c, expectedBundleID: expectedBundle, queryName: matchingName) {
+                all.append(verified)
+            }
+        }
         let ambiguous = DiscoveryMatcher.isAmbiguous(all)
-        var note: String?
-        if downloadable.isEmpty { note = "Found no downloadable copy in your sources." }
-        else if ambiguous { note = "More than one app matches. Pick the right one yourself." }
+        let note: String? = all.isEmpty ? emptyMessage : nil
         return DiscoveryOutcome(query: q, candidates: all, reports: reports, ambiguous: ambiguous, note: note)
+    }
+}
+
+
+// Actual archive verification, not HEAD, MIME type, URL suffix, or backend assertions.
+protocol DiscoveryIPAVerifying {
+    func verify(_ candidate: DiscoveryCandidate, expectedBundleID: String?, queryName: String) async -> DiscoveryCandidate?
+}
+
+struct DiscoveryIPAVerifier: DiscoveryIPAVerifying {
+    func verify(_ candidate: DiscoveryCandidate, expectedBundleID: String?, queryName: String) async -> DiscoveryCandidate? {
+        guard let url = candidate.downloadURL, DiscoveryURLPolicy.isSafe(url) else { return nil }
+        var limits = DiscoveryDownloader.Limits()
+        limits.maxBytes = 256 * 1024 * 1024
+        limits.requestTimeout = 10
+        limits.totalTimeout = 30
+        let downloader = DiscoveryDownloader(limits: limits)
+        do {
+            let file = try await downloader.download(url) { _ in }
+            defer { try? FileManager.default.removeItem(at: file) }
+            return try Self.validated(candidate, file: file, expectedBundleID: expectedBundleID, queryName: queryName)
+        } catch { return nil }
+    }
+
+    static func validated(_ c: DiscoveryCandidate, file: URL, expectedBundleID: String?, queryName: String) throws -> DiscoveryCandidate? {
+        var limits = IPALimits()
+        limits.maxFileSize = 256 * 1024 * 1024
+        limits.maxExecutable = 256 * 1024 * 1024
+        let facts = try IPAValidator.validate(file: file, expectedBundleID: expectedBundleID,
+            expectedVersion: c.version.isEmpty ? nil : c.version, deviceOS: nil, limits: limits)
+        guard expectedBundleID != nil || DiscoveryMatcher.score(query: queryName, name: facts.displayName) >= DiscoveryMatcher.minScore else { return nil }
+        return DiscoveryCandidate(name: facts.displayName, bundleID: facts.bundleID, developer: c.developer,
+            version: facts.version, minOS: facts.minOS, iconURL: c.iconURL, downloadURL: c.downloadURL,
+            sourceName: c.sourceName, sourceURL: c.sourceURL, origin: c.origin, identity: .bundleVerified, score: 1)
     }
 }

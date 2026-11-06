@@ -44,6 +44,7 @@ final class DiscoveryDownloader: NSObject, URLSessionDownloadDelegate {
 
     func download(_ url: URL, progress: @escaping (Double) -> Void) async throws -> URL {
         if let v = DiscoveryURLPolicy.check(url) { throw Failure.unsafe(v.description) }
+        guard await DiscoveryDNSPolicy.permits(url) else { throw Failure.unsafe("Non-public DNS destination refused.") }
         progressHandler = progress
         return try await withCheckedThrowingContinuation { cont in
             continuation = cont
@@ -64,8 +65,15 @@ final class DiscoveryDownloader: NSObject, URLSessionDownloadDelegate {
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         redirects += 1
         if redirects > limits.maxRedirects { failure = .tooManyRedirects; task.cancel(); completionHandler(nil); return }
-        if let u = request.url, let v = DiscoveryURLPolicy.check(u) { failure = .unsafe("Redirect refused: " + v.description); task.cancel(); completionHandler(nil); return }
-        completionHandler(request)
+        guard let target = request.url else { failure = .unsafe("Missing redirect URL."); task.cancel(); completionHandler(nil); return }
+        if let v = DiscoveryURLPolicy.check(target) { failure = .unsafe("Redirect refused: " + v.description); task.cancel(); completionHandler(nil); return }
+        Task {
+            guard await DiscoveryDNSPolicy.permits(target) else {
+                failure = .unsafe("Redirect to a non-public DNS destination refused.")
+                task.cancel(); completionHandler(nil); return
+            }
+            completionHandler(request)
+        }
     }
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,

@@ -129,15 +129,15 @@ struct DiscoveryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     searchField
-                    Text(tr("Type an app name or paste an App Store link. Mirsa looks through your sources and shows what it found. Nothing downloads until you say yes.",
-                            "اكتب اسم تطبيق أو الصق رابط App Store. Mirsa بيدور بالسورسات تبعك وبيعرضلك اللي لقاه. ما بينزل شي إلا لما توافق."))
+                    Text(tr("Type an app name or paste an App Store link. Mirsa looks through your sources and shows what it found. IPA files are fetched temporarily for validation; adding them needs your approval.",
+                            "اكتب اسم تطبيق أو الصق رابط App Store. Mirsa بيدور بالسورسات تبعك وبيعرضلك اللي لقاه. بيفحص ملف IPA مؤقتاً، وما بيضيفه إلا بموافقتك."))
                         .font(.footnote).foregroundStyle(.white.opacity(0.65))
                     if store.searching { ProgressView().tint(.white).frame(maxWidth: .infinity).padding(.vertical, 20) }
                     if let o = store.outcome {
                         if let n = o.note {
                             Text(n).font(.subheadline.weight(.semibold)).foregroundStyle(.orange)
                         }
-                        ForEach(o.candidates.filter { store.states[$0.id] != .dismissed }) { c in card(c) }
+                        ForEach(o.candidates.filter { $0.isDownloadable && $0.identity != .reference && $0.origin != .appleMetadata && store.states[$0.id] != .dismissed }) { c in card(c) }
                         providerRows(o.reports)
                     }
                 }
@@ -208,7 +208,7 @@ struct DiscoveryView: View {
                 switch c.identity {
                 case .bundleVerified: badge(tr("Bundle ID matches", "المعرّف مطابق"), .green, "checkmark.seal")
                 case .nameOnly: badge(tr("Identity unverified, name only", "الهوية غير مؤكدة، الاسم فقط"), .orange, "questionmark.circle")
-                case .reference: badge(tr("Reference page", "صفحة مرجعية"), .gray, "info.circle")
+                case .reference: EmptyView()
                 }
                 if c.isDownloadable {
                     if store.isAuthorized(c) { badge(tr("You authorized this source", "إنت صرّحت هالسورس"), .green, "person.badge.shield.checkmark") }
@@ -254,13 +254,7 @@ struct DiscoveryView: View {
                     }
                     .appsGlassCapsule(tint: .red)
                 }
-            } else {
-                HStack(spacing: 16) {
-                    if let url = URL(string: c.sourceURL), DiscoveryURLPolicy.isSafe(url) {
-                        Button(tr("Open page", "فتح الصفحة")) { openURL(url) }.font(.subheadline.weight(.bold))
-                    }
-                    Button { store.dismiss(c) } label: { Text(tr("Dismiss", "إخفاء")).font(.caption.weight(.bold)) }
-                }
+
             }
         }
     }

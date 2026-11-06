@@ -39,3 +39,16 @@ Deno.test("only four pages resolved, existing direct downloads preserved",async(
  const out=await resolveResults(r,async()=>{calls++;return {status:200,type:"text/html",html:'<a href="/a.ipa">x</a>'}});
  assertEquals(calls,4); assertEquals(out.filter(x=>x.downloadURL).length,4);
 });
+
+Deno.test("social and decrypt redirect hops rejected before request", async () => {
+ for (const target of ["https://decrypt.day/app.ipa","https://cdn.decrypt.day/a.ipa",
+    "https://instagram.com/p/app.ipa","https://commons.wikimedia.org/a.ipa",
+    "http://example.com/a.ipa","https://[::1]/a.ipa","https://169.254.169.254/a.ipa"]) {
+   let calls=0;
+   assertEquals(await resolvePage("https://example.com/page",async()=>{
+     calls++; return {status:302,location:target,type:"",html:""};
+   }),undefined,target);
+   assertEquals(calls,1,target);
+ }
+ assertEquals(ipaLinks('<a href="https://decrypt.day/a.ipa">x</a>',"https://example.com"),[]);
+});

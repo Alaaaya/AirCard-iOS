@@ -13,6 +13,7 @@ export function isSafeUrl(raw: string): boolean {
   if (u.username || u.password) return false;
   if (u.port && u.port !== "443") return false;
   const host = u.hostname.toLowerCase().replace(/\.+$/, "");
+  if (isBlockedHost(host)) return false;
   if (!host || host.includes(":") || host.startsWith("[")) return false;
   const labels = host.split(".");
   if (labels.length < 2 || labels.some((l) => l === "")) return false;
@@ -42,11 +43,11 @@ export interface Result {
 }
 
 /** Only links that really end in .ipa become download candidates. Everything else is a page reference. */
-export function toResults(hits: Hit[], bundle: string | null): Result[] {
+export function toResults(hits: Hit[], bundle: string | null, name: string | null = null): Result[] {
   const out: Result[] = [];
   const seen = new Set<string>();
   for (const h of hits) {
-    if (!h || typeof h.url !== "string" || !isSafeUrl(h.url) || seen.has(h.url) || isAndroidHit(h)) continue;
+    if (!h || typeof h.url !== "string" || !isSafeUrl(h.url) || seen.has(h.url) || isAndroidHit(h) || isCrackHit(h) || (name !== null && !titleMatches(name, h.title))) continue;
     seen.add(h.url);
     const u = new URL(h.url);
     const direct = u.pathname.toLowerCase().endsWith(".ipa");
@@ -93,4 +94,19 @@ export function buildSearchQuery(name: string | null, bundle: string | null): st
 export function isAndroidHit(h: Hit): boolean {
   const text = [h.title, h.url, h.snippet ?? ""].join(" ");
   return /android|\bapk(?:s|m|x)?\b|apkpure|apkmirror|apkcombo|uptodown|play\.google\.com/i.test(text);
+}
+
+
+export function isBlockedHost(host: string): boolean {
+  return ["instagram.com", "facebook.com", "tiktok.com", "twitter.com", "x.com", "wikipedia.org",
+    "wikimedia.org", "decrypt.day", "decrypt.today", "armconverter.com", "appdb.to", "iphonecake.com", "appcake.net"]
+    .some(b => host === b || host.endsWith("." + b));
+}
+export function isCrackHit(h: Hit): boolean {
+  return /\b(decrypt(?:ed)?|crack(?:ed)?|drm)\b/i.test([h.title, h.url, h.snippet ?? ""].join(" "));
+}
+export function titleMatches(query: string, title: string): boolean {
+  const tokens = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  const q = tokens(query), t = new Set(tokens(title));
+  return q.length > 0 && q.every(x => t.has(x));
 }
