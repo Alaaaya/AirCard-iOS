@@ -138,7 +138,7 @@ fn runtime() -> &'static tokio::runtime::Runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_stack_size(16 * 1024 * 1024)
-            .thread_name("aircard-sideload")
+            .thread_name("mirsa-sideload")
             .build()
             .expect("tokio runtime")
     })

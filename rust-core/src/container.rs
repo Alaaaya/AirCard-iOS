@@ -196,7 +196,7 @@ pub fn patch_main_executable(mut d: Vec<u8>) -> Result<Vec<u8>, String> {
     }
 
     if !has_id {
-        let name = b"@rpath/AirCardGuest.dylib\0";
+        let name = b"@rpath/MirsaGuest.dylib\0";
         let size = (24 + name.len() + 7) & !7;
         let cmds_end = 32 + sizeofcmds;
         // keep 16 spare bytes for an LC_CODE_SIGNATURE the signer may add
@@ -359,7 +359,42 @@ mod tests {
         let text = String::from_utf8_lossy(&out);
         assert!(text.contains("@loader_path/Frameworks"));
         assert!(!text.contains("@executable_path"));
-        assert!(text.contains("@rpath/AirCardGuest.dylib"));
+        assert!(text.contains("@rpath/MirsaGuest.dylib\0"));
+    }
+
+    #[test]
+    fn generated_guest_keeps_original_executable_and_plist_identity() {
+        let app = std::env::temp_dir().join(format!("mirsa-guest-name-{}.app", std::process::id()));
+        std::fs::create_dir_all(&app).unwrap();
+        let mut info = plist::Dictionary::new();
+        info.insert("CFBundleExecutable".into(), plist::Value::String("OriginalGuest".into()));
+        info.insert("CFBundleIdentifier".into(), plist::Value::String("example.original.guest".into()));
+        plist::Value::Dictionary(info).to_file_xml(app.join("Info.plist")).unwrap();
+        let original_plist = std::fs::read(app.join("Info.plist")).unwrap();
+        std::fs::write(app.join("OriginalGuest"), fake_exe()).unwrap();
+        let result = prepare_bundle(&app).unwrap();
+        assert_eq!(result.executable, app.join("OriginalGuest"));
+        assert_eq!(std::fs::read(app.join("Info.plist")).unwrap(), original_plist);
+        assert!(!app.join("MirsaGuest.dylib").exists());
+        let out = std::fs::read(&result.executable).unwrap();
+        let mut off = 32;
+        let mut found = false;
+        for _ in 0..rd32(&out, 16) {
+            let size = rd32(&out, off + 4) as usize;
+            if rd32(&out, off) == LC_ID_DYLIB {
+                let nameoff = rd32(&out, off + 8) as usize;
+                let name = b"@rpath/MirsaGuest.dylib\0";
+                assert_eq!(&out[off + nameoff..off + nameoff + name.len()], name);
+                assert!(off + nameoff + name.len() <= off + size);
+                found = true;
+            }
+            off += size;
+        }
+        assert!(found);
+        // Existing patched bundle is idempotent, no file or plist rename.
+        prepare_bundle(&app).unwrap();
+        assert_eq!(std::fs::read(&result.executable).unwrap(), out);
+        std::fs::remove_dir_all(app).unwrap();
     }
 
     #[test]
