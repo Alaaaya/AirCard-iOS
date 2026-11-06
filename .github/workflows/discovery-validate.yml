@@ -1,0 +1,35 @@
+name: Discovery validate
+on:
+  workflow_dispatch:
+  push:
+    branches: [kat/app-discovery]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package the pure Discovery files and run tests (no release, no artifact)
+        run: |
+          set -o pipefail
+          mkdir -p dk/Sources/DiscoveryKit dk/Tests/DiscoveryKitTests
+          for f in DiscoveryCore DiscoveryArchive DiscoveryProviders DiscoveryDownloader DiscoveryAuth; do cp ios-app/Discovery/$f.swift dk/Sources/DiscoveryKit/; done
+          cp tests/DiscoveryTests.swift tests/DiscoveryAuthTests.swift dk/Tests/DiscoveryKitTests/
+          cat > dk/Package.swift <<'EOF'
+          // swift-tools-version:5.9
+          import PackageDescription
+          let package = Package(name: "DiscoveryKit", platforms: [.macOS(.v13), .iOS(.v16)],
+            products: [.library(name: "DiscoveryKit", targets: ["DiscoveryKit"])],
+            targets: [.target(name: "DiscoveryKit"), .testTarget(name: "DiscoveryKitTests", dependencies: ["DiscoveryKit"])])
+          EOF
+          cd dk && swift test 2>&1 | tee /tmp/t.log | tail -80
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno test backend/discovery-search
+      - run: deno check backend/discovery-search/index.ts
