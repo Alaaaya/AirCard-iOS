@@ -74,6 +74,8 @@ pub(crate) struct Options {
     #[serde(default)] pub remove_extensions: bool,
     #[serde(default)] pub remove_watch: bool,
     #[serde(default)] pub remove_app_clips: bool,
+    /// Optional plist of extra entitlements for the MAIN app only; still constrained by its profile.
+    #[serde(default)] pub custom_entitlements_path: String,
 }
 struct Profile { data: Vec<u8>, parsed: ProvisioningProfile }
 pub(crate) fn validate_profile(p: &ProvisioningProfile, cert: &[u8], udid: &str, now: SystemTime) -> Result<(), String> {
@@ -168,6 +170,18 @@ fn actual_udid(pairing_path: &str) -> Result<String,String> {
 pub fn sign(app: &Path, profile_path: &Path, key: &str, cert: &str) -> Result<(), String> {
     sign_with_options(app, profile_path, key, cert, &Options::default()).map(|_| ())
 }
+/// Bounded plist import. Dangerous identity keys are ignored; profile authorization is enforced later by constrain().
+pub(crate) fn custom_entitlements(path: &str) -> Result<plist::Dictionary, String> {
+    let meta = std::fs::metadata(path).map_err(|_| "ملف الصلاحيات غير موجود.")?;
+    if meta.len() > 64 * 1024 { return Err("ملف الصلاحيات كبير جداً.".into()); }
+    let data = std::fs::read(path).map_err(err)?;
+    pairing_structure(&data).map_err(|_| "ملف الصلاحيات معقّد أو غير صالح.")?;
+    let value: plist::Value = plist::from_bytes(&data).map_err(|_| "ملف الصلاحيات غير صالح.")?;
+    let mut dict = value.into_dictionary().ok_or("ملف الصلاحيات لازم يكون قاموس.")?;
+    if dict.len() > 256 { return Err("عدد الصلاحيات كبير جداً.".into()); }
+    for k in ["application-identifier", "com.apple.developer.team-identifier", "get-task-allow", "com.apple.private.security.no-container"] { dict.remove(k); }
+    Ok(dict)
+}
 pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert: &str, opts: &Options) -> Result<Verification, String> {
     // Reject links even for direct local requests, before trusting app paths.
     if std::fs::symlink_metadata(app).map_err(err)?.file_type().is_symlink() {
@@ -222,7 +236,10 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
         let p = &profiles[index].parsed;
         if p.team_id() != team { return Err(format!("فريق البروفايل مختلف للتطبيق {id}.")); }
         let prefix = patterns[index].split_once('.').ok_or("معرّف البروفايل غير صالح.")?.0;
-        let requested = nested::read_entitlements(&std::fs::read(node.executable()?).map_err(err)?)?;
+        let mut requested = nested::read_entitlements(&std::fs::read(node.executable()?).map_err(err)?)?;
+        if node.path == app && !opts.custom_entitlements_path.is_empty() {
+            for (k, v) in custom_entitlements(&opts.custom_entitlements_path)? { requested.insert(k, v); }
+        }
         let constrained = nested::constrain(&requested, p.entitlements(), prefix, id, team, &mapping)
             .map_err(|e| format!("{id} - {e}"))?;
         assignments.insert(id.clone(), index);
@@ -306,6 +323,19 @@ mod tests {
         let bytes = vec![0; PAIRING_LIMIT as usize + 1];
         let result = rt.block_on(crate::exploit::connect_tunnel(&bytes, &logger));
         assert!(matches!(result, Err(e) if e.contains("حجم")));
+    }
+    #[test] fn custom_entitlements_bounded_and_strips_identity() {
+        let dir = std::env::temp_dir().join(format!("mirsa-ent-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("e.plist");
+        std::fs::write(&p, br#"<?xml version="1.0"?><plist version="1.0"><dict><key>application-identifier</key><string>X.evil</string><key>com.apple.security.application-groups</key><array><string>group.a</string></array></dict></plist>"#).unwrap();
+        let d = custom_entitlements(p.to_str().unwrap()).unwrap();
+        assert!(d.get("application-identifier").is_none() && d.get("com.apple.security.application-groups").is_some());
+        std::fs::write(&p, b"nope").unwrap();
+        assert!(custom_entitlements(p.to_str().unwrap()).is_err());
+        std::fs::write(&p, vec![b'x'; 70_000]).unwrap();
+        assert!(custom_entitlements(p.to_str().unwrap()).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
     }
     #[test] fn explicit_profile_rewrites_only_bundle_suffix() {
         assert_eq!(resolved_bundle_id("OLDPREFIX.com.profile.app", "com.original.app").unwrap(), "com.profile.app");

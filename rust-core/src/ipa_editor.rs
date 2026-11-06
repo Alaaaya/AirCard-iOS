@@ -746,6 +746,40 @@ fn framework_executable(framework: &Path) -> Result<String> {
 }
 
 /// Operates exclusively on a disposable app copy. Swift swaps it in only after repacking succeeds.
+
+/// Lists dylib load commands of a thin or FAT (first slice) 64-bit Mach-O. Read-only, bounded.
+fn dependencies(path: &Path) -> Result<Vec<String>> {
+    let all = read_macho(path)?;
+    let mut d: &[u8] = &all;
+    if d.len() >= 8 && (u32at(d, 0)? == 0xcafebabe || u32at(d, 0)? == 0xbebafeca) {
+        // FAT header is big-endian; use first slice only.
+        let big = |o: usize| -> Result<usize> { Ok(u32::from_be_bytes(d.get(o..o + 4).ok_or("Truncated FAT header")?.try_into().unwrap()) as usize) };
+        let (off, size) = (big(16)?, big(20)?);
+        d = d.get(off..off.checked_add(size).ok_or("FAT overflow")?).ok_or("Invalid FAT slice")?;
+    }
+    if d.len() < 32 || u32at(d, 0)? != 0xfeedfacf { return Err("Only 64-bit little-endian Mach-O is supported".into()); }
+    let count = u32at(d, 16)? as usize;
+    let end = 32usize.checked_add(u32at(d, 20)? as usize).ok_or("Mach-O table overflow")?;
+    if count > 65536 || end > d.len() { return Err("Invalid load table".into()); }
+    let (mut at, mut out) = (32usize, Vec::new());
+    for _ in 0..count {
+        if at + 8 > end { return Err("Truncated load command".into()); }
+        let kind = u32at(d, at)?;
+        let size = u32at(d, at + 4)? as usize;
+        if size < 8 || size % 8 != 0 || size > end - at { return Err("Malformed load command".into()); }
+        if matches!(kind, 0xc | 0x18 | 0x1f | 0x80000018 | 0x8000001f) {
+            let name_off = u32at(d, at + 8)? as usize;
+            if name_off < 24 || name_off >= size { return Err("Invalid dylib name".into()); }
+            let raw = &d[at + name_off..at + size];
+            let len = raw.iter().position(|&b| b == 0).ok_or("Unterminated dylib name")?;
+            if len > 4096 { return Err("Dylib name too long".into()); }
+            out.push(String::from_utf8_lossy(&raw[..len]).into_owned());
+        }
+        at += size;
+    }
+    if out.len() > 4096 { out.truncate(4096); }
+    Ok(out)
+}
 fn inject(app: &Path, executable: &str, libraries: &[String]) -> Result<()> {
     let app = fs::canonicalize(app).map_err(err)?;
     let ex = relative(executable)?;
@@ -886,6 +920,13 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
         "extract" => extract_zip(Path::new(&r.input), Path::new(&r.output)),
         "pack" => pack(Path::new(&r.input), Path::new(&r.output)),
         "deb" => extract_deb(Path::new(&r.input), Path::new(&r.output)),
+        "dependencies" => {
+            let list = dependencies(Path::new(&r.input))?;
+            let json = serde_json::to_vec(&list).map_err(err)?;
+            let out = Path::new(&r.output);
+            if out.parent().is_none() { return Err("Invalid output".into()); }
+            fs::write(out, json).map_err(err)
+        }
         "inject" => inject(Path::new(&r.input), &r.executable, &r.libraries),
         _ => Err("Unknown editor operation".into()),
     }.map(|_| crate::personal_sign::Verification::default())
@@ -922,6 +963,32 @@ pub unsafe extern "C" fn al_ipa_editor_run(request: *const c_char) -> *mut c_cha
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dependencies_lists_dylib_loads_and_rejects_malformed() {
+        let c1 = dylib_command(0xc, "@rpath/Foo.framework/Foo", None).unwrap();
+        let c2 = dylib_command(0x80000018, "/usr/lib/libz.1.dylib", None).unwrap();
+        let mut d = vec![0u8; 4096];
+        d[0..4].copy_from_slice(&0xfeedfacfu32.to_le_bytes());
+        d[4..8].copy_from_slice(&0x0100000cu32.to_le_bytes());
+        d[12..16].copy_from_slice(&2u32.to_le_bytes());
+        d[16..20].copy_from_slice(&2u32.to_le_bytes());
+        d[20..24].copy_from_slice(&((c1.len() + c2.len()) as u32).to_le_bytes());
+        d[32..32 + c1.len()].copy_from_slice(&c1);
+        d[32 + c1.len()..32 + c1.len() + c2.len()].copy_from_slice(&c2);
+        let dir = std::env::temp_dir().join(format!("mirsa-deps-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("main");
+        fs::write(&p, &d).unwrap();
+        assert_eq!(dependencies(&p).unwrap(), vec!["@rpath/Foo.framework/Foo", "/usr/lib/libz.1.dylib"]);
+        // truncated table and garbage fail closed
+        d[20..24].copy_from_slice(&0xffffffu32.to_le_bytes());
+        fs::write(&p, &d).unwrap();
+        assert!(dependencies(&p).is_err());
+        fs::write(&p, b"garbage-garbage-garbage-garbage-garbage").unwrap();
+        assert!(dependencies(&p).is_err());
+        fs::remove_dir_all(dir).unwrap();
+    }
     fn ffi_json(request: serde_json::Value) -> serde_json::Value {
         let request = CString::new(request.to_string()).unwrap();
         let ptr = unsafe { al_ipa_editor_run(request.as_ptr()) };
