@@ -45,7 +45,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         }
         XCTAssertEqual(extra.count, 2)
         try await snapshot(PersonalAppsHub(), name: "Arabic-projects-real-SwiftUI-multi-fixture")
-        // Tall render shows the last settings row (minimum iOS) and the space above the sticky sign button.
+        // Real phone-size top and bottom scroll captures show the last settings row and sticky sign button.
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-top-430x932")
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-bottom-430x932-last-row-and-sign-button", scrollToBottom: true)
         try await snapshot(NavigationStack { ScrollView { PersonalCertificateView().padding(20) }.background(AuroraBackground()) }, name: "Arabic-certificate-import-real-SwiftUI")

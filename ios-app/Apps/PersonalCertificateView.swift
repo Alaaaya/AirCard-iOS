@@ -286,9 +286,12 @@ struct PersonalCertificateView: View {
                     .opacity(canSave ? 1 : 0.3), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }.buttonStyle(.plain).disabled(!canSave)
             if let latest { savedCard(latest) }
-            Text(personalText("Currently supports unencrypted apps without extensions, Watch apps or App Clips. A matching development, Ad Hoc or enterprise profile is required.",
-                              "حالياً بيدعم التطبيقات غير المشفّرة وبدون إضافات أو تطبيق ساعة أو App Clips. بدك ملف تطوير أو Ad Hoc أو مؤسسات مطابق للتطبيق."))
+            Text(personalText("The IPA must be unencrypted and contain no extensions, Watch apps or App Clips. A Development or Ad Hoc profile that includes this device is required.",
+                              "لازم ملف IPA يكون غير مشفّر وبدون إضافات أو تطبيق Watch أو App Clip. وبدك بروفايل Development أو Ad Hoc مضاف فيه هالجهاز."))
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier("personal-certificate-signing-note")
             if let message { Text(message).font(.footnote).textSelection(.enabled) }
         }
         .padding(18).appsGlass(cornerRadius: 28)
