@@ -132,7 +132,7 @@ struct PersonalCertificateView: View {
     @State private var output: URL?
     @State private var sharing = false
     @State private var confirmRemove = false
-    private enum ImportKind: String, Identifiable { case p12, profile, ipa; var id: String { rawValue } }
+    private enum ImportKind: String, Identifiable { case p12, profile; var id: String { rawValue } }
     private func text(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
 
     var body: some View {
@@ -148,43 +148,48 @@ struct PersonalCertificateView: View {
                           "تطابق الشهادة والملف وتاريخ الصلاحية بينفحصوا وقت التوقيع."))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Button { picker = .p12 } label: {
-                Label(p12Name.isEmpty ? text("Import P12", "استيراد P12") : p12Name, systemImage: "person.badge.key")
-            }
-            if p12 != nil {
-                SecureField(text("P12 password", "كلمة سر P12"), text: $password)
-                    .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
-                    .textFieldStyle(.roundedBorder)
-            }
-            Button { picker = .profile } label: {
-                Label(profileName.isEmpty ? text("Import mobileprovision", "استيراد mobileprovision") : profileName, systemImage: "doc.badge.gearshape")
-            }
-            if p12 != nil || profile != nil {
-                Button(text("Save identity securely", "حفظ الشهادة بأمان")) { save() }
-                    .disabled(p12 == nil || profile == nil)
-            }
-            Button { picker = .ipa } label: {
-                Label(ipa?.lastPathComponent ?? text("Select IPA", "اختيار IPA"), systemImage: "square.and.arrow.down")
-            }
-            Button { sign() } label: {
-                HStack {
-                    if busy { ProgressView() }
-                    Text(text("Sign and export IPA", "توقيع وتصدير IPA")).fontWeight(.semibold)
-                }.frame(maxWidth: .infinity).padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(!saved || ipa == nil || busy || p12 != nil || profile != nil)
-            if let output {
-                Button { sharing = true } label: { Label(text("Export signed IPA", "تصدير IPA الموقّع"), systemImage: "square.and.arrow.up") }
-                Text(text("Export to Files or a compatible installer. Exporting does not install the app. Your device must be included in the profile; iOS checks revocation and trust at installation.",
-                          "احفظه بالملفات أو افتحه بمثبّت بيدعمه. التصدير لحاله ما بيثبّت التطبيق. لازم جهازك يكون ضمن الملف، وiOS بيتأكد من صلاحية الشهادة وقت التثبيت."))
-                    .font(.caption).foregroundStyle(.secondary)
-                Text(output.lastPathComponent).font(.caption2).foregroundStyle(.secondary)
+            if initialIPA == nil {
+                Button { picker = .p12 } label: {
+                    Label(p12Name.isEmpty ? text("Import P12", "استيراد P12") : p12Name, systemImage: "person.badge.key")
+                }
+                if p12 != nil {
+                    SecureField(text("P12 password", "كلمة سر P12"), text: $password)
+                        .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
+                        .textFieldStyle(.roundedBorder)
+                }
+                Button { picker = .profile } label: {
+                    Label(profileName.isEmpty ? text("Import mobileprovision", "استيراد mobileprovision") : profileName, systemImage: "doc.badge.gearshape")
+                }
+                if p12 != nil || profile != nil {
+                    Button(text("Save identity securely", "حفظ الشهادة بأمان")) { save() }
+                        .disabled(p12 == nil || profile == nil)
+                }
+            } else {
+                Label(ipa?.lastPathComponent ?? text("Library app", "تطبيق المكتبة"), systemImage: "app")
+                if !saved {
+                    Text(text("Save your certificate in certificate settings first.", "احفظ شهادتك من إعدادات الشهادة بالأول."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                Button { sign() } label: {
+                    HStack {
+                        if busy { ProgressView() }
+                        Text(text("Sign and export IPA", "توقيع وتصدير IPA")).fontWeight(.semibold)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 10)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!saved || ipa == nil || busy || p12 != nil || profile != nil)
+                if let output {
+                    Button { sharing = true } label: { Label(text("Export signed IPA", "تصدير IPA الموقّع"), systemImage: "square.and.arrow.up") }
+                    Text(text("Export to Files or a compatible installer. Exporting does not install the app. Your device must be included in the profile; iOS checks revocation and trust at installation.",
+                              "احفظه بالملفات أو افتحه بمثبّت بيدعمه. التصدير لحاله ما بيثبّت التطبيق. لازم جهازك يكون ضمن الملف، وiOS بيتأكد من صلاحية الشهادة وقت التثبيت."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(output.lastPathComponent).font(.caption2).foregroundStyle(.secondary)
+                }
             }
             Text(text("Currently supports unencrypted apps without extensions, Watch apps or App Clips. A matching development, Ad Hoc or enterprise profile is required.",
                       "حالياً بيدعم التطبيقات غير المشفّرة وبدون إضافات أو تطبيق ساعة أو App Clips. بدك ملف تطوير أو Ad Hoc أو مؤسسات مطابق للتطبيق."))
                 .font(.caption).foregroundStyle(.secondary)
-            if saved {
+            if saved && initialIPA == nil {
                 Button(text("Remove saved identity", "حذف الشهادة المحفوظة"), role: .destructive) { confirmRemove = true }
             }
             if let message { Text(message).font(.footnote).textSelection(.enabled) }
@@ -207,7 +212,7 @@ struct PersonalCertificateView: View {
             }
         }
         .task {
-            if let initialIPA, ipa == nil { receive(initialIPA, kind: .ipa) }
+            if let initialIPA, ipa == nil { receiveLibraryIPA(initialIPA) }
             do { saved = try PersonalIdentityVault.load() != nil }
             catch { message = error.localizedDescription }
         }
@@ -223,7 +228,7 @@ struct PersonalCertificateView: View {
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         do {
             let size = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
-            let limit = kind == .ipa ? 512 * 1024 * 1024 : kind == .profile ? 256 * 1024 : 1024 * 1024
+            let limit = kind == .profile ? 256 * 1024 : 1024 * 1024
             guard size.isRegularFile == true, let count = size.fileSize, count > 0, count <= limit else {
                 throw SideloadError.message("File is empty, not a regular file, or exceeds the size limit.")
             }
@@ -231,15 +236,19 @@ struct PersonalCertificateView: View {
             switch kind {
             case .p12: p12 = try Data(contentsOf: url); p12Name = url.lastPathComponent; password = ""
             case .profile: profile = try Data(contentsOf: url); profileName = url.lastPathComponent
-            case .ipa:
-                clearIPA()
-                let folder = FileManager.default.temporaryDirectory.appendingPathComponent("personal-input-\(UUID().uuidString)")
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
-                                                        attributes: [.protectionKey: FileProtectionType.complete])
-                let dest = folder.appendingPathComponent("Input.ipa")
-                do { try FileManager.default.copyItem(at: url, to: dest); ipa = dest }
-                catch { try? FileManager.default.removeItem(at: folder); throw error }
             }
+        } catch { message = error.localizedDescription }
+    }
+    // Only called with a selected personal-library item, never a file picker.
+    private func receiveLibraryIPA(_ url: URL) {
+        do {
+            clearIPA()
+            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("personal-input-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
+                attributes: [.protectionKey: FileProtectionType.complete])
+            let dest = folder.appendingPathComponent("Input.ipa")
+            do { try FileManager.default.copyItem(at: url, to: dest); ipa = dest }
+            catch { try? FileManager.default.removeItem(at: folder); throw error }
         } catch { message = error.localizedDescription }
     }
     private func save() {
