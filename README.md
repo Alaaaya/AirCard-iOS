@@ -1,7 +1,7 @@
-# AirCard-iOS
+# Mirsa
 
 <p align="center">
-  <img src="ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" height="128" alt="AirCard-iOS Icon" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);" />
+  <img src="https://raw.githubusercontent.com/Alaaaya/Mirsa/main/app-source/ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" height="128" alt="Mirsa Icon" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);" />
 </p>
 
 <p align="center">
@@ -13,12 +13,11 @@
   <img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift" alt="Swift" />
   <img src="https://img.shields.io/badge/Rust-FFI%20Core-red?style=flat-square&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
-  <a href="https://www.paypal.com/donate/?hosted_button_id=98QRTC2HFRA4Y"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=flat-square&logo=paypal" alt="Donate with PayPal" /></a>
 </p>
 
 ## Overview
 
-AirCard-iOS customizes Apple Wallet card artwork, lock screen passcode dialers, and lock screen wallpapers on device without a jailbreak.
+Mirsa customizes Apple Wallet card artwork, lock screen passcode dialers, and lock screen wallpapers on device without a jailbreak.
 
 The app communicates with internal system services over a local loopback tunnel (`10.7.0.1` or `127.0.0.1`) provided by LocalDevVPN. File operations are handled by `AirliftFFI`, a Rust library that interfaces with the AirTraffic service.
 
@@ -68,11 +67,11 @@ The app communicates with internal system services over a local loopback tunnel 
 
 ## Pairing Setup Guide
 
-AirCard-iOS requires a pairing record to communicate with device lockdown services. Choose the method that best matches your setup:
+Mirsa requires a pairing record to communicate with device lockdown services. Some system pairing labels and build artifact filenames still use the upstream name shown below. Choose the method that best matches your setup:
 
 ### Option A: SideStore (Recommended)
 If you already use SideStore on your device, it has already created a valid pairing file:
-1. Open **AirCard-iOS** and go to the **Pairing** tab.
+1. Open **Mirsa** and go to the **Pairing** tab.
 2. Tap **Import Pairing File…**.
 3. In the Files document picker, navigate to:
    ```text
@@ -82,7 +81,7 @@ If you already use SideStore on your device, it has already created a valid pair
 
 ### Option B: LiveContainer (with SideStore inside)
 If you run SideStore inside LiveContainer:
-1. Open **AirCard-iOS** › **Pairing** tab › tap **Import Pairing File…**.
+1. Open **Mirsa** › **Pairing** tab › tap **Import Pairing File…**.
 2. In the Files document picker, navigate to:
    ```text
    On My iPhone › LiveContainer › SideStore › Documents › ALTPairingFile.mobiledevicepairing
@@ -91,20 +90,20 @@ If you run SideStore inside LiveContainer:
 3. Select `ALTPairingFile.mobiledevicepairing`.
 
 ### Option C: iLoader / Jitterbug / AltStore / Computer
-- **iLoader / Jitterbug**: In the respective app, export your pairing file (`<UDID>.mobiledevicepairing`) into the Files app, then import it in AirCard-iOS.
-- **Mac / PC**: Generate a pairing record using `jitterbugpair`, `pymobiledevice3`, or copy it from your computer (`/var/db/lockdown/<UDID>.plist` on macOS or `%ProgramData%\Apple\Lockdown\<UDID>.plist` on Windows), AirDrop/transfer it to your device, and import it into AirCard-iOS.
-- **Manual placement**: You can also drop any `.mobiledevicepairing` or `.plist` directly into `On My iPhone › AirCard-iOS` via the Files app; it will appear under *Discovered in Documents* ready to use.
+- **iLoader / Jitterbug**: In the respective app, export your pairing file (`<UDID>.mobiledevicepairing`) into the Files app, then import it in Mirsa.
+- **Mac / PC**: Generate a pairing record using `jitterbugpair`, `pymobiledevice3`, or copy it from your computer (`/var/db/lockdown/<UDID>.plist` on macOS or `%ProgramData%\Apple\Lockdown\<UDID>.plist` on Windows), AirDrop/transfer it to your device, and import it into Mirsa.
+- **Manual placement**: You can also drop any `.mobiledevicepairing` or `.plist` directly into `On My iPhone › Mirsa` via the Files app; it will appear under *Discovered in Documents* ready to use.
 
 ### Option D: On-Device Pairing (iOS 27+ only)
 On devices running iOS 27 or newer:
 1. In the **Pairing** tab, tap **Pair This iPhone**.
 2. Note the 6-digit PIN displayed on screen.
 3. Open **Settings › Privacy & Security › Developer Mode › Pair with AirCard-iOS**.
-4. Enter the PIN to approve the pairing. AirCard-iOS will complete the handshake and save the credentials.
+4. Enter the PIN to approve the pairing. Mirsa will complete the handshake and save the credentials.
 
 ## Installation
 
-Install `AirCard-iOS.ipa` using your preferred sideloading method:
+Install the Mirsa IPA using your preferred sideloading method:
 
 - SideStore or AltStore
 - TrollStore
@@ -120,8 +119,8 @@ Install `AirCard-iOS.ipa` using your preferred sideloading method:
 
 ### Build the IPA
 ```bash
-git clone https://github.com/mak5er/AirCard-iOS.git
-cd AirCard-iOS
+git clone https://github.com/Alaaaya/Mirsa-iOS.git
+cd Mirsa-iOS
 ./build-ipa.sh
 ```
 
@@ -136,7 +135,7 @@ To compile changes in `rust-core`:
 ## Repository structure
 
 ```
-AirCard-iOS/
+Mirsa-iOS/
 ├── ios-app/                   # SwiftUI application
 │   ├── AirCardApp.swift       # App entry point and lifecycle
 │   ├── AppViewModel.swift     # State management and exploit orchestration
@@ -162,22 +161,17 @@ AirCard-iOS/
 
 ## Credits
 
+Mirsa is based on [AirCard-iOS by mak5er](https://github.com/mak5er/AirCard-iOS). Original authorship, copyright notices and component licenses are preserved.
+
 - **[@mak5er](https://github.com/mak5er)**: Lead developer, UI, passcode theming, Tendies engine, on-device pairing.
 - **[@merybist](https://github.com/merybist)**: Initial base port.
 - **[AirLift](https://github.com/0xjohnnydev/airlift)** by **[0xjohnny (@0xjohnnydev)](https://github.com/0xjohnnydev)**: AirTraffic and ATAirlock sandbox escape research underlying `AirliftFFI`.
 - **[NeoSpring](https://github.com/rooootdev/neospring)**: Swift implementation by **[@skadz108](https://github.com/skadz108)** and **[@rooootdev](https://github.com/rooootdev)**, and **[@neonmodder123](https://github.com/neonmodder123)** for the WebKit GPU process respring technique.
 - Built upon concepts from the **AirCard** project.
 
-## Support & Donations
+## Contact
 
-If you want to support AirCard-iOS development by **[@mak5er](https://github.com/mak5er)**:
-
-- **Twitter / X**: [@mak5er](https://x.com/mak5er)
-- **GitHub**: [@mak5er](https://github.com/mak5er)
-- **PayPal**: [Donate via PayPal (Maksym Reva)](https://www.paypal.com/donate/?hosted_button_id=98QRTC2HFRA4Y)
-- **TON**: `UQBm9KPhtMw-XVVjirUoa09wzrlyWsbeZhKfefl1Uw-qNZ-r`
-- **USDT (TRC20)**: `TDkDMCyjYxgvkWUnQiF5Erk2RyPQMT6G1n`
-- **USDT / BNB (BEP20)**: `0x0954dc491c502849d04956ef74634aa5931a08e8`
+[X · @rasmtk30](https://x.com/rasmtk30)
 
 ## License
 
