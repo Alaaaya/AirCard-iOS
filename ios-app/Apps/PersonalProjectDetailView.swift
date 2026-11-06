@@ -43,8 +43,8 @@ struct PersonalProjectDetailView: View {
                     tweaksCard
                     settingsCard
                     certificateCard
-                    Text(personalText("Entitlements import is not available yet. Extensions and App Clips are rejected by the signer.",
-                                      "استيراد Entitlements مو متاح حالياً. الإضافات وApp Clips بيرفضهم المُوقّع."))
+                    Text(personalText("Custom entitlements import is not available yet. Retained extensions, Watch apps and App Clips require matching profiles for the connected device.",
+                                      "استيراد Entitlements مخصّصة مو متاح حالياً. الإضافات وتطبيقات Watch وApp Clips اللي بتحتفظ فيها بدها بروفايلات مطابقة للجهاز المتصل."))
                         .font(.caption).foregroundStyle(.secondary)
                     if let message { Text(message).font(.footnote).textSelection(.enabled) }
                 }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
