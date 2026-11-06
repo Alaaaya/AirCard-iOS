@@ -29,3 +29,15 @@ Only after that gate, implement multiple sessions keyed by container ID (duplica
 Read-only code audit and documentation only. No compile/CI claim, no device test, no IPA, no merge or release. A baseline-only CI build would not validate any multitask behavior. Existing unsigned-ipa.yml dispatch avoids publish (publish steps require push), but has not been dispatched because there is no implementation to compile.
 
 Sources: https://livecontainer.github.io/docs/guides/multitask and https://github.com/LiveContainer/LiveContainer at the pinned revision above.
+
+## Owner addition: independent container clones
+
+Owner additionally requested long-press “استنساخ”, custom name, separate accounts/data, independent shortcut, simultaneous launch and clone-only deletion.
+
+Current ManagedApp.id is both the original bundle identifier and the storage/session key. AppsStore.appDir/dataDir/originalIPA/iconURL and HomeShortcut URLs are keyed by it. This must be split into stable instance ID and original/source bundle identity before clones are safe. Reusing the ID would overwrite/delete the original's data. Merely changing the display name or copying data is not cloning. A fresh clone must start with empty data; shared signing originals must not be deleted when one instance is removed.
+
+Independent data folders do NOT guarantee separate accounts: GuestLoader explicitly documents shared host keychain, and no CFPreferences isolation. A clone feature advertised as independent accounts therefore needs instance-specific preference/keychain handling as well as the extension process bridge. Simultaneous clone launch remains blocked by the missing multitask bridge described above.
+
+Required model: backwards-compatible optional sourceBundleIdentifier/instanceID metadata, unique storage key per clone, custom display name, unique mirsa launch URL and shortcut, no copied source data, duplicate-session key based on instance not source, reference-aware bundle/original deletion. Existing installations must decode without migration data loss. Tests must cover deleting original before clone and clone before original, independent defaults/data/keychain, backups/reimports, and clone shortcuts after relaunch.
+
+No clone runtime/UI changes were made; this is an audited design requirement, not an implemented feature. Cert/home worker files remain untouched.
