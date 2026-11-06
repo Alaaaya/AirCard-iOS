@@ -53,3 +53,11 @@ C header parsed with cc. Python transport wiring 2/2 and presentation 4/4 pass.
 Full application Rust build and Swift native CI remain separate acceptance gates.
 The owner revoked ALL publication authorization, even if every CI turns green.
 No production/feed/deployment changes are authorized without fresh approval.
+
+The production FFI also constructs and polls its Tokio download future on a
+dedicated Rust thread with an explicit 8 MiB stack, rather than the Swift/GCD
+caller stack. This is isolation for the new transport, not a claim to fix the
+separate pairing/signing parser stack overflow being handled by another worker.
+Initial full-Cargo linking exhausted local disk and ld bus-erred; only this
+task's incremental cache was removed and the non-incremental retry passed.
+Final full crate targeted cargo test result: all five transport tests passed.

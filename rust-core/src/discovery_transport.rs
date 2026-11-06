@@ -225,17 +225,30 @@ pub unsafe extern "C" fn al_discovery_download(
         }
         let url = CStr::from_ptr(url).to_str().map_err(|_| "Invalid URL")?;
         let dest = CStr::from_ptr(dest).to_str().map_err(|_| "Invalid path")?;
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|_| "Download runtime unavailable")?;
-        let result = runtime.block_on(download(
-            url,
-            Path::new(dest),
-            max.min(3 * 1024 * 1024 * 1024),
-            seconds,
-            &*cancel,
-        ));
+        // Swift/GCD caller stacks may be only 544 KiB. Construct and poll the
+        // reqwest/Tokio future on a dedicated, explicitly sized Rust stack.
+        let cancellation = &*cancel;
+        let result = std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .name("mirsa-discovery-download".into())
+                .stack_size(8 * 1024 * 1024)
+                .spawn_scoped(scope, move || -> Result<()> {
+                    let runtime = tokio::runtime::Builder::new_current_thread()
+                        .enable_all()
+                        .build()
+                        .map_err(|_| "Download runtime unavailable")?;
+                    runtime.block_on(download(
+                        url,
+                        Path::new(dest),
+                        max.min(3 * 1024 * 1024 * 1024),
+                        seconds,
+                        cancellation,
+                    ))
+                })
+                .map_err(|_| "Download worker unavailable")?
+                .join()
+                .unwrap_or(Err("Download worker failed"))
+        });
         if result.is_err() {
             let _ = std::fs::remove_file(dest);
         }
