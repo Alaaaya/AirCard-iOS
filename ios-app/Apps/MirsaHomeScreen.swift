@@ -3,7 +3,10 @@ import SwiftUI
 // Independently implemented visual homage to NightVibes33/FlekDeck.
 // No upstream code or artwork is copied. See LICENSES/FlekDeck-inspiration.md.
 struct MirsaHomeScreen<Menu: View>: View {
+    /// Visible apps only (hidden ones already filtered out by the parent).
     let apps: [ManagedApp]
+    /// Every app ID including hidden ones. Required: hidden folder members and hidden docked apps are preserved.
+    let allAppIDs: [String]
     let onLaunch: (ManagedApp) -> Void
     let onSettings: () -> Void
     let onImport: () -> Void
@@ -28,7 +31,8 @@ struct MirsaHomeScreen<Menu: View>: View {
     }
     private func pinByDrop(_ id: String) {
         guard apps.contains(where: { $0.id == id }) else { return }
-        var ids = pinnedIDs.filter { pinnedID in pinnedID != id && apps.contains { $0.id == pinnedID } }
+        let known = Set(allAppIDs)
+        var ids = pinnedIDs.filter { $0 != id && known.contains($0) }
         guard ids.count < 4 else { return }
         ids.append(id); savePinned(ids)
     }
@@ -54,7 +58,7 @@ struct MirsaHomeScreen<Menu: View>: View {
     }
     private func appByID(_ id: String) -> ManagedApp? { apps.first { $0.id == id } }
     private func reconcileLayout() {
-        layoutStore.reconcile(visible: apps.map(\.id), all: apps.map(\.id), excluded: Set(pinnedIDs))
+        layoutStore.reconcile(visible: apps.map(\.id), all: allAppIDs, excluded: Set(pinnedIDs))
     }
     private var colors: [Color] {
         switch wallpaper {
@@ -174,6 +178,7 @@ struct MirsaHomeScreen<Menu: View>: View {
         }
         .onAppear(perform: reconcileLayout)
         .onChange(of: apps.map(\.id)) { _, _ in reconcileLayout() }
+        .onChange(of: allAppIDs) { _, _ in reconcileLayout() }
         .onChange(of: dockIDs) { _, _ in reconcileLayout() }
         .onDisappear { edgeTimer?.cancel(); edgeTimer = nil }
         .foregroundStyle(.white)
@@ -232,7 +237,7 @@ struct MirsaHomeScreen<Menu: View>: View {
                 Label(pinnedIDs.contains(app.id) ? tr("Remove from dock", "إزالة من الدوك") : tr("Pin to dock", "تثبيت بالدوك"),
                       systemImage: pinnedIDs.contains(app.id) ? "pin.slash" : "pin")
             }
-            .disabled(!pinnedIDs.contains(app.id) && dockApps.count >= 4)
+            .disabled(!pinnedIDs.contains(app.id) && pinnedIDs.filter { Set(allAppIDs).contains($0) }.count >= 4)
             Button { withAnimation { editing = true }; jiggle = false; DispatchQueue.main.async { jiggle = true } } label: {
                 Label(tr("Edit home screen", "تعديل الشاشة الرئيسية"), systemImage: "square.grid.3x3")
             }
@@ -242,7 +247,8 @@ struct MirsaHomeScreen<Menu: View>: View {
     }
 
     private func pin(_ app: ManagedApp) {
-        var ids = pinnedIDs.filter { id in apps.contains { $0.id == id } }
+        let known = Set(allAppIDs)
+        var ids = pinnedIDs.filter { known.contains($0) }
         if ids.contains(app.id) { ids.removeAll { $0 == app.id } }
         else if ids.count < 4 { ids.append(app.id) }
         if let data = try? JSONEncoder().encode(ids), let value = String(data: data, encoding: .utf8) {

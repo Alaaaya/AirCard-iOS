@@ -73,6 +73,24 @@ final class MirsaHomeLayoutTests: XCTestCase {
         }
     }
 
+    func testHiddenDockedAppKeptOutOfGridButNotDeleted() {
+        var l = base()
+        // "d" is hidden and docked: visible list lacks it, all keeps it.
+        l.reconcile(visible: ["a", "b", "c"], all: ["a", "b", "c", "d"], excluded: ["d"])
+        XCTAssertEqual(l.allAppIDs, ["a", "b", "c"])
+        // Unpinned later and visible again: reappears exactly once.
+        l.reconcile(visible: ["a", "b", "c", "d"], all: ["a", "b", "c", "d"])
+        XCTAssertEqual(l.allAppIDs.filter { $0 == "d" }.count, 1)
+    }
+
+    func testHiddenTopLevelPositionPreserved() {
+        var l = base()
+        l.reconcile(visible: ["a", "c", "d"], all: ["a", "b", "c", "d"])
+        XCTAssertEqual(l.allAppIDs, ["a", "b", "c", "d"])
+        l.reconcile(visible: ["a", "b", "c", "d"], all: ["a", "b", "c", "d"])
+        XCTAssertEqual(l.allAppIDs, ["a", "b", "c", "d"])
+    }
+
     func testFolderOrderInsideFolder() {
         var l = base()
         l.drop("app:a", onto: "app:b", newFolderID: "f1")
