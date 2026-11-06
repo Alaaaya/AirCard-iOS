@@ -64,6 +64,20 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         draft.tweakIDs = [tweak.id]
         try JSONEncoder().encode(draft).write(to: library.draftURL(app), options: .atomic)
         XCTAssertEqual(try JSONDecoder().decode(PersonalProjectDraft.self, from: Data(contentsOf: library.draftURL(app))).tweakIDs, [tweak.id])
+        // Model fixture: real MirsaOperationProgress entries keyed by the library UUID string, rendered by real SwiftUI.
+        let progress = MirsaOperationProgress.shared
+        let op = progress.begin(appID: app.id.uuidString, phase: .signing)
+        defer { progress.finish(op) }
+        XCTAssertEqual(progress.entry(for: app.id.uuidString)?.id, op)
+        XCTAssertNil(progress.entry(for: app.bundleID), "operations must key by library UUID, not bundleID")
+        try await snapshot(PersonalAppsHub(), name: "Personal-ring-indeterminate-fixture")
+        progress.update(op, phase: .signing, fraction: 0.5)
+        try await snapshot(PersonalAppsHub(), name: "Personal-ring-determinate-fixture")
+        let mainOp = progress.begin(appID: "com.example.main", phase: .downloading, cancel: {})
+        defer { progress.finish(mainOp) }
+        XCTAssertEqual(progress.entry(for: "com.example.main")?.canCancel, true)
+        progress.cancel(mainOp)
+        XCTAssertNil(progress.entry(for: "com.example.main"), "cancel must clear a cancellable operation")
         defaults.set(false, forKey: gridKey)
         try await snapshot(PersonalAppsHub(), name: "Personal-list-default-tweak-chip-x")
         defaults.set(true, forKey: gridKey)

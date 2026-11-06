@@ -193,6 +193,7 @@ private struct PersonalAppIcon: View {
     let app: PersonalLibraryApp
     @ObservedObject var library: PersonalAppsLibrary
     @State private var image: UIImage?
+    @ObservedObject private var progressState = MirsaOperationProgress.shared
     var body: some View {
         Group {
             if let image {
@@ -204,6 +205,19 @@ private struct PersonalAppIcon: View {
             }
         }
         .frame(width: 56, height: 56)
+        .overlay {
+            if let e = progressState.entry(for: app.id.uuidString) {
+                ZStack {
+                    Color.black.opacity(0.45)
+                    if let f = e.fraction {
+                        Circle().stroke(.white.opacity(0.25), lineWidth: 3).frame(width: 28, height: 28)
+                        Circle().trim(from: 0, to: f).stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                            .frame(width: 28, height: 28).rotationEffect(.degrees(-90))
+                    } else { ProgressView().tint(.white) }
+                }.accessibilityElement(children: .ignore)
+                 .accessibilityLabel(app.name + ", " + personalText("Signing", "جاري التوقيع") + (e.fraction.map { " \(Int($0 * 100))%" } ?? ""))
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
         .task(id: app.id) {

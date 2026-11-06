@@ -236,6 +236,7 @@ struct PersonalProjectDetailView: View {
         let input = library.url(app)
         let signingOptions = options
         busy = true
+        let operation = MirsaOperationProgress.shared.begin(appID: app.id.uuidString, phase: .signing)
         Task {
             do {
                 let result = try await Task.detached(priority: .userInitiated) {
@@ -247,7 +248,13 @@ struct PersonalProjectDetailView: View {
                     message = (message ?? "") + "\n" + "تم تغيير المعرّف ليطابق البروفايل"
                 }
                 sharing = true
-            } catch { message = error.localizedDescription }
+                MirsaOperationProgress.shared.finish(operation)
+                MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: .success)
+            } catch {
+                message = error.localizedDescription
+                MirsaOperationProgress.shared.finish(operation)
+                MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: MirsaCompletionFeedback.outcome(for: error))
+            }
             busy = false
         }
     }
