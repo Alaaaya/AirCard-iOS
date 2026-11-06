@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AirliftFFI
 
 @_silgen_name("al_ipa_editor_run")
 private func al_ipa_editor_run(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
