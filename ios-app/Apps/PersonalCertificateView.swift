@@ -285,5 +285,3 @@ private struct PersonalSignedShare: UIViewControllerRepresentable {
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
-
-
