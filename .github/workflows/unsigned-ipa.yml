@@ -7,7 +7,7 @@ permissions:
   contents: write
 jobs:
   build:
-    runs-on: ${{ vars.MAC_RUNNER || 'macos-14' }}
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
