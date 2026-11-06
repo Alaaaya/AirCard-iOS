@@ -64,31 +64,23 @@ export function toResults(hits: Hit[], bundle: string | null): Result[] {
   return out;
 }
 
-/** Constant-time compare for the shared bearer token. */
-export function tokenOk(header: string | null, secret: string | undefined): boolean {
-  if (!secret || secret.length < 24 || !header) return false;
-  const m = /^Bearer (.+)$/.exec(header);
-  if (!m) return false;
-  const a = new TextEncoder().encode(m[1]), b = new TextEncoder().encode(secret);
-  let d = a.length ^ b.length;
-  for (let i = 0; i < Math.max(a.length, b.length); i++) d |= (a[i] ?? 0) ^ (b[i] ?? 0);
-  return d === 0;
+/** Extracts the bearer JWT (three base64url parts). Anything else is rejected. */
+export function bearerJwt(header: string | null): string | null {
+  const m = /^Bearer ([A-Za-z0-9_-]{10,2048}\.[A-Za-z0-9_-]{10,4096}\.[A-Za-z0-9_-]{10,2048})$/.exec(header ?? "");
+  return m ? m[1] : null;
 }
 
-/** Fixed-window limiter (per instance). */
-export class RateLimiter {
-  private hits = new Map<string, { n: number; t: number }>();
-  constructor(private limit: number, private windowMs: number, private now: () => number = Date.now) {}
-  allow(key: string): boolean {
-    const t = this.now();
-    const e = this.hits.get(key);
-    if (!e || t - e.t >= this.windowMs) {
-      if (this.hits.size > 5000) this.hits.clear();
-      this.hits.set(key, { n: 1, t }); return true;
-    }
-    if (e.n >= this.limit) return false;
-    e.n++; return true;
-  }
+/** Maps the database limit error to its bucket name. */
+export function limitFromError(message: string | undefined): string | null {
+  const m = /limit:([a-z-]+)/.exec(message ?? "");
+  return m ? m[1] : null;
+}
+
+/** Client IP from the platform header, hashed so raw addresses are never stored. */
+export async function ipBucket(xff: string | null, salt: string): Promise<string> {
+  const ip = (xff ?? "unknown").split(",")[0].trim().slice(0, 64);
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(salt + "|" + ip));
+  return Array.from(new Uint8Array(d).slice(0, 12)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function buildSearchQuery(name: string | null, bundle: string | null): string {

@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1";
-import { cleanBundle, cleanQuery, isSafeUrl, RateLimiter, toResults, tokenOk } from "./logic.ts";
+import { cleanBundle, cleanQuery, isSafeUrl, toResults, bearerJwt, limitFromError, ipBucket } from "./logic.ts";
 
 Deno.test("unsafe urls rejected", () => {
   for (const u of ["http://a.com/x","https://127.0.0.1/x","https://localhost/x","https://2130706433/x","https://[::1]/x","https://a.local/x",
@@ -17,13 +17,18 @@ Deno.test("only .ipa links are downloadable, unsafe dropped, deduped, bounded", 
   assertEquals(r.length, 2); assertEquals(r[0].downloadURL, "https://x.com/a.IPA"); assertEquals(r[1].downloadURL, undefined);
   assertEquals(toResults(Array.from({length:50},(_,i)=>({title:"t",url:"https://h"+i+".com/a"})), null).length, 12);
 });
-Deno.test("token check", () => {
-  const s = "s".repeat(32);
-  assertEquals(tokenOk("Bearer " + s, s), true); assertEquals(tokenOk("Bearer x", s), false);
-  assertEquals(tokenOk(null, s), false); assertEquals(tokenOk("Bearer short", "short"), false); assertEquals(tokenOk("Bearer " + s, undefined), false);
+Deno.test("bearer jwt shape", () => {
+  const j = "aaaaaaaaaa.bbbbbbbbbb.cccccccccc";
+  assertEquals(bearerJwt("Bearer " + j), j);
+  for (const h of [null, "", "Bearer x", "Bearer a.b", "Basic " + j, "Bearer " + j + " extra", "bearer " + j]) assertEquals(bearerJwt(h), null, String(h));
 });
-Deno.test("rate limiter", () => {
-  let t = 0; const l = new RateLimiter(2, 1000, () => t);
-  assertEquals([l.allow("a"), l.allow("a"), l.allow("a")], [true, true, false]);
-  t = 1500; assertEquals(l.allow("a"), true);
+Deno.test("limit error mapping", () => {
+  assertEquals(limitFromError("limit:global-month"), "global-month");
+  assertEquals(limitFromError("connection refused"), null); assertEquals(limitFromError(undefined), null);
+});
+Deno.test("ip bucket hashed, stable, salted", async () => {
+  const a = await ipBucket("1.2.3.4, 9.9.9.9", "saltsaltsaltsalt1");
+  assertEquals(a, await ipBucket("1.2.3.4", "saltsaltsaltsalt1"));
+  assertEquals(a.includes("1.2.3.4"), false); assertEquals(a.length, 24);
+  assertEquals(a === await ipBucket("1.2.3.4", "othersaltothersalt"), false);
 });
