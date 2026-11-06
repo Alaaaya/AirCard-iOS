@@ -198,16 +198,21 @@ struct PersonalURLImportSheet: View {
         message = nil; working = true
         Task {
             var file: URL?
+            let operation = UUID()
             do {
                 let temp = try await downloader.download(link)
                 file = temp
                 try Task.checkCancellation()
                 try await onFile(temp)
+                MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: .success)
                 try? FileManager.default.removeItem(at: temp.deletingLastPathComponent())
                 dismiss()
             } catch is CancellationError {
                 message = personalText("Download cancelled.", "انلغى التحميل.")
-            } catch { message = error.localizedDescription }
+            } catch {
+                MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: MirsaCompletionFeedback.outcome(for: error))
+                message = error.localizedDescription
+            }
             if let file { try? FileManager.default.removeItem(at: file.deletingLastPathComponent()) }
             working = false
         }

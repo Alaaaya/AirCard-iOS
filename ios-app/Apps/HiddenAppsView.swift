@@ -138,3 +138,28 @@ struct HiddenAppsView<Content: View>: View {
 }
 
 extension Notification.Name { static let mirsaShowHidden = Notification.Name("mirsa.showHidden") }
+
+/// Unlocked content: applies a pending hide once (after PIN setup/unlock), lists hidden apps with unhide.
+struct HiddenAppsGrid: View {
+    let apps: [ManagedApp]
+    @Binding var pendingHide: String?
+    @ObservedObject private var hidden = HiddenAppsStore.shared
+
+    var body: some View {
+        let items = hidden.hiddenItems(apps, ns: .main, id: { $0.id })
+        List {
+            if items.isEmpty { Text("No hidden apps").foregroundStyle(.secondary) }
+            ForEach(items) { app in
+                HStack {
+                    Text(app.name).foregroundStyle(.white)
+                    Spacer()
+                    Button("Unhide") { _ = hidden.unhide(HiddenAppID(.main, app.id)) }
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .onAppear {
+            if let id = pendingHide { pendingHide = nil; _ = hidden.hide(HiddenAppID(.main, id)) }
+        }
+    }
+}

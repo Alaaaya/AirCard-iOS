@@ -73,7 +73,7 @@ final class SourcesStore: ObservableObject {
         for (app, location) in queue {
             guard !Task.isCancelled else { break }
             AppViewModel.shared?.selectedTab = .apps
-            if !(await AppsStore.shared.installFromURL(app.downloadURL, location: location)) { break }
+            if !(await AppsStore.shared.installFromURL(app.downloadURL, location: location, appID: app.bundleID)) { break }
         }
     }
 
@@ -445,7 +445,7 @@ private struct RepoAppRow: View {
         showInfo = false
         let target = installed?.location   // update keeps its place; new apps ask Container or Real
         AppViewModel.shared?.selectedTab = .apps
-        Task { await AppsStore.shared.installFromURL(app.downloadURL, location: target) }
+        Task { await AppsStore.shared.installFromURL(app.downloadURL, location: target, appID: app.bundleID) }
     }
 }
 
