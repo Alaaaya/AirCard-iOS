@@ -253,6 +253,7 @@ struct SourcesTab: View {
     @ObservedObject private var installedApps = AppsStore.shared
     @State private var adding = false
     @State private var input = ""
+    @State private var finding = false
 
     var body: some View {
         NavigationStack {
@@ -320,7 +321,11 @@ struct SourcesTab: View {
                     Button { input = UIPasteboard.general.string ?? ""; adding = true } label: { Image(systemName: "plus") }
                 }
                 ToolbarItem(placement: .topBarTrailing) { EditButton() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { finding = true } label: { Image(systemName: "sparkle.magnifyingglass") }
+                }
             }
+            .sheet(isPresented: $finding) { DiscoveryView() }
             .alert(tr("Add Source", "أضف سورس"), isPresented: $adding) {
                 TextField("https://…/source.json", text: $input)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
