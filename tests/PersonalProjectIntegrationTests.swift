@@ -198,16 +198,34 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             forbiddenText: ["FORBIDDEN-REFERENCE", "x.com", "References", "مراجع", "تنزيل"])
     }
 
+    /// SwiftUI exposes virtual accessibility containers, not UILabel subviews.
+    /// Walk the public container API as well as UIKit children; never accept an empty tree.
     private func renderedAccessibilityText(_ view: UIView) -> String {
-        var pieces = [view.accessibilityLabel, view.accessibilityValue].compactMap { $0 }
-        if let label = view as? UILabel, let text = label.text { pieces.append(text) }
-        if let button = view as? UIButton, let title = button.title(for: .normal) { pieces.append(title) }
-        for child in view.subviews { pieces.append(renderedAccessibilityText(child)) }
-        if let elements = view.accessibilityElements {
-            for case let element as UIAccessibilityElement in elements {
-                if let label = element.accessibilityLabel { pieces.append(label) }
+        var visited = Set<ObjectIdentifier>()
+        var pieces: [String] = []
+        func visit(_ object: NSObject, depth: Int) {
+            guard depth < 64, visited.count < 10_000,
+                  visited.insert(ObjectIdentifier(object)).inserted else { return }
+            if let text = object.accessibilityLabel { pieces.append(text) }
+            if let text = object.accessibilityValue { pieces.append(text) }
+            if let label = object as? UILabel, let text = label.text { pieces.append(text) }
+            if let button = object as? UIButton, let text = button.title(for: .normal) { pieces.append(text) }
+            if let childView = object as? UIView {
+                for child in childView.subviews { visit(child, depth: depth + 1) }
+            }
+            if let elements = object.accessibilityElements {
+                for case let child as NSObject in elements { visit(child, depth: depth + 1) }
+            }
+            let count = object.accessibilityElementCount()
+            if count > 0 && count <= 1_000 {
+                for index in 0..<count {
+                    if let child = object.accessibilityElement(at: index) as? NSObject {
+                        visit(child, depth: depth + 1)
+                    }
+                }
             }
         }
+        visit(view, depth: 0)
         return pieces.joined(separator: "\n")
     }
 
@@ -251,6 +269,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         }
         if !requiredText.isEmpty || !forbiddenText.isEmpty {
             let text = renderedAccessibilityText(host.view)
+            XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
             for expected in requiredText { XCTAssertTrue(text.contains(expected), "Missing rendered text: \(expected); actual: \(text)") }
             for forbidden in forbiddenText { XCTAssertFalse(text.contains(forbidden), "Forbidden rendered text: \(forbidden)") }
         }
