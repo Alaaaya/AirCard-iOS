@@ -613,16 +613,23 @@ struct ContentView: View {
                 .tabItem { Label(tr("Sources", "السورسات"), systemImage: "shippingbox.fill") }
                 .tag(AppTab.sources)
 
+            PersonalCertificateTab()
+                .modifier(LiquidTabChrome(liquid: liquidTheme))
+                .tabItem { Label(tr("Sign Apps", "توقيع التطبيقات"), systemImage: "signature") }
+                .tag(AppTab.certificateSigning)
+
             ToolsTab()
                 .modifier(LiquidTabChrome(liquid: liquidTheme))
                 .tabItem { Label(L.t("tools.tab"), systemImage: "wand.and.stars") }
                 .tag(AppTab.pairing)
         }
+        .environment(\.layoutDirection, .leftToRight)
         .overlay(alignment: .bottom) {
             if liquidTheme {
                 LiquidTabBar(selection: $vm.selectedTab, items: [
                     LiquidTabItem(tab: .apps, title: L.t("tab"), icon: "square.grid.2x2"),
                     LiquidTabItem(tab: .sources, title: tr("Sources", "السورسات"), icon: "shippingbox"),
+                    LiquidTabItem(tab: .certificateSigning, title: tr("Sign Apps", "توقيع التطبيقات"), icon: "signature"),
                     LiquidTabItem(tab: .pairing, title: L.t("tools.tab"), icon: "wand.and.stars"),
                 ])
                 .ignoresSafeArea(.keyboard)
