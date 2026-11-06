@@ -44,6 +44,10 @@ struct AirCardAppShortcuts: AppShortcutsProvider {
         AppShortcut(intent: OpenAppInMirsaIntent(),
                     phrases: ["Open an app in \(.applicationName)"],
                     shortTitle: "Open App in Mirsa", systemImageName: "app")
+        AppShortcut(intent: OpenSavedMirsaAppIntent(),
+                    phrases: ["Open a saved app with \(.applicationName)",
+                              "Open \(\.$app) with \(.applicationName)"],
+                    shortTitle: "Open Saved App", systemImageName: "app.badge.checkmark")
         AppShortcut(
             intent: InstallFromLinkIntent(),
             phrases: ["Install IPA with \(.applicationName)"],
@@ -105,5 +109,72 @@ struct OpenAppInMirsaIntent: AppIntent {
         }
         AppsStore.shared.launch(app)
         return .result(dialog: IntentDialog(stringLiteral: app.name))
+    }
+}
+
+/// The entity is serialized into each shortcut. Changing the current suggestion
+/// must never redirect icons that the user already added for another app.
+struct MirsaShortcutApp: AppEntity {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Mirsa App"
+    static var defaultQuery = MirsaShortcutAppQuery()
+    let id: String
+    let name: String
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(name)")
+    }
+}
+
+struct MirsaShortcutAppQuery: EntityStringQuery {
+    static let preferredAppKey = "mirsa.shortcut.preferredAppID"
+
+    @MainActor
+    func entities(for identifiers: [String]) async throws -> [MirsaShortcutApp] {
+        identifiers.compactMap { id in
+            AppsStore.shared.apps.first(where: { $0.id == id })
+                .map { MirsaShortcutApp(id: $0.id, name: $0.name) }
+        }
+    }
+
+    @MainActor
+    func suggestedEntities() async throws -> [MirsaShortcutApp] {
+        let preferred = UserDefaults.standard.string(forKey: Self.preferredAppKey)
+        let apps = AppsStore.shared.apps.sorted {
+            if $0.id == preferred { return $1.id != preferred }
+            if $1.id == preferred { return false }
+            return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+        return apps.map { MirsaShortcutApp(id: $0.id, name: $0.name) }
+    }
+
+    @MainActor
+    func defaultResult() async -> MirsaShortcutApp? {
+        guard let id = UserDefaults.standard.string(forKey: Self.preferredAppKey),
+              let app = AppsStore.shared.apps.first(where: { $0.id == id }) else { return nil }
+        return MirsaShortcutApp(id: app.id, name: app.name)
+    }
+
+    @MainActor
+    func entities(matching string: String) async throws -> [MirsaShortcutApp] {
+        try await suggestedEntities().filter { $0.name.localizedCaseInsensitiveContains(string) }
+    }
+}
+
+struct OpenSavedMirsaAppIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Saved App"
+    static var description = IntentDescription("Open an installed Mirsa app. Choose the app by name, then add this shortcut to your Home Screen.")
+    static var openAppWhenRun = true
+    @Parameter(title: "App") var app: MirsaShortcutApp
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Open \(\.$app) in Mirsa")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        guard let installed = AppsStore.shared.apps.first(where: { $0.id == app.id }) else {
+            return .result(dialog: IntentDialog(stringLiteral: tr("App not found in Mirsa.", "التطبيق مو موجود بـMirsa.")))
+        }
+        AppsStore.shared.launch(installed)
+        return .result(dialog: IntentDialog(stringLiteral: installed.name))
     }
 }
