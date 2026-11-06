@@ -8,6 +8,7 @@ public func aircardSwiftMain() {
 }
 
 struct AirCardApp: App {
+    @UIApplicationDelegateAdaptor(MirsaDownloadAppDelegate.self) private var downloadDelegate
     @StateObject private var vm = AppViewModel()
 
     init() {

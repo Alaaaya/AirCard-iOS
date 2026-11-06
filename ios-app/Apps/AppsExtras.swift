@@ -8,20 +8,6 @@ import UIKit
 /// Bilingual helper for the extras below.
 @inline(__always) func tr(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
 
-/// Task-scoped delegate: progress comes from bytes written, never a timer.
-private final class IPADownloadProgress: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
-    let update: @Sendable (Int64, Int64) -> Void
-    init(update: @escaping @Sendable (Int64, Int64) -> Void) { self.update = update }
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                    didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
-                    totalBytesExpectedToWrite: Int64) {
-        update(totalBytesWritten, totalBytesExpectedToWrite)
-    }
-    // The async download API owns its completion and temporary file.
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                    didFinishDownloadingTo location: URL) {}
-}
-
 extension AppsStore {
     func cancelDownload() {
         downloadTask?.cancel()
@@ -41,24 +27,12 @@ extension AppsStore {
         progress = 0
         downloadHasKnownSize = false
         isDownloading = true
-        let delegate = IPADownloadProgress { [weak self] received, expected in
-            Task { @MainActor [weak self] in
+        let task = Task<URL, Error> {
+            try await BackgroundIPADownloads.shared.download(url) { [weak self] received, expected in
                 guard let self, self.downloadID == id, self.isDownloading else { return }
                 self.downloadHasKnownSize = expected > 0
                 self.progress = expected > 0 ? min(1, max(0, Double(received) / Double(expected))) : 0
             }
-        }
-        let task = Task<URL, Error> {
-            let (tmp, response) = try await URLSession.shared.download(from: url, delegate: delegate)
-            defer { try? FileManager.default.removeItem(at: tmp) }
-            try Task.checkCancellation()
-            if let h = response as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
-                throw NSError(domain: "Mirsa", code: h.statusCode,
-                              userInfo: [NSLocalizedDescriptionKey: tr("Download failed (\(h.statusCode))", "فشل التنزيل (\(h.statusCode))")])
-            }
-            let file = FileManager.default.temporaryDirectory.appendingPathComponent("dl-\(UUID().uuidString).ipa")
-            try FileManager.default.moveItem(at: tmp, to: file)
-            return file
         }
         downloadTask = task
         defer {
