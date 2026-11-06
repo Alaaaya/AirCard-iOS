@@ -46,7 +46,8 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         XCTAssertEqual(extra.count, 2)
         try await snapshot(PersonalAppsHub(), name: "Arabic-projects-real-SwiftUI-multi-fixture")
         // Tall render shows the last settings row (minimum iOS) and the space above the sticky sign button.
-        try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-full-scroll-last-row-and-button", height: 2000)
+        try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-top-430x932")
+        try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-bottom-430x932-last-row-and-sign-button", scrollToBottom: true)
         try await snapshot(NavigationStack { ScrollView { PersonalCertificateView().padding(20) }.background(AuroraBackground()) }, name: "Arabic-certificate-import-real-SwiftUI")
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-real-SwiftUI-fixture")
     }
@@ -132,7 +133,13 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         return { for (key, value) in saved { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
     }
 
-    private func snapshot<V: View>(_ view: V, name: String, height: CGFloat = 932) async throws {
+    private func findScrollView(_ v: UIView) -> UIScrollView? {
+        if let s = v as? UIScrollView, s.contentSize.height > 0 { return s }
+        for sub in v.subviews { if let s = findScrollView(sub) { return s } }
+        return nil
+    }
+
+    private func snapshot<V: View>(_ view: V, name: String, height: CGFloat = 932, scrollToBottom: Bool = false) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let original = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
@@ -145,6 +152,16 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         window.layoutIfNeeded()
         try await Task.sleep(nanoseconds: 800_000_000)
         host.view.layoutIfNeeded()
+        if scrollToBottom {
+            let scroll = try XCTUnwrap(findScrollView(host.view), "A UIScrollView must exist in the hosted view")
+            XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height, "Content must overflow the 430x932 viewport")
+            let y = max(-scroll.adjustedContentInset.top, scroll.contentSize.height - scroll.bounds.height + scroll.adjustedContentInset.bottom)
+            scroll.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+            window.layoutIfNeeded()
+            try await Task.sleep(nanoseconds: 500_000_000)
+            host.view.layoutIfNeeded()
+            XCTAssertEqual(scroll.contentOffset.y, y, accuracy: 1, "Scroll view must really be at the bottom")
+        }
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
         var rendered = false
         let image = UIGraphicsImageRenderer(size: window.bounds.size, format: format).image { _ in
