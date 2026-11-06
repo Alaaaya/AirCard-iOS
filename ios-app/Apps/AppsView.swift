@@ -422,7 +422,7 @@ struct AppsTab: View {
 
     @ViewBuilder
     private func menu(for app: ManagedApp) -> some View {
-        Button { store.launch(app) } label: { Label(L.t("menu.open"), systemImage: "arrow.up.forward.app") }
+        Button { launchIfIdle(app) } label: { Label(L.t("menu.open"), systemImage: "arrow.up.forward.app") }
         if app.location == .container {
             Button { Task { await store.move(app, to: .real, vm: vm) } } label: {
                 Label(L.t("menu.toReal"), systemImage: "iphone.and.arrow.forward")

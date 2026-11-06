@@ -57,14 +57,13 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         }
         try await library.add(fixture, signed: false)
         let app = try XCTUnwrap(library.apps.first { !beforeApps.contains($0.id) })
-        try? await tweaks.addFile(dylib)
-        let tweak = tweaks.items.first { !beforeTweaks.contains($0.id) }
-        if let tweak {
-            var draft = PersonalProjectDraft(name: "Fixture", bundleID: app.bundleID, version: "1.0")
-            draft.tweakIDs = [tweak.id]
-            try JSONEncoder().encode(draft).write(to: library.draftURL(app), options: .atomic)
-            XCTAssertEqual(try JSONDecoder().decode(PersonalProjectDraft.self, from: Data(contentsOf: library.draftURL(app))).tweakIDs, [tweak.id])
-        }
+        try await tweaks.addFile(dylib)
+        let tweak = try XCTUnwrap(tweaks.items.first { !beforeTweaks.contains($0.id) }, "Tweak import must create a real library item; no chip proof without it")
+        XCTAssertEqual(tweak.roots, [dylib.lastPathComponent])
+        var draft = PersonalProjectDraft(name: "Fixture", bundleID: app.bundleID, version: "1.0")
+        draft.tweakIDs = [tweak.id]
+        try JSONEncoder().encode(draft).write(to: library.draftURL(app), options: .atomic)
+        XCTAssertEqual(try JSONDecoder().decode(PersonalProjectDraft.self, from: Data(contentsOf: library.draftURL(app))).tweakIDs, [tweak.id])
         defaults.set(false, forKey: gridKey)
         try await snapshot(PersonalAppsHub(), name: "Personal-list-default-tweak-chip-x")
         defaults.set(true, forKey: gridKey)
