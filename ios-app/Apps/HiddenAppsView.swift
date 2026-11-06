@@ -15,8 +15,8 @@ struct HiddenPINPad: View {
 
     private var title: String {
         switch mode {
-        case .enter: return "Enter PIN"
-        case .create: return first == nil ? "Create a PIN" : "Confirm PIN"
+        case .enter: return personalText("Enter PIN", "اكتب الرمز")
+        case .create: return first == nil ? personalText("Create a PIN", "سوّي رمز") : personalText("Confirm PIN", "أكّد الرمز")
         }
     }
 
@@ -30,7 +30,7 @@ struct HiddenPINPad: View {
                         .scaleEffect(i < pin.count ? 1.15 : 1).animation(.spring(response: 0.25, dampingFraction: 0.6), value: pin.count)
                 }
             }.modifier(Shake(t: CGFloat(shake)))
-            Text(message ?? (mode == .create ? "4 to 6 digits. Stored only on this device." : "4 to 6 digits"))
+            Text(message ?? (mode == .create ? personalText("4 to 6 digits. Stored only on this device.", "من 4 لـ 6 أرقام. بينحفظ على جهازك بس.") : personalText("4 to 6 digits", "من 4 لـ 6 أرقام")))
                 .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65)).frame(minHeight: 34)
             VStack(spacing: 14) {
                 ForEach([[1, 2, 3], [4, 5, 6], [7, 8, 9]], id: \.self) { row in
@@ -38,11 +38,11 @@ struct HiddenPINPad: View {
                 }
                 HStack(spacing: 18) {
                     Button { if !pin.isEmpty { pin.removeLast() } } label: { Image(systemName: "delete.left").frame(width: 74, height: 74) }
-                        .foregroundStyle(.white.opacity(0.8)).accessibilityLabel("Delete")
+                        .foregroundStyle(.white.opacity(0.8)).accessibilityLabel(personalText("Delete", "مسح"))
                     key("0")
                     Button { submit() } label: { Image(systemName: "checkmark").frame(width: 74, height: 74) }
                         .foregroundStyle(HiddenAppsStore.isValidPIN(pin) ? .white : .white.opacity(0.25))
-                        .disabled(!HiddenAppsStore.isValidPIN(pin)).accessibilityLabel("OK")
+                        .disabled(!HiddenAppsStore.isValidPIN(pin)).accessibilityLabel(personalText("OK", "تأكيد"))
                 }
             }
         }
@@ -78,7 +78,7 @@ private struct Shake: GeometryEffect {
 
 struct HiddenAppsView<Content: View>: View {
     @ObservedObject var store: HiddenAppsStore
-    var title: String = "Hidden apps"
+    var title: String = personalText("Hidden apps", "التطبيقات المخفية")
     @ViewBuilder var content: () -> Content
     @Environment(\.scenePhase) private var phase
     @Environment(\.dismiss) private var dismiss
@@ -92,33 +92,33 @@ struct HiddenAppsView<Content: View>: View {
             if store.health == .faulted {
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.lock.fill").font(.largeTitle).foregroundStyle(.white)
-                    Text("Hidden apps are unavailable").font(.headline).foregroundStyle(.white)
-                    Text("The protected data could not be read. Nothing was deleted and your hidden apps stay hidden.")
+                    Text(personalText("Hidden apps are unavailable", "التطبيقات المخفية مو متاحة هلأ")).font(.headline).foregroundStyle(.white)
+                    Text(personalText("The protected data could not be read. Nothing was deleted and your hidden apps stay hidden.", "ما قدرنا نقرا البيانات المحمية. ما انحذف شي والتطبيقات المخفية بتضل مخفية."))
                         .font(.footnote).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.65))
-                    Button("Retry") { store.reload() }.buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
+                    Button(personalText("Retry", "جرّب كمان")) { store.reload() }.buttonStyle(.borderedProminent).tint(.white).foregroundStyle(.black)
                 }.padding(32)
             } else if store.isUnlocked {
                 VStack(spacing: 0) {
                     HStack {
                         Button { store.lock(); dismiss() } label: { Image(systemName: "xmark").font(.headline).frame(width: 44, height: 44) }
-                            .foregroundStyle(.white).accessibilityLabel("Close")
+                            .foregroundStyle(.white).accessibilityLabel(personalText("Close", "سكّر"))
                         Text(title).font(.headline).foregroundStyle(.white)
                         Spacer()
-                        Button("Lock") { store.lock(); dismiss() }.foregroundStyle(.white.opacity(0.8))
+                        Button(personalText("Lock", "قفل")) { store.lock(); dismiss() }.foregroundStyle(.white.opacity(0.8))
                     }.padding(.horizontal, 12)
                     content()
                 }.environment(\.layoutDirection, .leftToRight)
             } else if !store.hasPIN {
                 HiddenPINPad(mode: .create, message: message) { pin in
-                    do { try store.setPIN(pin); message = nil } catch { message = "Could not save the PIN." }
+                    do { try store.setPIN(pin); message = nil } catch { message = personalText("Could not save the PIN.", "ما قدرنا نحفظ الرمز.") }
                 }
             } else {
                 HiddenPINPad(mode: .enter, message: message ?? lockedText) { pin in
                     switch store.unlock(pin) {
                     case .success: message = nil
-                    case .wrongPIN(let r): message = r > 0 ? "Wrong PIN. \(r) tries left." : "Wrong PIN."
+                    case .wrongPIN(let r): message = r > 0 ? personalText("Wrong PIN. \(r) tries left.", "الرمز غلط. باقي \(r) محاولات.") : personalText("Wrong PIN.", "الرمز غلط.")
                     case .locked(let u): message = lockText(u)
-                    case .faulted: message = "Could not verify the PIN."
+                    case .faulted: message = personalText("Could not verify the PIN.", "ما قدرنا نتحقق من الرمز.")
                     case .notConfigured: message = nil
                     }
                 }
@@ -126,13 +126,14 @@ struct HiddenAppsView<Content: View>: View {
         }
         .onChange(of: phase) { p in if p != .active { store.lock() } }
         .onDisappear { store.lock() }
-        .onReceive(ticker) { now = $0; if let m = message, m.hasPrefix("Too many"), !m.contains("later") { } }
+        .onReceive(ticker) { now = $0 }
     }
 
     private var lockedText: String? { nil }
     private func lockText(_ until: Date) -> String {
         let s = max(1, Int(until.timeIntervalSince(Date()).rounded(.up)))
-        return "Too many tries. Wait \(s >= 60 ? "\(s / 60) min" : "\(s) s")."
+        let t = s >= 60 ? personalText("\(s / 60) min", "\(s / 60) دقيقة") : personalText("\(s) s", "\(s) ثانية")
+        return personalText("Too many tries. Wait \(t).", "محاولات كتير. استنى \(t).")
     }
 }
 
