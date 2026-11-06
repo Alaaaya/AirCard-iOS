@@ -119,7 +119,7 @@ fn extract_zip(input: &Path, dest: &Path) -> Result<()> {
     }
     result
 }
-fn walk(root: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+pub(crate) fn walk(root: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
     walk_depth(root, out, 0)
 }
 fn walk_depth(root: &Path, out: &mut Vec<PathBuf>, depth: usize) -> Result<()> {
@@ -529,7 +529,7 @@ fn macho(d: Vec<u8>, dylib: bool) -> Result<Mach> {
 }
 /// Inspect encrypted slices without changing architecture or deployment targets.
 /// This also protects metadata-only edits of universal IPAs.
-fn unencrypted(d: &[u8]) -> Result<()> {
+pub(crate) fn unencrypted(d: &[u8]) -> Result<()> {
     if d.len() < 32 {
         return Err("Truncated Mach-O".into());
     }
@@ -868,9 +868,16 @@ struct Request {
     executable: String,
     #[serde(default)]
     libraries: Vec<String>,
+    #[serde(default)]
+    private_key: String,
+    #[serde(default)]
+    certificate: String,
+    #[serde(default)]
+    profile: String,
 }
 fn run(r: Request) -> Result<()> {
     match r.operation.as_str() {
+        "personal_sign" => crate::personal_sign::sign(Path::new(&r.input), Path::new(&r.profile), &r.private_key, &r.certificate),
         "validate" => unencrypted(&read_macho(Path::new(&r.input))?),
         "extract" => extract_zip(Path::new(&r.input), Path::new(&r.output)),
         "pack" => pack(Path::new(&r.input), Path::new(&r.output)),

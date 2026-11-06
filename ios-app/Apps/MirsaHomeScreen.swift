@@ -8,6 +8,7 @@ struct MirsaHomeScreen<Menu: View>: View {
     let onSettings: () -> Void
     let onImport: () -> Void
     let onDownloads: () -> Void
+    let onCertificate: () -> Void
     @ViewBuilder let menu: (ManagedApp) -> Menu
     @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
     @AppStorage("mirsa.home.dockIDs") private var dockIDs = "[]"
@@ -38,6 +39,8 @@ struct MirsaHomeScreen<Menu: View>: View {
                 HStack {
                     Text("Mirsa").font(.title3.weight(.semibold))
                     Spacer()
+                    Button(action: onCertificate) { Image(systemName: "signature").frame(width: 44, height: 44) }
+                        .accessibilityLabel(tr("Sign apps with a certificate", "توقيع التطبيقات بشهادة"))
                     Button(action: onImport) { Image(systemName: "plus").frame(width: 44, height: 44) }
                         .accessibilityLabel(L.t("empty.import"))
                     Button(action: onSettings) { Image(systemName: "gearshape").frame(width: 44, height: 44) }
