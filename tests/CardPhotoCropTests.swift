@@ -1,7 +1,7 @@
 import XCTest
 import UIKit
 import SwiftUI
-@testable import AirCard_iOS
+@testable import Mirsa
 
 @MainActor
 final class CardPhotoCropTests: XCTestCase {

@@ -1,7 +1,7 @@
-# AirCard-iOS
+# Mirsa
 
 <p align="center">
-  <img src="ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" height="128" alt="AirCard-iOS Icon" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);" />
+  <img src="ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" height="128" alt="Mirsa Icon" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);" />
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 
 ## Overview
 
-AirCard-iOS customizes Apple Wallet card artwork, lock screen passcode dialers, and lock screen wallpapers on device without a jailbreak.
+Mirsa customizes Apple Wallet card artwork, lock screen passcode dialers, and lock screen wallpapers on device without a jailbreak.
 
 The app communicates with internal system services over a local loopback tunnel (`10.7.0.1` or `127.0.0.1`) provided by LocalDevVPN. File operations are handled by `AirliftFFI`, a Rust library that interfaces with the AirTraffic service.
 
@@ -89,7 +89,7 @@ See `LICENSES/Sideloader-NOTICE.md` (includes the LGPL-2.1 note for apple-codesi
 
 ### Pairing options
 - **Import pairing file**: Supports pairing files (`.mobiledevicepairing`, `.plist`, `.mobilepair`) from **SideStore**, **LiveContainer**, **iLoader**, **AltStore**, **Jitterbug**, or exported from Mac/PC.
-- **On-device pairing (iOS 27+)**: Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
+- **On-device pairing (iOS 27+)**: Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with Mirsa.
 - **Safe unpairing**: Easily delete the active pairing file to re-pair or switch pairing credentials at any time.
 
 ## Prerequisites
@@ -100,11 +100,11 @@ See `LICENSES/Sideloader-NOTICE.md` (includes the LGPL-2.1 note for apple-codesi
 
 ## Pairing Setup Guide
 
-AirCard-iOS requires a pairing record to communicate with device lockdown services. Choose the method that best matches your setup:
+Mirsa requires a pairing record to communicate with device lockdown services. Choose the method that best matches your setup:
 
 ### Option A: SideStore (Recommended)
 If you already use SideStore on your device, it has already created a valid pairing file:
-1. Open **AirCard-iOS** and go to the **Pairing** tab.
+1. Open **Mirsa** and go to the **Pairing** tab.
 2. Tap **Import Pairing File…**.
 3. In the Files document picker, navigate to:
    ```text
@@ -114,7 +114,7 @@ If you already use SideStore on your device, it has already created a valid pair
 
 ### Option B: LiveContainer (with SideStore inside)
 If you run SideStore inside LiveContainer:
-1. Open **AirCard-iOS** › **Pairing** tab › tap **Import Pairing File…**.
+1. Open **Mirsa** › **Pairing** tab › tap **Import Pairing File…**.
 2. In the Files document picker, navigate to:
    ```text
    On My iPhone › LiveContainer › SideStore › Documents › ALTPairingFile.mobiledevicepairing
@@ -123,20 +123,20 @@ If you run SideStore inside LiveContainer:
 3. Select `ALTPairingFile.mobiledevicepairing`.
 
 ### Option C: iLoader / Jitterbug / AltStore / Computer
-- **iLoader / Jitterbug**: In the respective app, export your pairing file (`<UDID>.mobiledevicepairing`) into the Files app, then import it in AirCard-iOS.
-- **Mac / PC**: Generate a pairing record using `jitterbugpair`, `pymobiledevice3`, or copy it from your computer (`/var/db/lockdown/<UDID>.plist` on macOS or `%ProgramData%\Apple\Lockdown\<UDID>.plist` on Windows), AirDrop/transfer it to your device, and import it into AirCard-iOS.
-- **Manual placement**: You can also drop any `.mobiledevicepairing` or `.plist` directly into `On My iPhone › AirCard-iOS` via the Files app; it will appear under *Discovered in Documents* ready to use.
+- **iLoader / Jitterbug**: In the respective app, export your pairing file (`<UDID>.mobiledevicepairing`) into the Files app, then import it in Mirsa.
+- **Mac / PC**: Generate a pairing record using `jitterbugpair`, `pymobiledevice3`, or copy it from your computer (`/var/db/lockdown/<UDID>.plist` on macOS or `%ProgramData%\Apple\Lockdown\<UDID>.plist` on Windows), AirDrop/transfer it to your device, and import it into Mirsa.
+- **Manual placement**: You can also drop any `.mobiledevicepairing` or `.plist` directly into `On My iPhone › Mirsa` via the Files app; it will appear under *Discovered in Documents* ready to use.
 
 ### Option D: On-Device Pairing (iOS 27+ only)
 On devices running iOS 27 or newer:
 1. In the **Pairing** tab, tap **Pair This iPhone**.
 2. Note the 6-digit PIN displayed on screen.
-3. Open **Settings › Privacy & Security › Developer Mode › Pair with AirCard-iOS**.
-4. Enter the PIN to approve the pairing. AirCard-iOS will complete the handshake and save the credentials.
+3. Open **Settings › Privacy & Security › Developer Mode › Pair with Mirsa**.
+4. Enter the PIN to approve the pairing. Mirsa will complete the handshake and save the credentials.
 
 ## Installation
 
-Install `AirCard-iOS.ipa` using your preferred sideloading method:
+Install `Mirsa.ipa` using your preferred sideloading method:
 
 - SideStore or AltStore
 - TrollStore
@@ -153,11 +153,11 @@ Install `AirCard-iOS.ipa` using your preferred sideloading method:
 ### Build the IPA
 ```bash
 git clone https://github.com/mak5er/AirCard-iOS.git
-cd AirCard-iOS
+cd Mirsa
 ./build-ipa.sh
 ```
 
-The completed package is written to `build/AirCard-iOS.ipa`.
+The completed package is written to `build/Mirsa.ipa`.
 
 ### Rebuilding the Rust framework
 CI (`.github/workflows/unsigned-ipa.yml`) rebuilds `AirliftFFI.xcframework`
@@ -171,9 +171,9 @@ To compile changes in `rust-core`:
 ## Repository structure
 
 ```
-AirCard-iOS/
+Mirsa/
 ├── ios-app/                   # SwiftUI application
-│   ├── AirCardApp.swift       # App entry point and lifecycle
+│   ├── MirsaApp.swift       # App entry point and lifecycle
 │   ├── AppViewModel.swift     # State management and exploit orchestration
 │   ├── ContentView.swift      # Main UI views
 │   ├── TendiesView.swift      # PosterBoard wallpaper view

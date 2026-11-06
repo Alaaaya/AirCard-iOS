@@ -1,4 +1,4 @@
-name: AirCard-iOS
+name: Mirsa
 options:
   bundleIdPrefix: com.mak5er
   deploymentTarget:
@@ -17,7 +17,7 @@ settings:
     DEVELOPMENT_TEAM: ""
 
 targets:
-  AirCard-iOS:
+  Mirsa:
     type: application
     platform: iOS
     sources:
@@ -35,7 +35,7 @@ targets:
         embed: false
     settings:
       base:
-        PRODUCT_NAME: "AirCard-iOS"
+        PRODUCT_NAME: "Mirsa"
         PRODUCT_BUNDLE_IDENTIFIER: com.alaa.mirsa
         INFOPLIST_FILE: ios-app/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -56,23 +56,23 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
-  AirCard-iOSTests:
+  MirsaTests:
     type: bundle.unit-test
     platform: iOS
     sources:
       - path: tests
     dependencies:
-      - target: AirCard-iOS
+      - target: Mirsa
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.alaa.mirsa.tests
 
 schemes:
-  AirCard-iOS:
+  Mirsa:
     build:
       targets:
-        AirCard-iOS: all
+        Mirsa: all
     test:
       targets:
-        - AirCard-iOSTests
+        - MirsaTests

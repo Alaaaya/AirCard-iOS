@@ -39,7 +39,7 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Mirsa pairs this iPhone with itself and can receive apps from a computer on the same Wi-Fi.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>AirCard-iOS needs photo access to apply custom card skins and passcode themes.</string>
+	<string>Mirsa needs photo access to apply custom card skins and passcode themes.</string>
 	<!-- Background: audio keeps the app alive while the user approves the PIN -->
 	<key>UIBackgroundModes</key>
 	<array>
@@ -52,29 +52,29 @@
 	<array>
 		<string>com.alaa.mirsa.apps.refresh</string>
 	</array>
-	<!-- Apps tab Container: guest apps run inside AirCard's process, so iOS
-	     reads their privacy prompts from AirCard's Info.plist. Without these
+	<!-- Apps tab Container: guest apps run inside Mirsa's process, so iOS
+	     reads their privacy prompts from Mirsa's Info.plist. Without these
 	     keys a guest asking for the camera, microphone, ... would crash. -->
 	<key>NSCameraUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use the camera.</string>
+	<string>An app running in the Mirsa Container wants to use the camera.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use the microphone.</string>
+	<string>An app running in the Mirsa Container wants to use the microphone.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>An app running in the AirCard Container wants to save to your photo library.</string>
+	<string>An app running in the Mirsa Container wants to save to your photo library.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use your location.</string>
+	<string>An app running in the Mirsa Container wants to use your location.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>An app running in the AirCard Container wants to access your contacts.</string>
+	<string>An app running in the Mirsa Container wants to access your contacts.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use Face ID.</string>
+	<string>An app running in the Mirsa Container wants to use Face ID.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use Bluetooth.</string>
+	<string>An app running in the Mirsa Container wants to use Bluetooth.</string>
 	<key>NSMotionUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use motion data.</string>
+	<string>An app running in the Mirsa Container wants to use motion data.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>An app running in the AirCard Container wants to access your calendars.</string>
+	<string>An app running in the Mirsa Container wants to access your calendars.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>An app running in the AirCard Container wants to use speech recognition.</string>
+	<string>An app running in the Mirsa Container wants to use speech recognition.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>CFBundleURLTypes</key>

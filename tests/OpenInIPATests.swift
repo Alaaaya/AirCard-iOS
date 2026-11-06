@@ -1,5 +1,5 @@
 import XCTest
-@testable import AirCard_iOS
+@testable import Mirsa
 
 final class OpenInIPATests: XCTestCase {
     private func input(_ name: String, bytes: Data) throws -> URL {

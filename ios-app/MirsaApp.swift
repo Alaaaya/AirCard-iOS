@@ -2,12 +2,12 @@ import SwiftUI
 import AirliftFFI
 
 /// Entry point called from main.m once the Container loader has had its turn.
-@_cdecl("aircard_swift_main")
-public func aircardSwiftMain() {
-    AirCardApp.main()
+@_cdecl("mirsa_swift_main")
+public func mirsaSwiftMain() {
+    MirsaApp.main()
 }
 
-struct AirCardApp: App {
+struct MirsaApp: App {
     @UIApplicationDelegateAdaptor(MirsaDownloadAppDelegate.self) private var downloadDelegate
     @StateObject private var vm = AppViewModel()
 

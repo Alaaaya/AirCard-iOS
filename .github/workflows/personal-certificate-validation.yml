@@ -37,7 +37,7 @@ jobs:
           brew install xcodegen
           xcodegen generate
           bash build-ipa.sh
-          mv build/AirCard-iOS.ipa build/Mirsa-validation.ipa
+          mv build/Mirsa.ipa build/Mirsa-validation.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: Mirsa-personal-signing-validation
@@ -78,7 +78,7 @@ jobs:
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLanguages -array ar en
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLocale ar
           mkdir -p build
-          xcodebuild -project AirCard-iOS.xcodeproj -scheme AirCard-iOS -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/SimulatorData -resultBundlePath build/PersonalUI.xcresult test CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/simulator-validation.log
+          xcodebuild -project Mirsa.xcodeproj -scheme Mirsa -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/SimulatorData -resultBundlePath build/PersonalUI.xcresult test CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/simulator-validation.log
       - name: Export runtime screenshot attachments
         if: always()
         run: |

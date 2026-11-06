@@ -1,6 +1,6 @@
 import XCTest
 import AirliftFFI
-@testable import AirCard_iOS
+@testable import Mirsa
 
 final class WalletScanParserTests: XCTestCase {
 

@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 class LiveActivityPackagingTests(unittest.TestCase):
     def test_extension_embedded_and_shared_types_in_both_targets(self):
         project = yaml.safe_load((ROOT / "project.yml").read_text())
-        app = project["targets"]["AirCard-iOS"]
+        app = project["targets"]["Mirsa"]
         widget = project["targets"]["MirsaLiveActivity"]
         self.assertIn({"target": "MirsaLiveActivity", "embed": True}, app["dependencies"])
         self.assertIn({"path": "LiveActivityShared"}, app["sources"])

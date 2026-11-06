@@ -27,7 +27,7 @@ struct RefreshAppsIntent: AppIntent {
     }
 }
 
-struct AirCardAppShortcuts: AppShortcutsProvider {
+struct MirsaAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
             intent: RefreshAppsIntent(),

@@ -1,5 +1,5 @@
 import XCTest
-@testable import AirCard_iOS
+@testable import Mirsa
 
 @MainActor
 final class MirsaOperationProgressTests: XCTestCase {
