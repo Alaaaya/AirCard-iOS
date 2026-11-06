@@ -1,12 +1,32 @@
 <div align="center">
-  <br />
-  <img src="assets/mirsa-icon.png" width="120" height="120" alt="Mirsa app icon" />
+  <img src="assets/mirsa-hero.jpg" width="100%" alt="Mirsa. Make it yours. Your apps, your sources, your iPhone." />
   <h1>Mirsa · مرسى</h1>
   <p><strong>غيّر تفاصيل آيفونك، على ذوقك.</strong><br />Make your iPhone feel like yours.</p>
   <p>Wallet artwork, passcode themes and lock-screen wallpapers.<br />On your device. No jailbreak required on supported iOS versions.</p>
   <p><code>iPhone</code> &nbsp; <code>Swift + Rust</code> &nbsp; <a href="LICENSE">MIT License</a></p>
   <br />
   <p><a href="#install">Install</a> &nbsp; · &nbsp; <a href="#customize">Customize</a> &nbsp; · &nbsp; <a href="#compatibility">Compatibility</a> &nbsp; · &nbsp; <a href="#build">Build</a></p>
+</div>
+
+---
+
+<div align="center">
+  <h2>Inside Mirsa · من داخل مرسى</h2>
+  <p>Real screens from the app. Personal account details are hidden.</p>
+  <table>
+    <tr>
+      <td width="25%"><img src="assets/screenshots/home.jpg" width="240" alt="Mirsa home and app container, personal email hidden" /></td>
+      <td width="25%"><img src="assets/screenshots/sources.jpg" width="240" alt="Mirsa sources screen" /></td>
+      <td width="25%"><img src="assets/screenshots/pairing.jpg" width="240" alt="Mirsa pairing tools and local VPN" /></td>
+      <td width="25%"><img src="assets/screenshots/downloads.jpg" width="240" alt="Mirsa downloads screen, personal email hidden" /></td>
+    </tr>
+    <tr>
+      <td align="center"><strong>Home &amp; container</strong><br />الرئيسية والحاوية</td>
+      <td align="center"><strong>Sources</strong><br />السورسات</td>
+      <td align="center"><strong>Pairing tools</strong><br />أدوات الاقتران</td>
+      <td align="center"><strong>Downloads</strong><br />التنزيلات</td>
+    </tr>
+  </table>
 </div>
 
 ---
