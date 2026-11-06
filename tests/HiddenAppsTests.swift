@@ -14,7 +14,7 @@ private final class MemSecrets: HiddenSecretStore {
 @MainActor
 final class HiddenAppsTests: XCTestCase {
     var t = Date(timeIntervalSince1970: 1_000_000)
-    func make(_ m: MemSecrets = MemSecrets()) -> (HiddenAppsStore, MemSecrets) { (HiddenAppsStore(secrets: m, now: { self.t }), m) }
+    private func make(_ m: MemSecrets = MemSecrets()) -> (HiddenAppsStore, MemSecrets) { (HiddenAppsStore(secrets: m, now: { self.t }), m) }
 
     func testPINValidation() {
         XCTAssertFalse(HiddenAppsStore.isValidPIN("123")); XCTAssertFalse(HiddenAppsStore.isValidPIN("1234567"))
