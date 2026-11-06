@@ -32,4 +32,7 @@ struct PersonalProjectDraft: Codable, Equatable {
     var removeWatchApp = false
     var minimumOS = ""
     var tweakIDs: [UUID] = []
+    var removeExtensions: Bool? = nil
+    var removeAppClips: Bool? = nil
+    var additionalProfileIDs: [String]? = nil
 }

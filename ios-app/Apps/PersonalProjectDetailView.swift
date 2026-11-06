@@ -156,6 +156,8 @@ struct PersonalProjectDetailView: View {
             toggle(personalText("Enable Files access", "تمكين الوصول إلى الملفات"), personalText("Shows app documents in Files.", "بيظهر ملفات التطبيق بتطبيق الملفات."), $draft.fileSharing)
             toggle(personalText("Remove URL schemes", "إزالة مخططات URL"), personalText("Deletes the app's custom URL schemes.", "بيحذف مخططات URL تبع التطبيق."), $draft.removeURLSchemes)
             toggle(personalText("Remove old embedded profile", "إزالة البروفايل المضمّن القديم"), personalText("Only the old one. Signing still embeds your new profile.", "القديم بس. التوقيع لسا بيضمّن البروفايل الجديد تبعك."), $draft.removeEmbeddedProfile)
+            toggle(personalText("Remove extensions", "إزالة الإضافات المضمّنة"), personalText("Removes PlugIns before signing.", "بيحذف مجلد PlugIns قبل التوقيع."), Binding(get: { draft.removeExtensions ?? false }, set: { draft.removeExtensions = $0 }))
+            toggle(personalText("Remove App Clips", "إزالة App Clips"), personalText("Removes AppClips before signing.", "بيحذف مجلد AppClips قبل التوقيع."), Binding(get: { draft.removeAppClips ?? false }, set: { draft.removeAppClips = $0 }))
             toggle(personalText("Remove Watch app", "إزالة تطبيق الساعة"), personalText("Deletes the Watch folder before signing.", "بيحذف مجلد الساعة قبل التوقيع."), $draft.removeWatchApp)
             VStack(alignment: .leading, spacing: 4) {
                 Text(personalText("Minimum iOS version", "أدنى إصدار iOS")).font(.subheadline)
@@ -189,6 +191,16 @@ struct PersonalProjectDetailView: View {
                 }
             } else {
                 Text(personalText("No saved certificate yet.", "ما في شهادة محفوظة.")).font(.footnote).foregroundStyle(.secondary)
+            }
+            ForEach(identities.filter { $0.id != selected?.id }) { identity in
+                Toggle(isOn: Binding(get: { (draft.additionalProfileIDs ?? []).contains(identity.id) }, set: { enabled in
+                    var ids = draft.additionalProfileIDs ?? []
+                    ids.removeAll { $0 == identity.id }
+                    if enabled { ids.append(identity.id) }
+                    draft.additionalProfileIDs = ids
+                })) {
+                    Text(personalText("Nested profile", "بروفايل للتطبيقات المضمّنة") + " · " + identity.name).font(.caption)
+                }
             }
             Button { showCertificates = true } label: {
                 Label(personalText("Manage certificates", "إدارة الشهادات"), systemImage: "slider.horizontal.3")
@@ -232,6 +244,9 @@ struct PersonalProjectDetailView: View {
         options.removeURLSchemes = draft.removeURLSchemes
         options.removeEmbeddedProfile = draft.removeEmbeddedProfile
         options.removeWatchApp = draft.removeWatchApp
+        options.removeExtensions = draft.removeExtensions ?? false
+        options.removeAppClips = draft.removeAppClips ?? false
+        options.additionalProfiles = identities.filter { (draft.additionalProfileIDs ?? []).contains($0.id) }.map { $0.material.profile }
         let minimum = draft.minimumOS.trimmingCharacters(in: .whitespacesAndNewlines)
         options.minimumOS = minimum.isEmpty ? nil : minimum
         do {
