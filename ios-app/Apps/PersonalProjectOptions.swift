@@ -12,6 +12,9 @@ struct PersonalProjectOptions: Sendable {
     var removeWatchApp = false
     var minimumOS: String? = nil
     var libraries: [URL] = []
+    var additionalProfiles: [Data] = []
+    var removeExtensions = false
+    var removeAppClips = false
 }
 
 func personalText(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }

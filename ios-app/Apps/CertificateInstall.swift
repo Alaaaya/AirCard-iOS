@@ -91,13 +91,16 @@ enum CertificateInstall {
         MirsaOperationProgress.shared.update(operation, phase: .installing)
         do {
             let appPath = staged.app.path
-            let result = try await Task.detached(priority: .userInitiated) {
+            var result = try await Task.detached(priority: .userInitiated) {
                 try SideloadService.installSigned(appPath: appPath) { f, stage in
                     // Fraction only from real transfer/install callbacks.
                     let real: Double? = stage == "Installing" ? f : nil
                     Task { @MainActor in MirsaOperationProgress.shared.update(operation, phase: .installing, fraction: real) }
                 }
             }.value
+            result["profile_verification"] = signed.verification.profile_verification
+            result["warnings"] = signed.verification.warnings.map { ["code": $0.code, "message": $0.message] }
+            result["device_authorization"] = "checked"
             outcome = .success
             try? FileManager.default.removeItem(at: kept.deletingLastPathComponent())
             try? FileManager.default.removeItem(at: exportDir)
@@ -157,6 +160,9 @@ struct CertificateInstallSheet: View {
                         Button { install(id) } label: {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(id.name).font(.headline)
+                                if !id.verification.isVerified {
+                                    Text(id.verification.warningText).font(.caption).foregroundStyle(.orange)
+                                }
                                 Text([id.teamID, id.expiry.map { $0.formatted(date: .abbreviated, time: .omitted) }]
                                     .compactMap { $0 }.joined(separator: " · "))
                                     .font(.caption).foregroundStyle(.secondary)
@@ -195,10 +201,13 @@ struct CertificateInstallSheet: View {
         working = true; message = nil
         Task {
             do {
-                _ = try await CertificateInstall.run(input: pending.originalIPA, appID: pending.bundleID,
+                let result = try await CertificateInstall.run(input: pending.originalIPA, appID: pending.bundleID,
                                                      identity: identity, store: store)
                 working = false
-                dismiss(); onDone()
+                if let warnings = result["warnings"] as? [[String: String]], !warnings.isEmpty {
+                    message = warnings.compactMap { $0["message"] }.joined(separator: "\n")
+                    onDone()
+                } else { dismiss(); onDone() }
             } catch {
                 message = error.localizedDescription
                 if case CertificateInstall.Failure.retained(_, let url) = error { retainedURL = url }

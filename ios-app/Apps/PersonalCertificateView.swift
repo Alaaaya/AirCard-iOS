@@ -247,7 +247,16 @@ enum PersonalCertificateSigner {
         let (key, certificate) = try PersonalIdentityVault.identity(material)
         let request: [String: Any] = ["operation": "personal_sign", "input": app.path,
                                       "profile": profile.path, "private_key": key.base64EncodedString(),
-                                      "certificate": certificate.base64EncodedString()]
+                                      "certificate": certificate.base64EncodedString(),
+                                      "pairing_path": PairingController.pairingFilePath(),
+                                      "remove_extensions": options.removeExtensions,
+                                      "remove_watch": options.removeWatchApp,
+                                      "remove_app_clips": options.removeAppClips,
+                                      "profiles": try options.additionalProfiles.enumerated().map { index, data in
+                                          let url = stage.appendingPathComponent("profile-extra-\(index).mobileprovision")
+                                          try data.write(to: url, options: [.atomic, .completeFileProtection])
+                                          return url.path
+                                      }]
         let bytes = try JSONSerialization.data(withJSONObject: request)
         guard let text = String(data: bytes, encoding: .utf8),
               let response = text.withCString({ personalEditorRun($0) }) else {
@@ -321,8 +330,8 @@ struct PersonalCertificateView: View {
                     .opacity(canSave ? 1 : 0.3), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }.buttonStyle(.plain).disabled(!canSave)
             if let latest { savedCard(latest) }
-            Text(personalText("The IPA must be unencrypted and contain no extensions, Watch apps or App Clips. A Development or Ad Hoc profile that includes this device is required.",
-                              "لازم ملف IPA يكون غير مشفّر وبدون إضافات أو تطبيق Watch أو App Clip. وبدك بروفايل Development أو Ad Hoc مضاف فيه هالجهاز."))
+            Text(personalText("The IPA must be unencrypted. Each retained app or extension needs a matching Development or Ad Hoc profile that includes the connected device. Device authorization is checked through pairing when signing.",
+                              "لازم ملف IPA يكون غير مشفّر. كل تطبيق أو إضافة بتحتفظ فيها بدها بروفايل Development أو Ad Hoc مطابق ومضاف فيه الجهاز المتصل. تطابق الجهاز بينفحص عبر الاقتران وقت التوقيع."))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -390,6 +399,7 @@ struct PersonalCertificateView: View {
             Label(personalText("Selected certificate", "الشهادة المحددة") + (count > 1 ? " (\(count))" : ""), systemImage: "lock.shield.fill")
                 .font(.subheadline.weight(.semibold)).foregroundStyle(item.verification.isVerified ? Color.green : Color.orange)
             Text(item.name).font(.headline).lineLimit(2)
+            Text("تطابق الجهاز لسا مو مفحوص. بينفحص وقت التوقيع عبر الاتصال بالجهاز.").font(.caption).foregroundStyle(.secondary)
             if !item.verification.isVerified {
                 Label(item.verification.warningText, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
