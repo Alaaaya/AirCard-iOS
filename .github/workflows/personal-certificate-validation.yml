@@ -1,0 +1,41 @@
+name: Personal certificate validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-core
+      - name: Test Rust validation
+        run: cargo test --manifest-path rust-core/Cargo.toml --lib personal_sign
+      - name: Build Rust device library
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        run: |
+          cd rust-core
+          cargo build --release --target aarch64-apple-ios
+          cd ..
+          rm -rf AirliftFFI.xcframework
+          xcodebuild -create-xcframework -library rust-core/target/aarch64-apple-ios/release/libairlift_ffi.a -headers rust-core/include -output AirliftFFI.xcframework
+      - name: Build application
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          bash build-ipa.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mirsa-personal-signing-validation
+          path: build/AirCard-iOS.ipa

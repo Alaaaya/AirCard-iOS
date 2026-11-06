@@ -107,7 +107,7 @@ enum IconTint {
 
 // MARK: - Root
 
-enum AppsSegment { case container, real, downloads }
+enum AppsSegment { case container, real, downloads, certificate }
 
 struct AppsTab: View {
     @EnvironmentObject var vm: AppViewModel
@@ -139,15 +139,19 @@ struct AppsTab: View {
                                 onSettings: { showSettings = true },
                                 onImport: { showPicker = true },
                                 onDownloads: { segment = .downloads },
+                                onCertificate: { segment = .certificate },
                                 menu: { app in menu(for: app) })
-                if segment == .downloads {
+                if segment == .downloads || segment == .certificate {
                     VStack {
                         HStack {
-                            Text(tr("Downloads", "التنزيلات")).font(.headline)
+                            Text(segment == .certificate ? tr("Certificate", "توقيع التطبيقات بشهادة") : tr("Downloads", "التنزيلات")).font(.headline)
                             Spacer()
                             Button(L.t("settings.done")) { segment = .container }
                         }
-                        DownloadsList(store: store)
+                        ScrollView {
+                            if segment == .certificate { PersonalCertificateView() }
+                            else { DownloadsList(store: store) }
+                        }
                         Spacer()
                     }
                     .padding(20)
@@ -157,7 +161,7 @@ struct AppsTab: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
-                    HeroCard(store: store, onSignIn: { showLogin = true }, onRefresh: refreshAll)
+                    if segment != .certificate { HeroCard(store: store, onSignIn: { showLogin = true }, onRefresh: refreshAll) }
                     statusWarnings
                     segmentControl
                     grid
@@ -168,9 +172,9 @@ struct AppsTab: View {
             }
             .scrollIndicators(.hidden)
 
-            fab
+            if segment != .certificate { fab
                 .padding(.trailing, 22)
-                .padding(.bottom, theme == MirsaTheme.liquid.rawValue ? 18 : 26)
+                .padding(.bottom, theme == MirsaTheme.liquid.rawValue ? 18 : 26) }
 
             }
 
@@ -299,13 +303,17 @@ struct AppsTab: View {
     }
 
     private var segmentControl: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 4) {
             segButton(.container, title: L.t("seg.container"), trailing: "∞")
             segButton(.real, title: L.t("seg.real"), trailing: "\(store.slotsUsed)/\(store.realLimit)")
+            segButton(.certificate, title: tr("Certificate", "توقيع التطبيقات بشهادة"), trailing: "")
             segButton(.downloads, title: tr("Downloads", "التنزيلات"), trailing: "\(downloads.items.count)")
         }
         .padding(4)
         .appsGlassCapsule()
+        .environment(\.layoutDirection, .leftToRight)
+        }
     }
 
     private func segButton(_ s: AppsSegment, title: String, trailing: String) -> some View {
@@ -339,7 +347,9 @@ struct AppsTab: View {
 
     @ViewBuilder
     private var grid: some View {
-        if segment == .downloads {
+        if segment == .certificate {
+            PersonalCertificateView()
+        } else if segment == .downloads {
             DownloadsList(store: store)
         } else if currentApps.isEmpty {
             ContentUnavailableView {
