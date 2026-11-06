@@ -112,6 +112,38 @@ fn validate_key_certificate(key: &[u8], cert: &x509_cert::Certificate) -> Result
     if public != rsa::RsaPublicKey::from(&private) { return Err("المفتاح الخاص ما بيطابق الشهادة المختارة.".into()); }
     Ok(())
 }
+const PAIRING_LIMIT: u64 = 4 * 1024 * 1024;
+pub(crate) fn pairing_structure(bytes: &[u8]) -> Result<(), String> {
+    use plist::stream::{Event, Reader};
+    if bytes.is_empty() || bytes.len() as u64 > PAIRING_LIMIT {
+        return Err("حجم ملف الاقتران غير صالح.".into());
+    }
+    let mut depth = 0usize;
+    for (count, event) in Reader::new(std::io::Cursor::new(bytes)).enumerate() {
+        if count >= 65_536 { return Err("ملف الاقتران معقّد زيادة.".into()); }
+        match event.map_err(|_| "ملف الاقتران غير صالح.".to_owned())? {
+            Event::StartArray(_) | Event::StartDictionary(_) => {
+                depth += 1;
+                if depth > 32 { return Err("ملف الاقتران متداخل زيادة.".into()); }
+            }
+            Event::EndCollection => { depth = depth.checked_sub(1).ok_or("ملف الاقتران غير صالح.")?; }
+            _ => {}
+        }
+    }
+    if depth != 0 { return Err("ملف الاقتران غير مكتمل.".into()); }
+    Ok(())
+}
+fn read_pairing(path: &str) -> Result<Vec<u8>, String> {
+    use std::io::Read;
+    let meta = std::fs::symlink_metadata(path).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
+    if !meta.is_file() || meta.len() > PAIRING_LIMIT { return Err("ملف الاقتران غير صالح أو حجمه كبير.".into()); }
+    let file = std::fs::File::open(path).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
+    if !file.metadata().map_err(err)?.is_file() { return Err("ملف الاقتران غير صالح.".into()); }
+    let mut bytes = Vec::new();
+    file.take(PAIRING_LIMIT + 1).read_to_end(&mut bytes).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
+    pairing_structure(&bytes)?;
+    Ok(bytes)
+}
 fn actual_udid(pairing_path: &str) -> Result<String,String> {
     // This API is blocking. Swift calls it on a detached worker, but direct
     // callers must not nest block_on in an active Tokio runtime. Return an
@@ -120,7 +152,7 @@ fn actual_udid(pairing_path: &str) -> Result<String,String> {
         return Err("تعذّر التحقق من الجهاز ضمن مهمة شبكة شغّالة. أعد المحاولة من عامل توقيع مستقل.".into());
     }
     if pairing_path.is_empty() { return Err("وصل الجهاز وفعّل الاقتران أولاً للتحقق من UDID الحقيقي.".into()); }
-    let bytes = std::fs::read(pairing_path).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
+    let bytes = read_pairing(pairing_path)?;
     let logger = crate::exploit::Logger { cb: None, ctx: std::ptr::null_mut() };
     let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(err)?;
     rt.block_on(async {
@@ -244,6 +276,36 @@ mod tests {
             .args(["--exact", "personal_sign::tests::nested_runtime_udid_is_recoverable", "--nocapture"])
             .env(CHILD, "1").output().unwrap();
         assert!(output.status.success(), "child {:?}: {}", output.status, String::from_utf8_lossy(&output.stderr));
+    }
+    #[test]
+    fn pairing_limits_cover_xml_binary_depth_and_size() {
+        assert!(pairing_structure(b"").is_err());
+        assert!(pairing_structure(b"garbage").is_err());
+        assert!(pairing_structure(&vec![b'x'; PAIRING_LIMIT as usize + 1]).is_err());
+        let shallow = plist::Value::Dictionary(plist::Dictionary::new());
+        for binary in [false, true] {
+            let mut bytes = Vec::new();
+            if binary { shallow.to_writer_binary(&mut bytes).unwrap(); }
+            else { shallow.to_writer_xml(&mut bytes).unwrap(); }
+            assert!(pairing_structure(&bytes).is_ok());
+            let mut deep = plist::Value::String("test".into());
+            for _ in 0..33 { deep = plist::Value::Array(vec![deep]); }
+            bytes.clear();
+            if binary { deep.to_writer_binary(&mut bytes).unwrap(); }
+            else { deep.to_writer_xml(&mut bytes).unwrap(); }
+            assert!(pairing_structure(&bytes).unwrap_err().contains("متداخل"));
+        }
+        let mut bytes = Vec::new();
+        plist::Value::Array(vec![plist::Value::Boolean(false); 65_536]).to_writer_binary(&mut bytes).unwrap();
+        assert!(pairing_structure(&bytes).unwrap_err().contains("معقّد"));
+    }
+    #[test]
+    fn shared_tunnel_rejects_pairing_limits_before_crypto_or_network() {
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let logger = crate::exploit::Logger { cb: None, ctx: std::ptr::null_mut() };
+        let bytes = vec![0; PAIRING_LIMIT as usize + 1];
+        let result = rt.block_on(crate::exploit::connect_tunnel(&bytes, &logger));
+        assert!(matches!(result, Err(e) if e.contains("حجم")));
     }
     #[test] fn explicit_profile_rewrites_only_bundle_suffix() {
         assert_eq!(resolved_bundle_id("OLDPREFIX.com.profile.app", "com.original.app").unwrap(), "com.profile.app");

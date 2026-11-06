@@ -40,7 +40,9 @@ idevice-ffi = { path = "vendor/idevice-ffi", features = [
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "fs", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-plist = "1.8"
+# Stream events allow nonrecursive pairing depth validation. Pin because this
+# maintained parser's stream API is explicitly unstable across minor versions.
+plist = { version = "=1.10.1", features = ["enable_unstable_features_that_may_break_with_minor_version_bumps"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"

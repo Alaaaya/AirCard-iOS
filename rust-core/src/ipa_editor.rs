@@ -879,6 +879,8 @@ struct Request {
 }
 fn run(r: Request) -> Result<crate::personal_sign::Verification> {
     match r.operation.as_str() {
+        #[cfg(test)]
+        "__test_worker_panic" => panic!("synthetic worker panic"),
         "personal_sign" => return crate::personal_sign::sign_with_options(Path::new(&r.input), Path::new(&r.profile), &r.private_key, &r.certificate, &r.signing_options),
         "validate" => unencrypted(&read_macho(Path::new(&r.input))?),
         "extract" => extract_zip(Path::new(&r.input), Path::new(&r.output)),
@@ -888,32 +890,91 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
         _ => Err("Unknown editor operation".into()),
     }.map(|_| crate::personal_sign::Verification::default())
 }
+// The entire synchronous editor/signing path must leave Swift's ~544 KiB
+// cooperative stack. Runtime::block_on polls its root future on THIS thread;
+// configuring only Tokio worker stacks cannot fix the observed stack guard hit.
+const EDITOR_STACK_BYTES: usize = 16 * 1024 * 1024;
+fn editor_worker<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+    let worker = std::thread::Builder::new().name("mirsa-editor".into())
+        .stack_size(EDITOR_STACK_BYTES).spawn(work)
+        .map_err(|_| "تعذّر بدء عامل التوقيع. جرّب مرة تانية.".to_owned())?;
+    worker.join().unwrap_or_else(|_| Err("توقّف عامل التوقيع بسبب بيانات غير صالحة.".into()))
+}
 /// Returns an owned UTF-8 JSON result; release via existing al_string_free.
 /// # Safety
 /// request must point to a valid NUL-terminated UTF-8 JSON string.
 #[no_mangle]
 pub unsafe extern "C" fn al_ipa_editor_run(request: *const c_char) -> *mut c_char {
     let result = std::panic::catch_unwind(|| {
-        if request.is_null() {
-            return Err("Missing request".into());
-        }
+        if request.is_null() { return Err("Missing request".into()); }
         let text = CStr::from_ptr(request).to_str().map_err(err)?;
-        if text.len() > 1024 * 1024 {
-            return Err("Request too large".into());
-        }
-        run(serde_json::from_str(text).map_err(err)?)
-    })
-    .unwrap_or_else(|_| Err("Editor rejected malformed input".into()));
+        if text.len() > 1024 * 1024 { return Err("Request too large".into()); }
+        // Own all input before crossing threads. No borrowed C pointer escapes.
+        let owned = text.to_owned();
+        editor_worker(move || run(serde_json::from_str(&owned).map_err(err)?))
+    }).unwrap_or_else(|_| Err("تعذّر قراءة طلب التوقيع.".into()));
     let json = match result {
         Ok(status) => serde_json::json!({"ok":true,"profile_verification":status.profile_verification,"warnings":status.warnings,"device_authorization":status.device_authorization}),
         Err(e) => serde_json::json!({"ok":false,"error":e}),
     };
     CString::new(json.to_string()).unwrap().into_raw()
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn ffi_json(request: serde_json::Value) -> serde_json::Value {
+        let request = CString::new(request.to_string()).unwrap();
+        let ptr = unsafe { al_ipa_editor_run(request.as_ptr()) };
+        assert!(!ptr.is_null());
+        let owned = unsafe { CString::from_raw(ptr) };
+        serde_json::from_slice(owned.as_bytes()).unwrap()
+    }
+    #[test]
+    fn ffi_worker_panic_becomes_arabic_json() {
+        let result = ffi_json(serde_json::json!({"operation":"__test_worker_panic","input":""}));
+        assert_eq!(result["ok"], false);
+        assert!(result["error"].as_str().unwrap().contains("عامل التوقيع"));
+    }
+    #[test]
+    fn ffi_signing_from_small_stack_reaches_real_pairing_parser() {
+        use base64::Engine;
+        use isideload_p12_keystore::{KeyStore,KeyStoreEntry,Pkcs12ImportPolicy};
+        let store = KeyStore::from_pkcs12(include_bytes!("../tests/p12-fixtures/modern.p12"), "mirsa-test", Pkcs12ImportPolicy::Raw).unwrap();
+        let key = store.entries().find_map(|(_, e)| if let KeyStoreEntry::PrivateKeyChain(c) = e { Some(c.key().as_der().to_vec()) } else { None }).unwrap();
+        let dir = std::env::temp_dir().join(format!("mirsa-small-stack-{}",std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let pairing = dir.join("pairing.plist");
+        // Structurally valid plist, deliberately missing required pairing keys.
+        // Reaches both production PairingFile parsers and fails before networking.
+        fs::write(&pairing, b"<?xml version=\"1.0\"?><plist version=\"1.0\"><dict/></plist>").unwrap();
+        let b64 = base64::engine::general_purpose::STANDARD;
+        let request = serde_json::json!({"operation":"personal_sign","input":dir.to_str().unwrap(),"private_key":b64.encode(key),"certificate":b64.encode(include_bytes!("../tests/p12-fixtures/leaf.der")),"pairing_path":pairing.to_str().unwrap()});
+        let result = std::thread::Builder::new().stack_size(544 * 1024).spawn(move || {
+            // Also proves the FFI worker leaves an already entered runtime.
+            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            rt.block_on(async { ffi_json(request) })
+        }).unwrap().join().unwrap();
+        assert_eq!(result["ok"], false);
+        assert!(result["error"].as_str().unwrap().contains("neither a valid Lockdown"), "{result}");
+        fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn production_worker_has_separate_large_stack() {
+        let caller = std::thread::current().id();
+        let id = editor_worker(move || {
+            assert_eq!(std::thread::current().name(), Some("mirsa-editor"));
+            // Touch a frame larger than the observed cooperative stack.
+            #[inline(never)]
+            fn touch() -> usize {
+                let mut frame = [0u8; 1024 * 1024];
+                for (i, byte) in frame.iter_mut().enumerate() { *byte = (i % 251) as u8; }
+                std::hint::black_box(&frame)[700_000] as usize
+            }
+            assert!(touch() > 0);
+            Ok(std::thread::current().id())
+        }).unwrap();
+        assert_ne!(caller, id);
+    }
     #[test]
     fn ffi_invalid_requests_return_error_json() {
         unsafe fn response(request: *const c_char) -> serde_json::Value {
