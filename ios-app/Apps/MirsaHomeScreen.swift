@@ -11,32 +11,20 @@ struct MirsaHomeScreen<Menu: View>: View {
     @ViewBuilder let menu: (ManagedApp) -> Menu
     @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
     @AppStorage("mirsa.home.dockIDs") private var dockIDs = "[]"
-    @AppStorage("mirsa.home.orderIDs") private var orderIDs = "[]"
+    @StateObject private var layoutStore = MirsaHomeLayoutStore(namespace: "main", legacyOrderKey: "mirsa.home.orderIDs")
+    @State private var openFolder: String?
     @State private var page = 0
     @State private var editing = false
     @State private var jiggle = false
     @State private var edgeTimer: Task<Void, Never>?
 
-    private var order: [String] {
-        guard let d = orderIDs.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([String].self, from: d)) ?? []
-    }
-    private func saveOrder(_ ids: [String]) {
-        if let d = try? JSONEncoder().encode(ids), let v = String(data: d, encoding: .utf8) { orderIDs = v }
-    }
     private func savePinned(_ ids: [String]) {
         if let d = try? JSONEncoder().encode(ids), let v = String(data: d, encoding: .utf8) {
             withAnimation(.easeInOut(duration: 0.2)) { dockIDs = v }
         }
     }
-    /// Move a dragged app before target (nil = end of grid). Unpins it if it was in the dock.
-    private func move(_ id: String, before target: String?) {
-        guard id != target, apps.contains(where: { $0.id == id }) else { return }
+    private func unpinIfPinned(_ id: String) {
         if pinnedIDs.contains(id) { savePinned(pinnedIDs.filter { $0 != id }) }
-        var ids = gridApps.map(\.id).filter { $0 != id }
-        let at = target.flatMap { ids.firstIndex(of: $0) } ?? ids.count
-        ids.insert(id, at: at)
-        withAnimation(.spring(duration: 0.3)) { saveOrder(ids) }
     }
     private func pinByDrop(_ id: String) {
         guard apps.contains(where: { $0.id == id }) else { return }
@@ -60,13 +48,13 @@ struct MirsaHomeScreen<Menu: View>: View {
     private var dockApps: [ManagedApp] {
         pinnedIDs.compactMap { id in apps.first { $0.id == id } }.prefix(4).map { $0 }
     }
-    private var gridApps: [ManagedApp] {
-        let rest = apps.filter { !pinnedIDs.contains($0.id) }
-        let o = order
-        return rest.sorted { a, b in
-            let i = o.firstIndex(of: a.id) ?? Int.max, j = o.firstIndex(of: b.id) ?? Int.max
-            return i < j
-        }
+    private var gridApps: [ManagedApp] { apps.filter { !pinnedIDs.contains($0.id) } }
+    private var gridItems: [MirsaHomeItem] {
+        layoutStore.layout.displayItems(visible: Set(gridApps.map(\.id)))
+    }
+    private func appByID(_ id: String) -> ManagedApp? { apps.first { $0.id == id } }
+    private func reconcileLayout() {
+        layoutStore.reconcile(visible: apps.map(\.id), all: apps.map(\.id), excluded: Set(pinnedIDs))
     }
     private var colors: [Color] {
         switch wallpaper {
@@ -80,7 +68,8 @@ struct MirsaHomeScreen<Menu: View>: View {
         GeometryReader { geo in
             let rows = max(1, Int(max(100, geo.size.height - 180) / 118))
             let capacity = rows * 3
-            let count = max(1, (gridApps.count + capacity - 1) / capacity)
+            let items = gridItems
+            let count = max(1, (items.count + capacity - 1) / capacity)
             VStack(spacing: 12) {
                 HStack {
                     Text("Mirsa").font(.title3.weight(.semibold))
@@ -100,11 +89,14 @@ struct MirsaHomeScreen<Menu: View>: View {
                 TabView(selection: $page) {
                     ForEach(0..<count, id: \.self) { index in
                         VStack {
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                                ForEach(Array(gridApps.dropFirst(index * capacity).prefix(capacity))) { app in
-                                    tile(app, compact: false)
-                                }
-                            }
+                            MirsaHomeItemsGrid(store: layoutStore,
+                                               items: Array(items.dropFirst(index * capacity).prefix(capacity)),
+                                               editing: editing, jiggle: jiggle,
+                                               onOpenFolder: { id in withAnimation(.easeOut(duration: 0.2)) { openFolder = id } },
+                                               onPlaced: { unpinIfPinned($0) },
+                                               tile: { id in if let app = appByID(id) { tile(app, compact: false) } },
+                                               icon: { id in if let app = appByID(id) { appIcon(app) } })
+                            if index == count - 1 { MirsaHomeEndZone(store: layoutStore, editing: editing, onPlaced: { unpinIfPinned($0) }) }
                             if gridApps.isEmpty {
                                 VStack(spacing: 16) {
                                     Image(systemName: "square.grid.3x3").font(.largeTitle)
@@ -159,10 +151,17 @@ struct MirsaHomeScreen<Menu: View>: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
                 .dropDestination(for: String.self) { items, _ in
-                    guard editing, let id = items.first else { return false }
+                    guard editing, let id = items.first.flatMap(MirsaHomeLayout.parseApp) else { return false }
                     pinByDrop(id); return true
                 }
                 .onChange(of: count) { _, newValue in page = min(page, newValue - 1) }
+            }
+            .overlay {
+                if let fid = openFolder {
+                    MirsaFolderOverlay(store: layoutStore, folderID: fid, visible: Set(gridApps.map(\.id)),
+                                       onClose: { withAnimation(.easeOut(duration: 0.2)) { openFolder = nil } },
+                                       tile: { id in if let app = appByID(id) { tile(app, compact: false) } })
+                }
             }
             .background {
                 LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -173,9 +172,22 @@ struct MirsaHomeScreen<Menu: View>: View {
                     .ignoresSafeArea()
             }
         }
+        .onAppear(perform: reconcileLayout)
+        .onChange(of: apps.map(\.id)) { _, _ in reconcileLayout() }
+        .onChange(of: dockIDs) { _, _ in reconcileLayout() }
         .onDisappear { edgeTimer?.cancel(); edgeTimer = nil }
         .foregroundStyle(.white)
         .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func appIcon(_ app: ManagedApp) -> some View {
+        Group {
+            if let icon = UIImage(contentsOfFile: AppsStore.iconURL(app.id).path) {
+                Image(uiImage: icon).resizable().scaledToFill()
+            } else {
+                Color.indigo.overlay(Text(String(app.name.prefix(1))).font(.caption.bold()))
+            }
+        }
     }
 
     private func tile(_ app: ManagedApp, compact: Bool) -> some View {
@@ -207,9 +219,7 @@ struct MirsaHomeScreen<Menu: View>: View {
         .accessibilityLabel(app.name)
         .rotationEffect(.degrees(editing ? (jiggle ? 1.6 : -1.6) : 0))
         .animation(editing ? .easeInOut(duration: 0.12).repeatForever(autoreverses: true) : .default, value: jiggle)
-        .modifier(EditDrag(enabled: editing, id: app.id, compact: compact) { dragged in
-            move(dragged, before: compact ? nil : app.id)
-        })
+        .modifier(DockDrag(enabled: editing && compact, id: app.id))
         .onLongPressGesture(minimumDuration: 0.5) {
             guard !editing else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -242,19 +252,197 @@ struct MirsaHomeScreen<Menu: View>: View {
 }
 
 
-private struct EditDrag: ViewModifier {
+private struct DockDrag: ViewModifier {
     let enabled: Bool
     let id: String
-    let compact: Bool
-    let onDropOnto: (String) -> Void
     func body(content: Content) -> some View {
-        if enabled {
-            content
-                .draggable(id)
-                .dropDestination(for: String.self) { items, _ in
-                    guard !compact, let d = items.first else { return false }
-                    onDropOnto(d); return true
+        if enabled { content.draggable(MirsaHomeLayout.appItemID(id)) } else { content }
+    }
+}
+
+
+// MARK: - Shared grid + folders (used by main and personal homes)
+
+/// Grid page content. `tile` renders a full app cell, `icon` only its icon (for folder previews).
+struct MirsaHomeItemsGrid<Tile: View, Icon: View>: View {
+    @ObservedObject var store: MirsaHomeLayoutStore
+    let items: [MirsaHomeItem]
+    let editing: Bool
+    let jiggle: Bool
+    let onOpenFolder: (String) -> Void
+    /// Called after an app was dropped into the grid (main home unpins docked apps here).
+    var onPlaced: (String) -> Void = { _ in }
+    @ViewBuilder let tile: (String) -> Tile
+    @ViewBuilder let icon: (String) -> Icon
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            ForEach(items) { item in
+                MirsaHomeCell(editing: editing, itemID: item.id,
+                              onReorder: { dragged in reorder(dragged, before: item.id) },
+                              onOnto: { dragged in dropOnto(dragged, target: item.id) }) {
+                    switch item {
+                    case .app(let id): tile(id)
+                    case .folder(let f): folderCell(f)
+                    }
                 }
-        } else { content }
+            }
+        }
+    }
+
+    private func reorder(_ dragged: String, before target: String) -> Bool {
+        var ok = false
+        withAnimation(.spring(duration: 0.3)) { store.mutate { ok = $0.move(dragged, before: target) } }
+        if ok, let a = MirsaHomeLayout.parseApp(dragged) { onPlaced(a) }
+        return ok
+    }
+    private func dropOnto(_ dragged: String, target: String) -> Bool {
+        var ok = false
+        let name = tr("Folder", "مجلد")
+        withAnimation(.spring(duration: 0.3)) { store.mutate { ok = $0.drop(dragged, onto: target, newFolderName: name) } }
+        if ok, let a = MirsaHomeLayout.parseApp(dragged) { onPlaced(a) }
+        return ok
+    }
+
+    private func folderCell(_ f: MirsaHomeFolder) -> some View {
+        Button { if !editing { onOpenFolder(f.id) } } label: {
+            VStack(spacing: 8) {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(26), spacing: 4), count: 2), spacing: 4) {
+                    ForEach(Array(f.appIDs.prefix(4)), id: \.self) { id in
+                        icon(id).frame(width: 26, height: 26)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                }
+                .frame(width: 64, height: 64)
+                .background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Text(f.name).font(.system(size: 13, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity).frame(height: 110)
+            .background { RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial) }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(f.name)
+        .rotationEffect(.degrees(editing ? (jiggle ? 1.6 : -1.6) : 0))
+        .animation(editing ? .easeInOut(duration: 0.12).repeatForever(autoreverses: true) : .default, value: jiggle)
+    }
+}
+
+/// One grid cell. When editing it is draggable and has two drop zones: a thin left strip that
+/// reorders, and the rest which drops onto the item (folder create / join).
+struct MirsaHomeCell<Content: View>: View {
+    let editing: Bool
+    let itemID: String
+    let onReorder: (String) -> Bool
+    let onOnto: (String) -> Bool
+    @ViewBuilder let content: () -> Content
+    @State private var reorderHover = false
+    @State private var ontoHover = false
+
+    var body: some View {
+        if editing {
+            content()
+                .draggable(itemID)
+                .scaleEffect(ontoHover ? 1.06 : 1)
+                .animation(.easeOut(duration: 0.15), value: ontoHover)
+                .overlay {
+                    GeometryReader { g in
+                        HStack(spacing: 0) {
+                            Color.clear.frame(width: g.size.width * 0.26).contentShape(Rectangle())
+                                .dropDestination(for: String.self) { items, _ in
+                                    guard let d = items.first else { return false }
+                                    return onReorder(d)
+                                } isTargeted: { reorderHover = $0 }
+                            Color.clear.contentShape(Rectangle())
+                                .dropDestination(for: String.self) { items, _ in
+                                    guard let d = items.first else { return false }
+                                    return onOnto(d)
+                                } isTargeted: { ontoHover = $0 }
+                        }
+                    }
+                }
+                .overlay(alignment: .leading) {
+                    if reorderHover { Capsule().fill(.white).frame(width: 3).padding(.vertical, 6).offset(x: -5) }
+                }
+        } else { content() }
+    }
+}
+
+/// Zone at the end of the grid so items can be dropped last.
+struct MirsaHomeEndZone: View {
+    @ObservedObject var store: MirsaHomeLayoutStore
+    let editing: Bool
+    var onPlaced: (String) -> Void = { _ in }
+    var body: some View {
+        if editing {
+            Color.clear.frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
+                .dropDestination(for: String.self) { items, _ in
+                    guard let d = items.first else { return false }
+                    var ok = false
+                    withAnimation(.spring(duration: 0.3)) { store.mutate { ok = $0.move(d, before: nil) } }
+                    if ok, let a = MirsaHomeLayout.parseApp(d) { onPlaced(a) }
+                    return ok
+                }
+        }
+    }
+}
+
+/// Glass overlay that shows one folder: editable name, drag apps within, drop outside to remove.
+struct MirsaFolderOverlay<Tile: View>: View {
+    @ObservedObject var store: MirsaHomeLayoutStore
+    let folderID: String
+    let visible: Set<String>
+    let onClose: () -> Void
+    @ViewBuilder let tile: (String) -> Tile
+
+    private var folder: MirsaHomeFolder? { store.layout.folder(folderID) }
+    private var name: Binding<String> {
+        Binding(get: { folder?.name ?? "" }, set: { v in store.mutate { $0.rename(folder: folderID, to: v) } })
+    }
+
+    var body: some View {
+        if let f = folder {
+            ZStack {
+                Color.black.opacity(0.45).ignoresSafeArea()
+                    .onTapGesture(perform: onClose)
+                    .dropDestination(for: String.self) { items, _ in
+                        guard let a = items.first.flatMap(MirsaHomeLayout.parseApp) else { return false }
+                        withAnimation { store.mutate { _ = $0.removeFromFolder(a, folder: folderID) } }
+                        return true
+                    }
+                VStack(spacing: 14) {
+                    TextField(tr("Folder", "مجلد"), text: name)
+                        .font(.title3.weight(.semibold)).multilineTextAlignment(.center)
+                        .textInputAutocapitalization(.words)
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                        ForEach(f.appIDs.filter { visible.contains($0) }, id: \.self) { id in
+                            tile(id)
+                                .draggable(MirsaHomeLayout.appItemID(id))
+                                .dropDestination(for: String.self) { items, _ in
+                                    guard let a = items.first.flatMap(MirsaHomeLayout.parseApp) else { return false }
+                                    withAnimation { store.mutate { _ = $0.moveInFolder(a, folder: folderID, before: id) } }
+                                    return true
+                                }
+                        }
+                    }
+                    Text(tr("Drag an app outside to remove it", "اسحب التطبيق لبرا ليطلع من المجلد"))
+                        .font(.caption).opacity(0.7)
+                }
+                .padding(18)
+                .frame(maxWidth: 360)
+                .appsGlass(cornerRadius: 32)
+                .padding(.horizontal, 20)
+                .dropDestination(for: String.self) { items, _ in
+                    guard let a = items.first.flatMap(MirsaHomeLayout.parseApp) else { return false }
+                    withAnimation { store.mutate { _ = $0.moveInFolder(a, folder: folderID, before: nil) } }
+                    return true
+                }
+            }
+            .foregroundStyle(.white)
+            .environment(\.layoutDirection, .leftToRight)
+            .transition(.opacity)
+        } else {
+            Color.clear.onAppear(perform: onClose)
+        }
     }
 }
