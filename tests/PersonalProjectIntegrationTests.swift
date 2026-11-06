@@ -163,6 +163,54 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         XCTAssertEqual(layout.layout.folder("f1")?.appIDs.count, 4)
     }
 
+
+    /// Offline simulator fixture, validated through the same IPA verifier as real sources.
+    /// This does not claim a live host download or a device run.
+    func testDiscoveryValidatedIPAAndEmptyArabicSnapshots() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "PersonalUIFixture", withExtension: "zip"))
+        let facts = try IPAValidator.validate(file: fixture, expectedBundleID: nil, expectedVersion: nil, deviceOS: nil)
+        let raw = DiscoveryCandidate(name: facts.displayName, bundleID: facts.bundleID,
+            developer: "Local test fixture", version: facts.version, minOS: facts.minOS, iconURL: nil,
+            downloadURL: URL(string: "https://downloads.example.org/fixture.ipa"),
+            sourceName: "Offline IPA fixture", sourceURL: "https://downloads.example.org/source.json",
+            origin: .userSource, identity: .nameOnly)
+        let valid = try XCTUnwrap(DiscoveryIPAVerifier.validated(raw, file: fixture,
+            expectedBundleID: facts.bundleID, queryName: facts.displayName))
+        XCTAssertEqual(valid.identity, .bundleVerified)
+        XCTAssertTrue(valid.isDownloadable)
+        let reference = DiscoveryCandidate(name: "FORBIDDEN-REFERENCE-x.com", bundleID: "invalid.reference",
+            developer: "", version: "", minOS: nil, iconURL: nil,
+            downloadURL: URL(string: "https://x.com/reference.ipa"), sourceName: "FORBIDDEN-REFERENCE",
+            sourceURL: "https://x.com", origin: .appleMetadata, identity: .reference)
+        let store = DiscoveryStore()
+        store.input = facts.displayName
+        store.outcome = DiscoveryOutcome(query: .name(facts.displayName), candidates: [valid, reference],
+            reports: [], ambiguous: false, note: nil)
+        try await snapshot(DiscoveryView(store: store), name: "Arabic-Discovery-real-validated-IPA-offline-fixture",
+            requiredText: [facts.displayName, facts.bundleID, "تنزيل", "لا"],
+            forbiddenText: ["FORBIDDEN-REFERENCE", "x.com", "References", "مراجع"])
+        store.dismiss(valid)
+        XCTAssertEqual(store.states[valid.id], .dismissed)
+        store.outcome = DiscoveryOutcome(query: .name("Absent app"), candidates: [reference],
+            reports: [], ambiguous: false, note: DiscoveryEngine.emptyMessage)
+        try await snapshot(DiscoveryView(store: store), name: "Arabic-Discovery-empty-no-references",
+            requiredText: [DiscoveryEngine.emptyMessage],
+            forbiddenText: ["FORBIDDEN-REFERENCE", "x.com", "References", "مراجع", "تنزيل"])
+    }
+
+    private func renderedAccessibilityText(_ view: UIView) -> String {
+        var pieces = [view.accessibilityLabel, view.accessibilityValue].compactMap { $0 }
+        if let label = view as? UILabel, let text = label.text { pieces.append(text) }
+        if let button = view as? UIButton, let title = button.title(for: .normal) { pieces.append(title) }
+        for child in view.subviews { pieces.append(renderedAccessibilityText(child)) }
+        if let elements = view.accessibilityElements {
+            for case let element as UIAccessibilityElement in elements {
+                if let label = element.accessibilityLabel { pieces.append(label) }
+            }
+        }
+        return pieces.joined(separator: "\n")
+    }
+
     private static let layoutKeys = ["mirsa.home.layout.v1.main", "mirsa.home.layout.v1.personal", "mirsa.home.orderIDs",
                                      "mirsa.home.dockIDs", "mirsa.home.wallpaper"]
     /// Snapshots each key now; the returned closure restores the value or removes the key if it was absent.
@@ -178,7 +226,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         return nil
     }
 
-    private func snapshot<V: View>(_ view: V, name: String, height: CGFloat = 932, scrollToBottom: Bool = false) async throws {
+    private func snapshot<V: View>(_ view: V, name: String, height: CGFloat = 932, scrollToBottom: Bool = false, requiredText: [String] = [], forbiddenText: [String] = []) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let original = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
@@ -200,6 +248,11 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             try await Task.sleep(nanoseconds: 500_000_000)
             host.view.layoutIfNeeded()
             XCTAssertEqual(scroll.contentOffset.y, y, accuracy: 1, "Scroll view must really be at the bottom")
+        }
+        if !requiredText.isEmpty || !forbiddenText.isEmpty {
+            let text = renderedAccessibilityText(host.view)
+            for expected in requiredText { XCTAssertTrue(text.contains(expected), "Missing rendered text: \(expected); actual: \(text)") }
+            for forbidden in forbiddenText { XCTAssertFalse(text.contains(forbidden), "Forbidden rendered text: \(forbidden)") }
         }
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
         var rendered = false

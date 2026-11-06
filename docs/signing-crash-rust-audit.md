@@ -2,9 +2,10 @@
 
 Base: 6e8d82bd94cdd50cf1bbdb06674c6f62ef3aec6e.
 
-The Zeus crash root cause is NOT established. No Zeus IPA, iOS crash report,
-or jetsam report was available. Do not describe this patch as a verified fix
-for the owner's on-device crash.
+The supplied device report establishes stack exhaustion on a 544 KiB Swift
+cooperative caller during the synchronous signing FFI. The dedicated-worker
+repair and regression evidence are detailed below. Actual on-device retesting
+remains pending; this is not a claim of successful device signing.
 
 ## Earlier independent nested-runtime defect
 

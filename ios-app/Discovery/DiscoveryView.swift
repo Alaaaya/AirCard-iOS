@@ -115,7 +115,11 @@ final class DiscoveryStore: ObservableObject {
 // MARK: - View
 
 struct DiscoveryView: View {
-    @StateObject private var store = DiscoveryStore()
+    @StateObject private var store: DiscoveryStore
+
+    init(store: DiscoveryStore = DiscoveryStore()) {
+        _store = StateObject(wrappedValue: store)
+    }
     @Environment(\.dismiss) private var dismissSheet
     @Environment(\.openURL) private var openURL
     @State private var pendingTrust: DiscoveryCandidate?
