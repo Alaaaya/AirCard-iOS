@@ -6,7 +6,7 @@ The Zeus crash root cause is NOT established. No Zeus IPA, iOS crash report,
 or jetsam report was available. Do not describe this patch as a verified fix
 for the owner's on-device crash.
 
-## Reproduced defect and narrow change
+## Earlier independent nested-runtime defect
 
 Calling personal_sign::actual_udid from within an entered Tokio runtime
 panicked at Tokio scheduler/multi_thread/mod.rs:91, with "Cannot start a
@@ -26,7 +26,9 @@ al_ipa_editor_run and al_personal_p12_import already have catch_unwind inside
 extern C. The workspace release profile and checked build scripts/workflows
 contain no explicit panic=abort override. Default Rust unwind can be caught;
 allocation failure, stack overflow, invalid foreign pointers, jetsam and signals
-are not made recoverable by catch_unwind. We did not reproduce any of those.
+are not made recoverable by catch_unwind. No local reproduction of the original
+device stack overflow was attempted; the supplied device report proves its
+termination mechanism.
 
 Added a direct FFI regression for null, malformed JSON, null JSON, missing fields,
 and a nonexistent personal-sign input. All return owned error JSON and can be
@@ -48,16 +50,19 @@ real failing artifact or on-device evidence.
 CARGO_TARGET_DIR=/tmp/mirsa-cert-rewrite/rust-core/target CARGO_BUILD_JOBS=2 \
  cargo test --manifest-path rust-core/Cargo.toml --lib
 
-Result: 51 passed, 0 failed. Linux host only; not an iOS device/ABI/runtime test.
-The pre-change nested regression failed and post-change passes. Build logs are
-/tmp/mirsa-nested-before.log and /tmp/mirsa-sign-crash-after.log on the web host.
+Current result: 57 passed, 0 failed. Linux host only; not an iOS device/ABI/runtime
+test. Current full-suite log is /tmp/mirsa-stack-final.log on the web host.
+The earlier nested-runtime regression failed before its guard and passes after;
+its historical logs are /tmp/mirsa-nested-before.log and
+/tmp/mirsa-sign-crash-after.log.
 No production push, workflow dispatch, feed write or publication occurred.
 
-Next decisive evidence: obtain the actual installed build identifier plus the
-Mirsa .ips termination report or jetsam entry. An isolated reproduction needs
-the same IPA and signing material, supplied securely, not credentials in logs.
+The device termination report has now been obtained and reviewed in full.
+Next validation is an iOS device retest of the original signing operation with
+the dedicated-worker repair. Any signing material must be supplied securely,
+never included in logs.
 
-## Follow-up with actual device termination evidence
+## Proven device termination and dedicated-worker repair
 
 The subsequently supplied complete device report establishes stack exhaustion,
 not jetsam or an allocation error. The triggered thread is a Swift cooperative
@@ -100,6 +105,8 @@ before networking. A separate worker regression touches a 1 MiB stack frame
 and asserts worker identity/name. A test-only operation panics inside the real
 FFI worker and verifies Arabic error JSON, never unwinding over extern C.
 Additional tests cover XML and binary depth, byte and event limits plus shared
-tunnel rejection. Full Linux suite currently 56 passed. Actual iOS device
+tunnel rejection. The generated guest regression also checks the NUL-terminated
+Mirsa install name while preserving the original executable filename and plist
+identity. Full Linux suite currently 57 passed. Actual iOS device
 retest with the original signing operation remains pending; no claim of
 successful on-device Zeus signing is made. Publication requires fresh owner OK.
