@@ -31,5 +31,6 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
+      - run: python3 scripts/tests/test_discovery_presentation.py
       - run: deno test backend/discovery-search
       - run: deno check backend/discovery-search/index.ts

@@ -149,7 +149,7 @@ final class DiscoveryTests: XCTestCase {
     }
 
     func testWebBackendPageResultIsReferenceOnly() {
-        let json = #"{"results":[{"name":"P","bundleId":"unknown.x.com","pageURL":"https://x.com/page"},{"name":"Bad","bundleId":"a.b","pageURL":"http://x.com/p"}]}"#
+        let json = #"{"results":[{"name":"P","bundleId":"unknown.x.com","pageURL":"https://downloads.example.com/page"},{"name":"Bad","bundleId":"a.b","pageURL":"http://downloads.example.com/p"}]}"#
         let r = WebBackendProvider.parse(Data(json.utf8))
         XCTAssertEqual(r.count, 1)
         XCTAssertFalse(r[0].isDownloadable)
@@ -236,6 +236,129 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(r[1].identity, .nameOnly)
         XCTAssertTrue(r[1].isDownloadable)
         XCTAssertEqual(r[1].bundleID, "")
+    }
+
+    func testCanonicalAppleURLParsing() {
+        for (url, cc) in [
+            ("https://apps.apple.com/de/app/dramawave/id6670430706?l=ar", "de"),
+            ("https://apps.apple.com/sa/app/دراما/id6670430706", "sa"),
+            ("https://itunes.apple.com/us/app/id6670430706", "us")
+        ] { XCTAssertEqual(DiscoveryQuery.parse(url), .appStoreID(id: "6670430706", country: cc)) }
+        for url in [
+            "http://apps.apple.com/us/app/id6670430706", "https://apps.apple.com.evil.com/us/app/id6670430706",
+            "https://apps.apple.com@evil.com/us/app/id6670430706", "https://user:pw@apps.apple.com/us/app/id6670430706",
+            "https://apps.apple.com/us/app/notid6670430706", "https://apps.apple.com/us/app/id6670430706junk",
+            "https://apps.apple.com/us/app/id6670430706/extra", "https://apps.apple.com/search?id=id6670430706",
+            "https://apps.apple.com/us/app/id6670430706id123456", "https://apps.apple.com:8443/us/app/id6670430706"
+        ] {
+            if case .unsupported = DiscoveryQuery.parse(url) {} else { XCTFail(url) }
+        }
+    }
+
+    func testNoSubstringOrJoinedTokenMatches() {
+        XCTAssertEqual(DiscoveryMatcher.score(query: "DramaWave", name: "DramaWaves hashtags"), 0)
+        XCTAssertEqual(DiscoveryMatcher.score(query: "Drama Wave", name: "DramaWave"), 0)
+        XCTAssertEqual(DiscoveryMatcher.score(query: "DramaWave", name: "Billboard 1922"), 0)
+        XCTAssertGreaterThan(DiscoveryMatcher.score(query: "DramaWave", name: "DramaWave official IPA"), 0)
+        XCTAssertGreaterThan(DiscoveryMatcher.score(query: "Café", name: "CAFE IPA"), 0)
+    }
+
+    func testBlockedWebReferencesAndDownloadsNeverBecomeCards() {
+        for host in ["x.com", "instagram.com", "commons.wikimedia.org", "decrypt.day", "cdn.decrypt.day"] {
+            let data = try! JSONSerialization.data(withJSONObject: ["results": [
+                ["name": "DramaWave", "pageURL": "https://" + host + "/app",
+                 "downloadURL": "https://" + host + "/fake.ipa"]]])
+            XCTAssertTrue(WebBackendProvider.parse(data).isEmpty, host)
+        }
+    }
+
+    private struct MetadataHTTP: DiscoveryHTTP {
+        let body: Data
+        func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int) { (body, 200) }
+    }
+    private struct RejectVerifier: DiscoveryIPAVerifying {
+        func verify(_ c: DiscoveryCandidate, expectedBundleID: String?, queryName: String) async -> DiscoveryCandidate? { nil }
+    }
+    private var appleFixture: Data {
+        Data(#"{"results":[{"trackId":6670430706,"trackName":"DramaWave","bundleId":"com.dramabuzz.app","artistName":"Publisher","version":"1.2"}]}"#.utf8)
+    }
+    func testMetadataOnlyOutcomeHasNoCardsAndExactArabicEmpty() async {
+        let o = await DiscoveryEngine.run(input: "https://apps.apple.com/us/app/id6670430706", sources: [],
+            web: .init(projectURL: nil, publishableKey: nil), http: MetadataHTTP(body: appleFixture),
+            verifier: RejectVerifier())
+        XCTAssertTrue(o.candidates.isEmpty)
+        XCTAssertEqual(o.note, "ما لقيت IPA لهالتطبيق")
+    }
+
+    private struct BytesVerifier: DiscoveryIPAVerifying {
+        let bytes: Data
+        func verify(_ c: DiscoveryCandidate, expectedBundleID: String?, queryName: String) async -> DiscoveryCandidate? {
+            let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".ipa")
+            defer { try? FileManager.default.removeItem(at: file) }
+            do {
+                try bytes.write(to: file)
+                return try DiscoveryIPAVerifier.validated(c, file: file, expectedBundleID: expectedBundleID, queryName: queryName)
+            } catch { return nil }
+        }
+    }
+    func testFakeIPANeverDisplayedAndRealIPAUsesActualIdentity() async {
+        let sources = [snap("My source", "https://source.example.com/source.json",
+            [("DramaWave", "com.dramabuzz.app", "1.2")])]
+        let web = WebBackendConfig(projectURL: nil, publishableKey: nil)
+        for fake in [Data("<html>Login required</html>".utf8), makeZip([("readme.txt", Data([1]))])] {
+            let o = await DiscoveryEngine.run(input: "https://apps.apple.com/us/app/id6670430706", sources: sources,
+                web: web, http: MetadataHTTP(body: appleFixture), verifier: BytesVerifier(bytes: fake))
+            XCTAssertTrue(o.candidates.isEmpty)
+            XCTAssertEqual(o.note, "ما لقيت IPA لهالتطبيق")
+        }
+        let real = await DiscoveryEngine.run(input: "https://apps.apple.com/us/app/id6670430706", sources: sources,
+            web: web, http: MetadataHTTP(body: appleFixture),
+            verifier: BytesVerifier(bytes: ipa(bundle: "com.dramabuzz.app")))
+        XCTAssertEqual(real.candidates.count, 1)
+        XCTAssertEqual(real.candidates.first?.bundleID, "com.dramabuzz.app")
+        XCTAssertEqual(real.candidates.first?.version, "1.2")
+        XCTAssertEqual(real.candidates.first?.sourceName, "My source")
+        XCTAssertEqual(real.candidates.first?.identity, .bundleVerified)
+        XCTAssertTrue(real.candidates.allSatisfy { $0.isDownloadable && $0.origin != .appleMetadata && $0.identity != .reference })
+        XCTAssertNil(real.note)
+    }
+
+    func testMalformedStoredEntryCannotTrapWhileValidating() {
+        var bytes = ipa()
+        // local Info.plist storage size smaller than central-directory declaration
+        if let cd = bytes.range(of: Data([0x50, 0x4b, 0x01, 0x02])) {
+            let off = cd.lowerBound
+            bytes.replaceSubrange((off + 20)..<(off + 24), with: le32(1))
+        }
+        XCTAssertThrowsError(try validate(bytes))
+    }
+
+    func testDNSGuardRejectsNonPublicAndMixedFamilies() {
+        for ip in ["127.0.0.1", "10.0.0.1", "169.254.169.254", "100.64.0.1",
+                   "192.168.0.1", "172.16.0.1", "198.18.0.1", "192.0.2.1",
+                   "::1", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "2001:db8::1",
+                   "224.0.0.1", "0.0.0.0"] {
+            XCTAssertFalse(DiscoveryDNSPolicy.publicAddress(ip), ip)
+        }
+        XCTAssertTrue(DiscoveryDNSPolicy.publicAddress("8.8.8.8"))
+        XCTAssertTrue(DiscoveryDNSPolicy.publicAddress("2606:4700:4700::1111"))
+    }
+
+    private struct PageOnlyHTTP: DiscoveryHTTP {
+        func get(_ url: URL, headers: [String: String]) async throws -> (Data, Int) {
+            if url.host == "itunes.apple.com" { return (Data(#"{"results":[]}"#.utf8), 200) }
+            return (Data(#"{"results":[{"name":"WhatsApp","pageURL":"https://example.com/whatsapp"},{"name":"WhatsApp","pageURL":"https://x.com/whatsapp"}]}"#.utf8), 200)
+        }
+    }
+    private struct TestToken: DiscoveryTokenProvider {
+        func token(forceRefresh: Bool) async throws -> String { "fixture" }
+    }
+    func testPageOnlyAndSocialOutcomesNeverDisplayReferenceCards() async {
+        let outcome = await DiscoveryEngine.run(input: "WhatsApp", sources: [],
+            web: .init(projectURL: u("https://backend.example.com"), publishableKey: "public-test"),
+            auth: TestToken(), http: PageOnlyHTTP(), verifier: RejectVerifier())
+        XCTAssertEqual(outcome.candidates, [])
+        XCTAssertEqual(outcome.note, "ما لقيت IPA لهالتطبيق")
     }
 
 }

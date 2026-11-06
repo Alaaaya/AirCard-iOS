@@ -53,6 +53,6 @@ Deno.serve(async (req) => {
   try {
     const q = buildSearchQuery(name, bundle);
     const hits = tk ? await tavily(q, tk) : await brave(q, bk!);
-    return json({ results: await resolveResults(toResults(hits, bundle)), provider: tk ? "tavily" : "brave" });
+    return json({ results: await resolveResults(toResults(hits, bundle, name)), provider: tk ? "tavily" : "brave" });
   } catch { return json({ error: "provider_failed" }, 502); }
 });

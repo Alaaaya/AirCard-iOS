@@ -4,7 +4,7 @@ import { request } from "node:https";
 import { lookup } from "node:dns";
 import ipaddr from "npm:ipaddr.js@2.5.0";
 import { Parser } from "npm:htmlparser2@10.0.0";
-import { isSafeUrl, isAndroidHit, Result } from "./logic.ts";
+import { isSafeUrl, isAndroidHit, isCrackHit, Result } from "./logic.ts";
 
 export const MAX_HTML = 256 * 1024;
 export function publicAddress(ip: string): boolean {
@@ -69,7 +69,7 @@ export function ipaLinks(html: string, base: string): string[] {
     if (name !== "a" || !a.href || links.size >= 12) return;
     try {
       const u = new URL(a.href, base);
-      if (isSafeUrl(u.href) && /\.ipa$/i.test(u.pathname) && !isAndroidHit({title: "", url: u.href})) links.add(u.href);
+      if (isSafeUrl(u.href) && /\.ipa$/i.test(u.pathname) && !isAndroidHit({title: "", url: u.href}) && !isCrackHit({title: "", url: u.href})) links.add(u.href);
     } catch { /* malformed href */ }
   }});
   parser.end(html);
@@ -80,7 +80,7 @@ export async function resolvePage(url: string, reader: Reader = readPublicPage):
   const deadline = Date.now() + 3500;
   try {
     for (let hop = 0; hop <= 2; hop++) {
-      if (!isSafeUrl(url)) return;
+      if (!isSafeUrl(url) || isCrackHit({title: "", url})) return;
       const page = await reader(url, deadline);
       if (page.status >= 300 && page.status < 400 && page.location && hop < 2) {
         url = new URL(page.location, url).href; continue;

@@ -129,6 +129,7 @@ struct ZipReader {
         let want = min(length, e.uncompressedSize - offset)
         switch e.method {
         case 0:
+            guard e.compressedSize == e.uncompressedSize, offset + want <= UInt64(raw.count) else { throw IPAValidationError.notZip }
             return raw.subdata(in: Int(offset)..<Int(offset + want))
         case 8:
             if e.compressedSize > 0, e.uncompressedSize / max(e.compressedSize, 1) > limits.maxCompressionRatio { throw IPAValidationError.ratioExceeded }
