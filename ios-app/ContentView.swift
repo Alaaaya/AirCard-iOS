@@ -654,6 +654,10 @@ struct ContentView: View {
                         try OpenInIPA.snapshot(url)
                     }.value
                     defer { OpenInIPA.remove(snapshot) }
+                    guard AppsStore.shared.busy == nil, AppsStore.shared.pending == nil else {
+                        vm.errorMessage = tr("Finish the current import before opening another IPA.", "خلّص الاستيراد الحالي قبل ما تفتح ملف تاني.")
+                        return
+                    }
                     await AppsStore.shared.importIPA(from: snapshot)
                 } catch { vm.errorMessage = error.localizedDescription }
             }
