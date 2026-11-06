@@ -6,6 +6,9 @@ import AirliftFFI
 @_silgen_name("al_ipa_editor_run")
 private func personalEditorRun(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
 
+@_silgen_name("al_personal_p12_import")
+private func personalP12Import(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+
 // Separate from Apple ID storage and its handover/export/wipe operations.
 enum PersonalIdentityVault {
     private static let service = "com.alaa.mirsa.personal-signing"
@@ -48,29 +51,35 @@ enum PersonalIdentityVault {
         }
     }
     static func identity(_ material: Material) throws -> (Data, Data) {
-        var items: CFArray?
-        let status = SecPKCS12Import(material.p12 as CFData,
-                                    [kSecImportExportPassphrase as String: material.password] as CFDictionary, &items)
-        guard status == errSecSuccess,
-              let entries = items as? [[String: Any]], entries.count == 1,
-              let raw = entries[0][kSecImportItemIdentity as String] else {
-            throw SideloadError.message("Cannot open P12. Check its password and make sure it contains one signing certificate and its private key.")
+        let request: [String: Any] = [
+            "p12": material.p12.base64EncodedString(),
+            "password": material.password.trimmingCharacters(in: .whitespacesAndNewlines),
+            "profile": material.profile.base64EncodedString()
+        ]
+        let bytes = try JSONSerialization.data(withJSONObject: request)
+        guard let text = String(data: bytes, encoding: .utf8),
+              let response = text.withCString({ personalP12Import($0) }) else {
+            throw SideloadError.message("P12 importer did not respond.")
         }
-        guard CFGetTypeID(raw as CFTypeRef) == SecIdentityGetTypeID() else {
-            throw SideloadError.message("P12 does not contain a signing identity.")
+        defer { al_string_free(response) }
+        let result = try JSONSerialization.jsonObject(with: Data(String(cString: response).utf8)) as? [String: Any]
+        guard result?["ok"] as? Bool == true,
+              let keyText = result?["key"] as? String, let key = Data(base64Encoded: keyText),
+              let certText = result?["certificate"] as? String, let cert = Data(base64Encoded: certText) else {
+            let messages: [String: (String, String)] = [
+                "password": ("P12 password is incorrect, or the file integrity check failed.", "كلمة سر P12 غلط، أو الملف تالف."),
+                "no_identity": ("P12 contains no certificate with its matching private key.", "ملف P12 ما فيه شهادة مع مفتاحها الخاص."),
+                "multiple_identities": ("Several signing identities match this profile. Export a P12 with only the identity you want.", "في أكتر من شهادة بتطابق هالملف. صدّر P12 فيه الشهادة المطلوبة بس."),
+                "encryption": ("This P12 encryption is unsupported. Re-export with AES-256 or legacy 3DES/RC2.", "تشفير ملف P12 مو مدعوم. صدّره من جديد بتشفير AES-256 أو 3DES/RC2."),
+                "profile_mismatch": ("No P12 signing identity matches the provisioning profile.", "ولا شهادة بملف P12 بتطابق ملف mobileprovision."),
+                "profile": ("Cannot read the provisioning profile or its developer certificates.", "ما قدرت اقرأ ملف mobileprovision أو الشهادات اللي فيه."),
+                "key_type": ("Use an RSA signing certificate and its private key.", "استخدم شهادة توقيع RSA مع مفتاحها الخاص."),
+                "invalid": ("P12 is damaged or has an unsupported structure.", "ملف P12 تالف أو تركيبته مو مدعومة.")
+            ]
+            let message = messages[result?["code"] as? String ?? "invalid"] ?? messages["invalid"]!
+            throw SideloadError.message(L.isArabic ? message.1 : message.0)
         }
-        let identity = raw as! SecIdentity
-        var key: SecKey?
-        var cert: SecCertificate?
-        guard SecIdentityCopyPrivateKey(identity, &key) == errSecSuccess,
-              SecIdentityCopyCertificate(identity, &cert) == errSecSuccess,
-              let key, let cert,
-              let attrs = SecKeyCopyAttributes(key) as? [String: Any],
-              attrs[kSecAttrKeyType as String] as? String == kSecAttrKeyTypeRSA as String,
-              let exported = SecKeyCopyExternalRepresentation(key, nil) else {
-            throw SideloadError.message("Use an exportable RSA Apple signing identity.")
-        }
-        return (exported as Data, SecCertificateCopyData(cert) as Data)
+        return (key, cert)
     }
 }
 
@@ -254,7 +263,7 @@ struct PersonalCertificateView: View {
     private func save() {
         guard let p12, let profile else { return }
         do {
-            let material = PersonalIdentityVault.Material(p12: p12, password: password, profile: profile)
+            let material = PersonalIdentityVault.Material(p12: p12, password: password.trimmingCharacters(in: .whitespacesAndNewlines), profile: profile)
             _ = try PersonalIdentityVault.identity(material)
             try PersonalIdentityVault.save(material)
             self.p12 = nil; self.profile = nil; password = ""; p12Name = ""; profileName = ""

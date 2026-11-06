@@ -62,6 +62,8 @@ base64 = "0.22"
 apple-codesign-quick = "0.1.0"
 x509-cert = "0.2.5"
 rootcause = "0.12"
+isideload-p12-keystore = "=0.3.0-rc4"
+rsa = "0.9.9"
 
 # Apply the same OPACK back-reference patch as SideInstaller:
 # devices emit tag 0xAB when name==model, which causes "unsupported OPACK tag".
