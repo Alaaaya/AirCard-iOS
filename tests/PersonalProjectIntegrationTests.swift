@@ -9,7 +9,7 @@ private final class SnapshotSecrets: HiddenSecretStore {
 }
 
 @MainActor
-final class PersonalProjectIntegrationTests",: XCTestCase {
+final class PersonalProjectIntegrationTests: XCTestCase {
     /// Production HiddenAppsStore fails closed when the unsigned simulator keychain errors, which blanked every list screenshot.
     /// Snapshots use an isolated in-memory store; the assertion proves rows really are visible.
     private func isolatedStore() -> HiddenAppsStore {
