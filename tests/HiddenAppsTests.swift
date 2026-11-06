@@ -94,5 +94,37 @@ final class HiddenAppsTests: XCTestCase {
         m.d["ids"] = Data(#"{"v":1,"ids":["main:a","junk"]}"#.utf8); s.reload(); XCTAssertEqual(s.health, .faulted)
         m.d["ids"] = Data(#"{"v":1,"ids":["main:a"]}"#.utf8); s.reload(); XCTAssertEqual(s.health, .ok)
     }
+    func testBadAuthWithValidIDsFaultsButKeepsKnownHidden() throws {
+        let (s, m) = make(); try s.setPIN("1234")
+        s.hide(HiddenAppID(.main, "a")); s.hide(HiddenAppID(.personal, "p"))
+        let idsBefore = m.d["ids"]
+        for bad in [Data("garbage".utf8), Data(#"{"v":2,"iterations":120000,"salt":"AAAAAAAAAAAAAAAAAAAAAA==","hash":"AA=="}"#.utf8)] {
+            m.d["auth"] = bad; s.reload()
+            XCTAssertEqual(s.health, .faulted)
+            XCTAssertEqual(s.unlock("1234"), .faulted); XCTAssertFalse(s.isUnlocked)
+            XCTAssertTrue(s.isHidden(.main, "a")); XCTAssertTrue(s.isHidden(.personal, "p"))
+            XCTAssertFalse(s.isHidden(.main, "other")); XCTAssertFalse(s.isHidden(.personal, "p2"))
+            XCTAssertEqual(s.visible(["a", "b"], ns: .main, id: { $0 }), ["b"])
+            XCTAssertTrue(s.hiddenItems(["a"], ns: .main, id: { $0 }).isEmpty)
+            XCTAssertFalse(s.unhide(HiddenAppID(.main, "a"))); XCTAssertFalse(s.hide(HiddenAppID(.main, "b")))
+            XCTAssertEqual(m.d["ids"], idsBefore); XCTAssertEqual(s.hiddenIDs, ["main:a", "personal:p"])
+            XCTAssertEqual(m.d["auth"], bad)
+        }
+    }
+    func testSetPINWriteFailureLeavesNoPIN() {
+        let (s, m) = make(); m.failWrite = true
+        XCTAssertThrowsError(try s.setPIN("1234")) { XCTAssertEqual($0 as? HiddenPINError, .storageFailed) }
+        XCTAssertFalse(s.hasPIN); XCTAssertFalse(s.isUnlocked); XCTAssertNil(m.d["auth"])
+    }
+    func testUnlockWriteFailureDoesNotUnlock() throws {
+        let (s, m) = make(); try s.setPIN("1234"); s.lock(); m.failWrite = true
+        XCTAssertEqual(s.unlock("1234"), .faulted); XCTAssertFalse(s.isUnlocked)
+        if case .wrongPIN = s.unlock("0000") { XCTFail("failure counter must not silently succeed") }
+    }
+    func testViewLocksOnBackgroundAndDisappearStatic() throws {
+        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("ios-app/Apps/HiddenAppsView.swift")
+        let src = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(src.contains("p != .active { store.lock() }")); XCTAssertTrue(src.contains(".onDisappear { store.lock() }"))
+    }
     func testIDParsing() { XCTAssertNil(HiddenAppID(raw: "bogus")); XCTAssertNil(HiddenAppID(raw: "main:")); XCTAssertNotNil(HiddenAppID(raw: "personal:ABC")) }
 }
