@@ -15,7 +15,7 @@ final class OpenInIPATests: XCTestCase {
         let source = try input("Example.IPA", bytes: Data([0x50, 0x4b, 3, 4]))
         let copy = try OpenInIPA.snapshot(source)
         XCTAssertNotEqual(copy, source)
-        XCTAssertEqual(try Data(contentsOf: copy), Data(contentsOf: source))
+        XCTAssertEqual(try Data(contentsOf: copy), try Data(contentsOf: source))
         OpenInIPA.remove(copy)
         XCTAssertFalse(FileManager.default.fileExists(atPath: copy.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
