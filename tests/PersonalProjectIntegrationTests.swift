@@ -35,7 +35,18 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         let icon = try XCTUnwrap(library.icon(for: app), "The real fixture IPA icon must be extracted, not a placeholder")
         XCTAssertEqual(icon.size.width, 180)
         XCTAssertEqual(icon.size.height, 180)
-        try await snapshot(PersonalAppsHub(), name: "Arabic-projects-real-SwiftUI-fixture")
+        // Realistic multi-app list: three imports of the real fixture IPA, removed in defer.
+        var extra: [PersonalLibraryApp] = []
+        defer { for a in extra { try? library.delete(a) } }
+        for _ in 0..<2 {
+            let known = Set(library.apps.map(\.id))
+            try await library.add(fixture, signed: false)
+            if let a = library.apps.first(where: { !known.contains($0.id) }) { extra.append(a) }
+        }
+        XCTAssertEqual(extra.count, 2)
+        try await snapshot(PersonalAppsHub(), name: "Arabic-projects-real-SwiftUI-multi-fixture")
+        // Tall render shows the last settings row (minimum iOS) and the space above the sticky sign button.
+        try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-full-scroll-last-row-and-button", height: 2000)
         try await snapshot(NavigationStack { ScrollView { PersonalCertificateView().padding(20) }.background(AuroraBackground()) }, name: "Arabic-certificate-import-real-SwiftUI")
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-real-SwiftUI-fixture")
     }
@@ -121,11 +132,11 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         return { for (key, value) in saved { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
     }
 
-    private func snapshot<V: View>(_ view: V, name: String) async throws {
+    private func snapshot<V: View>(_ view: V, name: String, height: CGFloat = 932) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let original = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
-        window.frame = CGRect(x: 0, y: 0, width: 430, height: 932)
+        window.frame = CGRect(x: 0, y: 0, width: 430, height: height)
         let host = UIHostingController(rootView: view.environment(\.locale, Locale(identifier: "ar")).environment(\.layoutDirection, .leftToRight))
         window.rootViewController = host
         window.makeKeyAndVisible()
@@ -140,7 +151,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             rendered = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
         }
         XCTAssertTrue(rendered)
-        XCTAssertEqual(image.size, CGSize(width: 430, height: 932))
+        XCTAssertEqual(image.size, CGSize(width: 430, height: height))
         let attachment = XCTAttachment(image: image)
         attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
     }

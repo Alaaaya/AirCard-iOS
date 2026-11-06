@@ -47,7 +47,7 @@ struct PersonalProjectDetailView: View {
                                       "استيراد Entitlements مو متاح حالياً. الإضافات وApp Clips بيرفضهم المُوقّع."))
                         .font(.caption).foregroundStyle(.secondary)
                     if let message { Text(message).font(.footnote).textSelection(.enabled) }
-                }.padding(20).padding(.bottom, 110)
+                }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
             }.scrollIndicators(.hidden)
         }
         .safeAreaInset(edge: .bottom) {
@@ -59,7 +59,7 @@ struct PersonalProjectDetailView: View {
             }
             .buttonStyle(.borderedProminent).tint(.green)
             .disabled(busy || selected == nil)
-            .padding(.horizontal, 20).padding(.bottom, 8).padding(.top, 8)
+            .padding(.horizontal, 20).padding(.bottom, 12).padding(.top, 12)
             .background(.ultraThinMaterial)
         }
         .preferredColorScheme(.dark)

@@ -392,7 +392,7 @@ struct PersonalAppsHub: View {
                     if let error = library.loadError ?? message {
                         Text(error).font(.footnote).foregroundStyle(.secondary)
                     }
-                }.padding(20).padding(.bottom, 120)
+                }.padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 120)
             }.scrollIndicators(.hidden)
         }
         .preferredColorScheme(.dark)
