@@ -133,9 +133,14 @@ final class AppScreenshotsTests: XCTestCase {
                           iconURL: nil, downloadURL: URL(string: "https://cdn.site.org/a.ipa")!, size: nil, date: nil, screenshots: urls)
         func shot(_ view: some View, _ name: String) async {
             let host = UIHostingController(rootView: view.environment(\.colorScheme, .dark))
-            let window = UIWindow(frame: UIScreen.main.bounds); window.rootViewController = host; window.makeKeyAndVisible()
-            try? await Task.sleep(nanoseconds: 800_000_000)
-            let img = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+            let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+            let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow(frame: UIScreen.main.bounds)
+            window.frame = UIScreen.main.bounds
+            window.rootViewController = host; window.makeKeyAndVisible()
+            host.view.frame = window.bounds; host.view.setNeedsLayout(); host.view.layoutIfNeeded()
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            let img = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true) }
+            withExtendedLifetime(window) {}
             let a = XCTAttachment(image: img); a.name = name; a.lifetime = .keepAlways; add(a)
         }
         await shot(ZStack { Color.black.ignoresSafeArea(); AppScreenshotGallery(app: app).padding() }, "gallery-thumbnails")
