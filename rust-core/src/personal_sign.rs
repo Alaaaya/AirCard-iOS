@@ -102,6 +102,11 @@ fn validate_key_certificate(key: &[u8], cert: &x509_cert::Certificate) -> Result
     use rsa::{pkcs8::DecodePrivateKey, pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey}};
     let private = rsa::RsaPrivateKey::from_pkcs8_der(key)
         .or_else(|_| rsa::RsaPrivateKey::from_pkcs1_der(key)).map_err(|_| "المفتاح الخاص RSA غير صالح.")?;
+    let algorithm = &cert.tbs_certificate.subject_public_key_info.algorithm;
+    if algorithm.oid.to_string() != "1.2.840.113549.1.1.1" || algorithm.parameters.as_ref().is_some_and(|p| {
+        use x509_cert::der::Encode;
+        p.to_der().ok().as_deref() != Some(&[5,0])
+    }) { return Err("نوع المفتاح العام بالشهادة غير مدعوم. استخدم شهادة RSA.".into()); }
     let bits = cert.tbs_certificate.subject_public_key_info.subject_public_key.as_bytes().ok_or("الشهادة غير صالحة.")?;
     let public = rsa::RsaPublicKey::from_pkcs1_der(bits).map_err(|_| "شهادة RSA غير صالحة.")?;
     if public != rsa::RsaPublicKey::from(&private) { return Err("المفتاح الخاص ما بيطابق الشهادة المختارة.".into()); }
@@ -134,6 +139,8 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
     let decoder = base64::engine::general_purpose::STANDARD;
     let cert = decoder.decode(cert).map_err(|_| "بيانات الشهادة غير صالحة.")?;
     let x509 = x509_cert::Certificate::from_der(&cert).map_err(|_| "الشهادة غير صالحة.")?;
+    let key = decoder.decode(key).map_err(|_| "المفتاح الخاص غير صالح.")?;
+    validate_key_certificate(&key, &x509)?;
     let now = SystemTime::now();
     let secs = now.duration_since(UNIX_EPOCH).map_err(err)?.as_secs();
     if secs < x509.tbs_certificate.validity.not_before.to_unix_duration().as_secs()
@@ -187,8 +194,6 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
     for file in files.iter().filter(|p| p.is_file() && !nested::removed(app, p, opts)) {
         nested::check_macho_file(file)?;
     }
-    let key = decoder.decode(key).map_err(|_| "المفتاح الخاص غير صالح.")?;
-    validate_key_certificate(&key, &x509)?;
     let signer = RustCryptoCmsSigner::from_der(&key, &cert, profiles[0].parsed.certificate_chain_der())
         .map_err(|_| "استخدم شهادة Apple RSA مع مفتاحها الخاص المطابق.")?;
     nested::apply_removals(app, opts)?;
@@ -276,6 +281,16 @@ mod key_binding_tests {
         use rsa::pkcs8::EncodePrivateKey;
         let n=rsa::BigUint::from(3233u32); let e=rsa::BigUint::from(17u32); let d=rsa::BigUint::from(2753u32);
         let wrong=rsa::RsaPrivateKey::from_components(n,e,d,vec![rsa::BigUint::from(61u32),rsa::BigUint::from(53u32)]).unwrap();
-        assert!(validate_key_certificate(wrong.to_pkcs8_der().unwrap().as_bytes(),&cert).is_err());
+        let wrong=wrong.to_pkcs8_der().unwrap();
+        assert!(validate_key_certificate(wrong.as_bytes(),&cert).is_err());
+        let root=std::env::temp_dir().join(format!("mirsa-direct-key-mismatch-{}",std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("sentinel"),b"unchanged").unwrap();
+        let b64=base64::engine::general_purpose::STANDARD;
+        let result=sign_with_options(&root,Path::new("/nonexistent-profile"),&b64.encode(wrong.as_bytes()),&b64.encode(include_bytes!("../tests/p12-fixtures/leaf.der")),&Options::default());
+        assert!(result.err().unwrap().contains("ما بيطابق"));
+        assert_eq!(std::fs::read(root.join("sentinel")).unwrap(),b"unchanged");
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(),1);
+        std::fs::remove_dir_all(root).unwrap();
     }
 }
