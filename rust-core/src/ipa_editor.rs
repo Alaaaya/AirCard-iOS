@@ -780,7 +780,7 @@ fn dependencies(path: &Path) -> Result<Vec<String>> {
     if out.len() > 4096 { out.truncate(4096); }
     Ok(out)
 }
-fn inject(app: &Path, executable: &str, libraries: &[String]) -> Result<()> {
+fn inject(app: &Path, executable: &str, libraries: &[String], first: bool) -> Result<()> {
     let app = fs::canonicalize(app).map_err(err)?;
     let ex = relative(executable)?;
     if ex.components().count() != 1 {
@@ -874,6 +874,7 @@ fn inject(app: &Path, executable: &str, libraries: &[String]) -> Result<()> {
     let m = macho(read_macho(&main)?, false)?;
     let _ = m.subtype; // already checked, keep type data explicit
     let mut commands: Vec<_> = m.commands.iter().map(|c| c.data.clone()).collect();
+    let mut added: Vec<Vec<u8>> = Vec::new();
     for root in roots {
         let load = relative_loader(&main, &root);
         if !m
@@ -881,9 +882,11 @@ fn inject(app: &Path, executable: &str, libraries: &[String]) -> Result<()> {
             .iter()
             .any(|c| c.name.as_deref() == Some(load.as_str()))
         {
-            commands.push(dylib_command(0xc, &load, None)?);
+            added.push(dylib_command(0xc, &load, None)?);
         }
     }
+    // Optional: injected tweaks load before the app's own libraries (list order kept).
+    if first { added.extend(commands); commands = added; } else { commands.extend(added); }
     patches.insert(main, write_commands(m, commands)?);
     for (path, data) in patches {
         fs::write(path, data).map_err(err)?;
@@ -902,6 +905,8 @@ struct Request {
     executable: String,
     #[serde(default)]
     libraries: Vec<String>,
+    #[serde(default)]
+    new_first: bool,
     #[serde(default)]
     private_key: String,
     #[serde(default)]
@@ -927,7 +932,7 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
             if out.parent().is_none() { return Err("Invalid output".into()); }
             fs::write(out, json).map_err(err)
         }
-        "inject" => inject(Path::new(&r.input), &r.executable, &r.libraries),
+        "inject" => inject(Path::new(&r.input), &r.executable, &r.libraries, r.new_first),
         _ => Err("Unknown editor operation".into()),
     }.map(|_| crate::personal_sign::Verification::default())
 }
@@ -1087,6 +1092,7 @@ mod tests {
             &app,
             "Main",
             &[root.join("Tweak.dylib").to_string_lossy().to_string()],
+            false,
         )
         .unwrap();
         let out = macho(fs::read(app.join("Main")).unwrap(), false).unwrap();
