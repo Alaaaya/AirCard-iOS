@@ -123,6 +123,10 @@ struct AppsTab: View {
     @State private var infoApp: ManagedApp?
     @State private var backupApp: ManagedApp?
     @State private var shortcutError: String?
+    @State private var showHidden = false
+    @State private var pendingHideID: String?
+    @ObservedObject private var progressState = MirsaOperationProgress.shared
+    @ObservedObject private var hiddenStore = HiddenAppsStore.shared
     @ObservedObject private var downloads = DownloadsLibrary.shared
     @AppStorage("mirsa.apps.homeLayout") private var homeLayout = false
     @Namespace private var segNS
@@ -135,7 +139,7 @@ struct AppsTab: View {
             AuroraBackground()
 
             if homeLayout {
-                MirsaHomeScreen(apps: store.containerApps + store.realApps,
+                MirsaHomeScreen(apps: hiddenStore.visible(store.containerApps + store.realApps, ns: .main, id: { $0.id }),
                                 onLaunch: { store.launch($0) },
                                 onSettings: { showSettings = true },
                                 onImport: { showImportOptions = true },
@@ -177,7 +181,7 @@ struct AppsTab: View {
 
             }
 
-            if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress, isDownloading: store.isDownloading, hasKnownSize: store.downloadHasKnownSize, onCancel: { store.cancelDownload() }) }
+            if let busy = store.busy, !(store.isDownloading && operationOnTile) { BusyOverlay(text: busy, progress: store.progress, isDownloading: store.isDownloading, hasKnownSize: store.downloadHasKnownSize, onCancel: { store.cancelDownload() }) }
         }
         .preferredColorScheme(.dark)
         .confirmationDialog(tr("Import IPA", "استيراد IPA"), isPresented: $showImportOptions, titleVisibility: .visible) {
@@ -225,7 +229,14 @@ struct AppsTab: View {
             AppsSettingsSheet(store: store, onSignIn: { showSettings = false; showLogin = true })
                 .environmentObject(vm)
         }
+        .sheet(isPresented: $showHidden) {
+            HiddenAppsView(store: hiddenStore) {
+                HiddenAppsGrid(apps: store.apps, pendingHide: $pendingHideID)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mirsaShowHidden)) { _ in showHidden = true }
         .onChange(of: scenePhaseForUpdates) { _, ph in
+            if ph != .active { hiddenStore.lock() }
             if ph == .active { Task { await updater.check() } }
         }
         .sheet(item: $updater.available) { rel in
@@ -360,7 +371,12 @@ struct AppsTab: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var currentApps: [ManagedApp] { segment == .container ? store.containerApps : store.realApps }
+    private var operationOnTile: Bool {
+        progressState.entries.values.contains { $0.appID != nil && $0.phase == .downloading }
+    }
+    private var currentApps: [ManagedApp] {
+        hiddenStore.visible(segment == .container ? store.containerApps : store.realApps, ns: .main, id: { $0.id })
+    }
 
     @ViewBuilder
     private var grid: some View {
@@ -417,6 +433,9 @@ struct AppsTab: View {
             Button { Task { await store.refresh(app, vm: vm) } } label: { Label(L.t("menu.refresh"), systemImage: "arrow.clockwise") }
         }
         Button { infoApp = app } label: { Label(L.t("menu.info"), systemImage: "info.circle") }
+        Button {
+            if !hiddenStore.hide(HiddenAppID(.main, app.id)) { pendingHideID = app.id; showHidden = true }
+        } label: { Label(tr("Hide", "إخفاء"), systemImage: "eye.slash") }
         Divider()
         Button(role: .destructive) { Task { await store.delete(app, vm: vm) } } label: {
             Label(L.t("menu.delete"), systemImage: "trash")
@@ -574,6 +593,7 @@ struct AppTile: View {
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     private var liquid: Bool { theme == MirsaTheme.liquid.rawValue }
     private var icon: UIImage? { UIImage(contentsOfFile: AppsStore.iconURL(app.id).path) }
+    @ObservedObject private var progress = MirsaOperationProgress.shared
 
     var body: some View {
         let img = icon
@@ -605,6 +625,7 @@ struct AppTile: View {
             .frame(width: liquid ? 76 : 96, height: liquid ? 76 : 96)
             .appsGlass(cornerRadius: liquid ? 24 : 26, tint: liquid ? nil : tint)
             .overlay(alignment: .topTrailing) { badges }
+            .overlay { operationOverlay }
 
             Text(app.name)
                 .font(.caption.weight(.semibold))
@@ -615,6 +636,27 @@ struct AppTile: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(app.name)
+    }
+
+    @ViewBuilder
+    private var operationOverlay: some View {
+        if let e = progress.entry(for: app.id) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 15, style: .continuous).fill(.black.opacity(0.45)).frame(width: 54, height: 54)
+                if let f = e.fraction {
+                    Circle().stroke(.white.opacity(0.25), lineWidth: 3).frame(width: 30, height: 30)
+                    Circle().trim(from: 0, to: f).stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .frame(width: 30, height: 30).rotationEffect(.degrees(-90))
+                } else { ProgressView().tint(.white) }
+                if e.canCancel {
+                    Button { progress.cancel(e.id) } label: {
+                        Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
+                            .frame(width: 44, height: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityLabel(tr("Cancel", "إلغاء"))
+                }
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        }
     }
 
     @ViewBuilder
@@ -1015,6 +1057,7 @@ struct PromptSheet: View {
 
 struct AppsSettingsSheet: View {
     @AppStorage("mirsa.apps.homeLayout") private var homeLayout = false
+    @AppStorage(MirsaCompletionFeedback.enabledKey) private var completionFeedback = true
     @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
     @EnvironmentObject var vm: AppViewModel
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
@@ -1047,6 +1090,14 @@ struct AppsSettingsSheet: View {
                             Text(tr("Sunset", "غروب")).tag("sunset")
                             Text(tr("Graphite", "داكن")).tag("graphite")
                         }
+                    }
+                }
+                Section {
+                    Toggle(tr("Completion sound & haptic", "صوت واهتزاز عند الانتهاء"), isOn: $completionFeedback)
+                }
+                Section {
+                    Button { dismiss(); NotificationCenter.default.post(name: .mirsaShowHidden, object: nil) } label: {
+                        Label(tr("Privacy", "الخصوصية"), systemImage: "lock")
                     }
                 }
                 Section(tr("Theme", "الثيم")) {
