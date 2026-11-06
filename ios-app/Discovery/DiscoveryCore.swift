@@ -41,9 +41,6 @@ enum DiscoveryURLPolicy {
         if labels.count < 2 { return .localHost }                                      // "localhost", "intranet", "printer"
         let tld = labels.last!
         if tld.allSatisfy({ $0.isNumber }) || tld.hasPrefix("0x") { return .ipLiteral } // 127.0.0.1, 2130706433, 0x7f.1
-        if labels.allSatisfy({ $0.allSatisfy { $0.isNumber || $0 == "x" || ("a"..."f").contains($0) } && $0.hasPrefix("0x") }) {
-            return .ipLiteral
-        }
         let blockedSuffixes = ["local", "localhost", "internal", "lan", "home", "intranet", "corp", "private", "localdomain", "home.arpa", "arpa"]
         for s in blockedSuffixes where host == s || host.hasSuffix("." + s) { return .localHost }
         if !host.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == ".") }) {
