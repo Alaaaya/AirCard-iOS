@@ -796,6 +796,114 @@ pub unsafe extern "C" fn al_sl_install(
     write_result(res, out_json, out_error)
 }
 
+/// Install an ALREADY SIGNED .app directory (e.g. signed with an imported
+/// P12 + profile) over the tunnel. No Apple ID session, no device
+/// registration, no signing. installation_proxy still enforces the embedded
+/// profile (device UDID, expiry, cert validity); nothing is bypassed.
+/// Never deletes anything: the caller owns `app_path`.
+fn validate_signed_app(app_path: &str) -> Result<PathBuf, String> {
+    let p = PathBuf::from(app_path);
+    if !p.is_absolute() {
+        return Err("Signed app path must be absolute".into());
+    }
+    let meta = std::fs::symlink_metadata(&p).map_err(|e| format!("Signed app not found: {e}"))?;
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return Err("Signed app must be a real .app folder".into());
+    }
+    if p.extension().and_then(|e| e.to_str()) != Some("app") {
+        return Err("Signed app folder must end in .app".into());
+    }
+    let child = |name: &str, dir: bool, max: u64| -> Result<(), String> {
+        let m = std::fs::symlink_metadata(p.join(name)).map_err(|_| format!("Signed app is missing {name}"))?;
+        if m.file_type().is_symlink() || m.is_dir() != dir {
+            return Err(format!("{name} has an invalid type"));
+        }
+        if !dir && (m.len() == 0 || m.len() > max) {
+            return Err(format!("{name} has an invalid size"));
+        }
+        Ok(())
+    };
+    child("Info.plist", false, 4 * 1024 * 1024)?;
+    child("_CodeSignature", true, 0)?;
+    child("embedded.mobileprovision", false, 1024 * 1024)?;
+    Ok(p)
+}
+
+async fn install_signed(
+    pairing_path: String,
+    app_path: String,
+    logger: &Logger,
+    progress: impl Fn(f64, &str) + Send + Sync + Clone + 'static,
+) -> Result<serde_json::Value, String> {
+    let signed = validate_signed_app(&app_path)?;
+    let pairing = std::fs::read(&pairing_path).map_err(|e| format!("Read pairing file: {e}"))?;
+    let info = read_info(&signed);
+    let bundle_id = info.get("CFBundleIdentifier").and_then(|v| v.as_string()).unwrap_or_default().to_string();
+    if bundle_id.is_empty() {
+        return Err("Signed app has no bundle identifier".into());
+    }
+    let expires = profile_expiry(&signed);
+    if let Some(e) = expires {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        if e <= now {
+            return Err("The provisioning profile in this app has expired".into());
+        }
+    }
+    progress(0.0, "Connecting");
+    let tunnel = exploit::connect_tunnel(&pairing, logger).await?;
+    // Only real transfer/install callbacks report "Installing" with a fraction.
+    let p4 = progress.clone();
+    let cb = move |pct: u64| p4((pct as f64 / 100.0).min(1.0), "Installing");
+    let res = match tunnel {
+        AppDeviceTunnel::Rsd { mut adapter, mut handshake } => {
+            isideload::sideload::install::install_app_rsd(&mut adapter, &mut handshake, &signed, cb).await
+        }
+        AppDeviceTunnel::Lockdown { provider, .. } => {
+            isideload::sideload::install::install_app(&provider, &signed, cb).await
+        }
+    };
+    res.map_err(|e| format!("Install failed: {e}"))?;
+    progress(1.0, "Done");
+    Ok(serde_json::json!({
+        "bundle_id": bundle_id,
+        "name": info.get("CFBundleDisplayName").or_else(|| info.get("CFBundleName")).and_then(|v| v.as_string()).unwrap_or_default(),
+        "version": info.get("CFBundleShortVersionString").and_then(|v| v.as_string()).unwrap_or_default(),
+        "expires": expires,
+    }))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn al_sl_install_signed(
+    pairing_path: *const c_char,
+    app_path: *const c_char,
+    progress_cb: ALProgressCb,
+    log_cb: exploit::ALLogCallback,
+    ctx: *mut c_void,
+    out_json: *mut *mut c_char,
+    out_error: *mut *mut c_char,
+) -> i32 {
+    let pairing = opt_str(pairing_path, "");
+    let app = opt_str(app_path, "");
+    let c = SendPtr(ctx as usize);
+    let pcb = progress_cb.map(|f| SendPtr(f as usize));
+    let res = guarded("al_sl_install_signed", move || {
+        let logger = Logger { cb: log_cb, ctx: c.0 as *mut c_void };
+        let progress = move |f: f64, stage: &str| {
+            if let Some(p) = pcb {
+                let cb: extern "C" fn(*mut c_void, f64, *const c_char) = unsafe { std::mem::transmute(p.0) };
+                if let Ok(s) = CString::new(stage) {
+                    cb(c.0 as *mut c_void, f, s.as_ptr());
+                }
+            }
+        };
+        runtime().block_on(install_signed(pairing, app, &logger, progress))
+    });
+    write_result(res, out_json, out_error)
+}
+
 /// Uninstall a real app by bundle id over the tunnel. BLOCKS.
 #[no_mangle]
 pub unsafe extern "C" fn al_sl_uninstall(
@@ -1040,4 +1148,75 @@ pub unsafe extern "C" fn al_dev_tool(
         runtime().block_on(dev_tool(pairing, kind, arg, out, &logger))
     });
     write_result(res, out_json, out_error)
+}
+
+
+#[cfg(test)]
+mod install_signed_tests {
+    use super::validate_signed_app;
+    use std::fs;
+
+    fn make(root: &std::path::Path, files: &[&str]) -> std::path::PathBuf {
+        let app = root.join("T.app");
+        fs::create_dir_all(app.join("_CodeSignature")).unwrap();
+        for f in files {
+            fs::write(app.join(f), b"x").unwrap();
+        }
+        app
+    }
+
+    fn tmp(n: &str) -> std::path::PathBuf {
+        let d = std::env::temp_dir().join(format!("mirsa-sig-{n}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn accepts_complete_app_and_rejects_relative() {
+        let d = tmp("ok");
+        let app = make(&d, &["Info.plist", "embedded.mobileprovision"]);
+        assert!(validate_signed_app(app.to_str().unwrap()).is_ok());
+        assert!(validate_signed_app("T.app").is_err());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn rejects_missing_required_files() {
+        let d = tmp("miss");
+        let app = make(&d, &["Info.plist"]);
+        assert!(validate_signed_app(app.to_str().unwrap()).is_err());
+        let d2 = tmp("miss2");
+        let app2 = make(&d2, &["embedded.mobileprovision"]);
+        assert!(validate_signed_app(app2.to_str().unwrap()).is_err());
+        let _ = fs::remove_dir_all(&d);
+        let _ = fs::remove_dir_all(&d2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlinks() {
+        let d = tmp("sym");
+        let app = make(&d, &["Info.plist", "embedded.mobileprovision"]);
+        fs::remove_file(app.join("embedded.mobileprovision")).unwrap();
+        fs::write(d.join("real"), b"x").unwrap();
+        std::os::unix::fs::symlink(d.join("real"), app.join("embedded.mobileprovision")).unwrap();
+        assert!(validate_signed_app(app.to_str().unwrap()).is_err());
+        let link = d.join("L.app");
+        std::os::unix::fs::symlink(&app, &link).unwrap();
+        assert!(validate_signed_app(link.to_str().unwrap()).is_err());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn rejects_non_app_and_empty_files() {
+        let d = tmp("bad");
+        let other = d.join("X.bundle");
+        fs::create_dir_all(&other).unwrap();
+        assert!(validate_signed_app(other.to_str().unwrap()).is_err());
+        let app = make(&d, &["Info.plist", "embedded.mobileprovision"]);
+        fs::write(app.join("Info.plist"), b"").unwrap();
+        assert!(validate_signed_app(app.to_str().unwrap()).is_err());
+        let _ = fs::remove_dir_all(&d);
+    }
 }

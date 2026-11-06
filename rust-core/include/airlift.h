@@ -200,6 +200,11 @@ int32_t al_sl_account_info(char **out_json, char **out_error);
 int32_t al_sl_install(const char *pairing_path, const char *app_path, const char *device_name,
                       ALProgressCb progress_cb, ALLogCallback log_cb, void *ctx,
                       char **out_json, char **out_error);
+// Install an ALREADY SIGNED .app folder (absolute path) with no Apple ID.
+// The embedded profile still limits devices/expiry. JSON: bundle_id, name, version, expires
+int32_t al_sl_install_signed(const char *pairing_path, const char *app_path,
+                             ALProgressCb progress_cb, ALLogCallback log_cb, void *ctx,
+                             char **out_json, char **out_error);
 int32_t al_sl_uninstall(const char *pairing_path, const char *bundle_id,
                         ALLogCallback log_cb, void *ctx, char **out_error);
 
