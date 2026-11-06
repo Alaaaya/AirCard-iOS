@@ -126,7 +126,7 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
-			<string>iOS App</string>
+			<string>IPA Archive</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>

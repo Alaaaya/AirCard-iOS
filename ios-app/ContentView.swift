@@ -598,6 +598,7 @@ struct ContentView: View {
     @EnvironmentObject var vm: AppViewModel
     @AppStorage("aircard.dont_show_support_on_launch") private var dontShowSupportOnLaunch: Bool = false
     @State private var showSupportPopup: Bool = false
+    @State private var receivingIPA = false
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     private var liquidTheme: Bool { theme == MirsaTheme.liquid.rawValue }
 
@@ -638,10 +639,28 @@ struct ContentView: View {
         .onOpenURL { url in
             // mirsa://launch?bundle=… from a Home Screen shortcut.
             if HomeShortcut.handle(url) { vm.selectedTab = .apps; return }
-            // "Open in AirCard" for .ipa files → Apps tab import.
+            // Document handoff uses a private snapshot before the provider relinquishes access.
             guard url.isFileURL, url.pathExtension.lowercased() == "ipa" else { return }
             vm.selectedTab = .apps
-            Task { await AppsStore.shared.importIPA(from: url) }
+            guard !receivingIPA, AppsStore.shared.busy == nil, AppsStore.shared.pending == nil else {
+                vm.errorMessage = tr("Finish the current import before opening another IPA.", "خلّص الاستيراد الحالي قبل ما تفتح ملف تاني.")
+                return
+            }
+            receivingIPA = true
+            Task {
+                defer { receivingIPA = false }
+                do {
+                    let snapshot = try await Task.detached(priority: .userInitiated) {
+                        try OpenInIPA.snapshot(url)
+                    }.value
+                    defer { OpenInIPA.remove(snapshot) }
+                    guard AppsStore.shared.busy == nil, AppsStore.shared.pending == nil else {
+                        vm.errorMessage = tr("Finish the current import before opening another IPA.", "خلّص الاستيراد الحالي قبل ما تفتح ملف تاني.")
+                        return
+                    }
+                    await AppsStore.shared.importIPA(from: snapshot)
+                } catch { vm.errorMessage = error.localizedDescription }
+            }
         }
         .alert("Notice", isPresented: Binding(
             get: { vm.errorMessage != nil },
