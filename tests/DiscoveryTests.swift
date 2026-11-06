@@ -148,6 +148,14 @@ final class DiscoveryTests: XCTestCase {
         XCTAssertEqual(r.first?.identity, .nameOnly)
     }
 
+    func testWebBackendPageResultIsReferenceOnly() {
+        let json = #"{"results":[{"name":"P","bundleId":"unknown.x.com","pageURL":"https://x.com/page"},{"name":"Bad","bundleId":"a.b","pageURL":"http://x.com/p"}]}"#
+        let r = WebBackendProvider.parse(Data(json.utf8))
+        XCTAssertEqual(r.count, 1)
+        XCTAssertFalse(r[0].isDownloadable)
+        XCTAssertEqual(r[0].identity, .reference)
+    }
+
     // MARK: validator
 
     private func validate(_ d: Data, bundle: String? = "com.example.app", version: String? = "1.2", os: String? = "18.0") throws -> IPAFacts {

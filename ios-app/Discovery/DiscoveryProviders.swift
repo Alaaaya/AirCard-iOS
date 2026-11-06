@@ -128,14 +128,18 @@ enum WebBackendProvider {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let results = root["results"] as? [[String: Any]] else { return [] }
         return results.prefix(30).compactMap { r in
-            guard let name = r["name"] as? String, let bid = r["bundleId"] as? String,
-                  let dl = (r["downloadURL"] as? String).flatMap(URL.init(string:)), DiscoveryURLPolicy.isSafe(dl) else { return nil }
+            guard let name = r["name"] as? String, let bid = r["bundleId"] as? String else { return nil }
+            let dlRaw = (r["downloadURL"] as? String).flatMap(URL.init(string:))
+            if dlRaw != nil, !DiscoveryURLPolicy.isSafe(dlRaw!) { return nil }
+            let dl = dlRaw
+            let pageRaw = (r["pageURL"] as? String).flatMap(URL.init(string:)).flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }
+            if dl == nil && pageRaw == nil { return nil }
             let icon = (r["iconURL"] as? String).flatMap(URL.init(string:)).flatMap { DiscoveryURLPolicy.isSafe($0) ? $0 : nil }
             return DiscoveryCandidate(name: name, bundleID: bid, developer: (r["developer"] as? String) ?? "",
                                       version: (r["version"] as? String) ?? "", minOS: r["minOS"] as? String, iconURL: icon,
-                                      downloadURL: dl, sourceName: (r["sourceName"] as? String) ?? (dl.host ?? "web"),
-                                      sourceURL: (r["sourceURL"] as? String) ?? dl.absoluteString,
-                                      origin: .webBackend, identity: .nameOnly)
+                                      downloadURL: dl, sourceName: (r["sourceName"] as? String) ?? ((dl ?? pageRaw)?.host ?? "web"),
+                                      sourceURL: (r["sourceURL"] as? String) ?? (dl ?? pageRaw)!.absoluteString,
+                                      origin: .webBackend, identity: dl == nil ? .reference : .nameOnly)
         }
     }
 
