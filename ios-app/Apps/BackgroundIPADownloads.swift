@@ -73,18 +73,18 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
         do {
             try fm.createDirectory(at: folder, withIntermediateDirectories: true)
             try fm.moveItem(at: location, to: file)
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 if self.cancelled.contains(downloadTask.taskIdentifier) { try? fm.removeItem(at: file) }
                 else { self.destinations[downloadTask.taskIdentifier] = file }
             }
         } catch {
-            Task { @MainActor in self.finish(downloadTask, result: .failure(error)) }
+            MainActor.assumeIsolated { self.finish(downloadTask, result: .failure(error)) }
         }
     }
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask,
                                didCompleteWithError error: Error?) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             if let error { self.finish(task, result: .failure(error)) }
             else if let file = self.destinations.removeValue(forKey: task.taskIdentifier) {
                 if let h = task.response as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
@@ -96,6 +96,9 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
     }
 
     private func finish(_ task: URLSessionTask, result: Result<URL, Error>) {
+        if case .failure = result, let file = destinations.removeValue(forKey: task.taskIdentifier) {
+            try? FileManager.default.removeItem(at: file)
+        }
         let wasCancelled = cancelled.remove(task.taskIdentifier) != nil
         if wasCancelled {
             if case .success(let file) = result { try? FileManager.default.removeItem(at: file) }
@@ -119,7 +122,7 @@ final class BackgroundIPADownloads: NSObject, URLSessionDownloadDelegate {
     }
 
     nonisolated func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             let completion = self.backgroundCompletion
             self.backgroundCompletion = nil
             completion?()
