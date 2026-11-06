@@ -505,7 +505,7 @@ struct WebUploadView: View {
 @MainActor
 final class MirsaUpdater: ObservableObject {
     static let shared = MirsaUpdater()
-    static let repo = "Alaaaya/AirCard-iOS"
+    static let repo = "Alaaaya/Mirsa-iOS"
 
     struct Release: Identifiable, Decodable {
         struct Asset: Decodable { let name: String; let browser_download_url: URL }
