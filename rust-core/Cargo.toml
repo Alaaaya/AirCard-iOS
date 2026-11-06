@@ -45,7 +45,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 lzma-rust2 = { version = "0.22", default-features = false, features = ["std", "xz"] }
-sha2 = "0.10"
+sha2 = { version = "0.10", features = ["oid"] }
+sha1 = { version = "0.10", features = ["oid"] }
+cms = "=0.2.3"
 hex = "0.4"
 tracing = "0.1"
 tracing-subscriber = "0.3"

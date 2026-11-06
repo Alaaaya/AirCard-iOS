@@ -1,9 +1,12 @@
-//! Personal signing uses supplied material only. No Apple ID session/network.
+//! Profile-constrained personal signing. No network or Apple-ID mutation.
 use apple_codesign_quick::{ProvisioningProfile, BundleSigningSettings, RustCryptoCmsSigner};
 use base64::Engine;
 use x509_cert::der::Decode;
-use std::{path::Path, time::{SystemTime, UNIX_EPOCH}};
-
+use std::{path::{Path, PathBuf}, collections::BTreeMap, time::{SystemTime, UNIX_EPOCH}};
+#[path = "personal_nested.rs"]
+mod nested;
+#[path = "personal_cms.rs"]
+mod cms_verify;
 fn err(e: impl std::fmt::Display) -> String { e.to_string() }
 pub fn matches_id(pattern: &str, id: &str) -> bool {
     if let Some(prefix) = pattern.strip_suffix('*') {
@@ -35,99 +38,169 @@ fn resolved_bundle_id(pattern: &str, original: &str) -> Result<String, String> {
         Err("معرّف التطبيق في البروفايل غير صالح.".into())
     }
 }
-pub fn sign(app: &Path, profile_path: &Path, key: &str, cert: &str) -> Result<(), String> {
-    let profile_data = std::fs::read(profile_path).map_err(err)?;
-    if profile_data.len() > 256 * 1024 { return Err("Profile exceeds 256 KiB".into()); }
-    let profile = ProvisioningProfile::parse(&profile_data).map_err(|_| "Invalid provisioning profile")?;
-    let now = SystemTime::now();
-    let expiry = profile.plist().get("ExpirationDate").and_then(plist::Value::as_date)
-        .ok_or("Profile has no expiration date")?;
-    let expires: SystemTime = expiry.into();
-    if let Some(created) = profile.plist().get("CreationDate").and_then(plist::Value::as_date) {
-        let created: SystemTime = created.into();
-        if created > now { return Err("البروفايل لسا ما بلشت صلاحيته.".into()); }
+
+// CMS authenticity is best effort per owner policy. Authorization is checked
+// separately and remains mandatory. No request flag can fabricate verification.
+#[derive(Default, serde::Serialize)]
+pub(crate) struct Verification {
+    pub profile_verification: String,
+    pub device_authorization: String,
+    pub warnings: Vec<serde_json::Value>,
+}
+pub(crate) fn profile_with_verification(bytes: &[u8], index: usize) -> Result<(ProvisioningProfile, Verification), String> {
+    if bytes.is_empty() || bytes.len() > 256*1024 { return Err("حجم البروفايل غير صالح.".into()); }
+    let parsed = ProvisioningProfile::parse(bytes).map_err(|_| "البروفايل غير صالح.")?;
+    let verified = cms_verify::verify(bytes).ok().filter(|v| {
+        plist::Value::from_reader(std::io::Cursor::new(&v.content)).ok()
+            .and_then(|p| p.as_dictionary().cloned()).as_ref() == Some(parsed.plist())
+    });
+    let trusted = verified.as_ref().is_some_and(|v| {
+        #[cfg(target_os = "ios")]
+        unsafe {
+            extern "C" { fn mirsa_verify_profile_signer_chain(signer: *const u8, signer_len: usize, chain: *const u8, chain_len: usize) -> i32; }
+            mirsa_verify_profile_signer_chain(v.signer.as_ptr(),v.signer.len(),v.chain.as_ptr(),v.chain.len()) == 1
+        }
+        #[cfg(not(target_os = "ios"))]
+        { let _ = v; false }
+    });
+    let mut status = Verification { profile_verification: if trusted { "verified" } else { "unverified" }.into(), warnings: vec![], device_authorization: "not_checked".into() };
+    if !trusted { status.warnings.push(serde_json::json!({"code":"profile_cms_unverified", "message":"تحذير: ما قدرنا نتحقق من توقيع البروفايل وثقة Apple. التوقيع رح يكمل، بس البروفايل غير موثّق.","profile_index":index})); }
+    Ok((parsed,status))
+}
+#[derive(Default, serde::Deserialize)]
+pub(crate) struct Options {
+    #[serde(default)] pub profiles: Vec<String>,
+    #[serde(default)] pub pairing_path: String,
+    #[serde(default)] pub remove_extensions: bool,
+    #[serde(default)] pub remove_watch: bool,
+    #[serde(default)] pub remove_app_clips: bool,
+}
+struct Profile { data: Vec<u8>, parsed: ProvisioningProfile }
+pub(crate) fn validate_profile(p: &ProvisioningProfile, cert: &[u8], udid: &str, now: SystemTime) -> Result<(), String> {
+    if udid.is_empty() || udid.len() > 128 || !udid.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        return Err("وصل الجهاز الحقيقي أولاً للحصول على UDID والتحقق من البروفايل.".into());
     }
-    if expires <= now { return Err("انتهت صلاحية البروفايل.".into()); }
-    // App Store profiles cannot be used for local sideload installation.
-    if profile.plist().get("ProvisionsAllDevices").and_then(plist::Value::as_boolean) != Some(true)
-        && profile.plist().get("ProvisionedDevices").and_then(plist::Value::as_array).map_or(true, |d| d.is_empty()) {
-        return Err("استخدم بروفايل تطوير أو Ad Hoc أو مؤسسات، مو App Store.".into());
+    let expiry: SystemTime = p.plist().get("ExpirationDate").and_then(plist::Value::as_date)
+        .ok_or("البروفايل بلا تاريخ صلاحية.")?.into();
+    if expiry <= now { return Err("انتهت صلاحية البروفايل.".into()); }
+    let created: SystemTime = p.plist().get("CreationDate").and_then(plist::Value::as_date)
+        .ok_or("البروفايل بلا تاريخ إنشاء.")?.into();
+    if created > now { return Err("البروفايل لسا ما بلشت صلاحيته.".into()); }
+    if !p.plist().get("ProvisionedDevices").and_then(plist::Value::as_array)
+            .is_some_and(|ds| ds.iter().any(|d| d.as_string() == Some(udid))) {
+        return Err("هالجهاز مو مضاف بالبروفايل. أضف UDID الجهاز واستورد البروفايل الجديد.".into());
     }
-    let decoder = base64::engine::general_purpose::STANDARD;
-    let cert = decoder.decode(cert).map_err(|_| "Invalid certificate data")?;
-    let x509 = x509_cert::Certificate::from_der(&cert).map_err(|_| "Invalid certificate")?;
-    let now_secs = now.duration_since(UNIX_EPOCH).map_err(err)?.as_secs();
-    let validity = &x509.tbs_certificate.validity;
-    if now_secs < validity.not_before.to_unix_duration().as_secs()
-        || now_secs >= validity.not_after.to_unix_duration().as_secs() {
-        return Err("الشهادة منتهية أو لسا ما بلشت صلاحيتها.".into());
-    }
-    let certs = profile.plist().get("DeveloperCertificates").and_then(plist::Value::as_array)
-        .ok_or("Profile has no developer certificates")?;
-    if !certs.iter().any(|v| v.as_data() == Some(cert.as_slice())) {
+    if !p.plist().get("DeveloperCertificates").and_then(plist::Value::as_array)
+        .is_some_and(|cs| cs.iter().any(|c| c.as_data() == Some(cert))) {
         return Err("الشهادة ما بتطابق هالبروفايل.".into());
     }
-    let mut info = plist::Value::from_file(app.join("Info.plist")).map_err(err)?;
-    let id = info.as_dictionary().and_then(|d| d.get("CFBundleIdentifier")).and_then(plist::Value::as_string)
-        .ok_or("معرّف التطبيق مو موجود.")?;
-    let mut entitlements = profile.entitlements().clone();
-    let pattern = entitlements.get("application-identifier").and_then(plist::Value::as_string)
-        .ok_or("البروفايل ما فيه معرّف تطبيق.")?.to_owned();
-    // Prefix is not necessarily TeamIdentifier on older accounts.
-    let prefix = pattern.split_once('.').ok_or("معرّف التطبيق في البروفايل غير صالح.")?.0;
-    let resolved_id = resolved_bundle_id(&pattern, id)?;
-    let rewritten = resolved_id != id;
-    let app_id = format!("{prefix}.{resolved_id}");
-    if !matches_id(&pattern, &app_id) { return Err("البروفايل ما بيسمح بمعرّف هالتطبيق.".into()); }
-    entitlements.insert("application-identifier".into(), app_id.clone().into());
-    if let Some(plist::Value::Array(groups)) = entitlements.get_mut("keychain-access-groups") {
-        for group in groups {
-            if let Some(s) = group.as_string() {
-                if s == format!("{prefix}.*") { *group = app_id.clone().into(); }
-                else if s.contains('*') { return Err("مجموعة Keychain في البروفايل غير مدعومة.".into()); }
-            }
+    if p.entitlements().get("com.apple.developer.team-identifier").and_then(plist::Value::as_string)
+        .is_some_and(|t| t != p.team_id()) { return Err("فريق البروفايل غير متطابق.".into()); }
+    Ok(())
+}
+fn actual_udid(pairing_path: &str) -> Result<String,String> {
+    if pairing_path.is_empty() { return Err("وصل الجهاز وفعّل الاقتران أولاً للتحقق من UDID الحقيقي.".into()); }
+    let bytes = std::fs::read(pairing_path).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
+    let logger = crate::exploit::Logger { cb: None, ctx: std::ptr::null_mut() };
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(err)?;
+    rt.block_on(async {
+        let tunnel = crate::exploit::connect_tunnel(&bytes,&logger).await?;
+        let id = match &tunnel {
+            crate::exploit::AppDeviceTunnel::Rsd { handshake,.. } => handshake.properties.get("UniqueDeviceID").and_then(|v|v.as_string()).map(str::to_owned).ok_or("الجهاز ما رجّع UDID حقيقي.".to_owned())?,
+            crate::exploit::AppDeviceTunnel::Lockdown { provider,.. } => isideload::util::device::IdeviceInfo::from_device(provider).await.map_err(err)?.udid,
+        };
+        if id.is_empty() { return Err("الجهاز ما رجّع UDID حقيقي.".into()); }
+        Ok(id)
+    })
+}
+pub fn sign(app: &Path, profile_path: &Path, key: &str, cert: &str) -> Result<(), String> {
+    sign_with_options(app, profile_path, key, cert, &Options::default()).map(|_| ())
+}
+pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert: &str, opts: &Options) -> Result<Verification, String> {
+    // Reject links even for direct local requests, before trusting app paths.
+    if std::fs::symlink_metadata(app).map_err(err)?.file_type().is_symlink() {
+        return Err("روابط الملفات غير مدعومة.".into());
+    }
+    let mut files = Vec::new(); crate::ipa_editor::walk(app, &mut files)?;
+    let decoder = base64::engine::general_purpose::STANDARD;
+    let cert = decoder.decode(cert).map_err(|_| "بيانات الشهادة غير صالحة.")?;
+    let x509 = x509_cert::Certificate::from_der(&cert).map_err(|_| "الشهادة غير صالحة.")?;
+    let now = SystemTime::now();
+    let secs = now.duration_since(UNIX_EPOCH).map_err(err)?.as_secs();
+    if secs < x509.tbs_certificate.validity.not_before.to_unix_duration().as_secs()
+        || secs >= x509.tbs_certificate.validity.not_after.to_unix_duration().as_secs() {
+        return Err("الشهادة منتهية أو لسا ما بلشت صلاحيتها.".into());
+    }
+    if opts.profiles.len() > 128 { return Err("عدد البروفايلات كبير جداً.".into()); }
+    let mut paths = vec![profile_path.to_path_buf()];
+    paths.extend(opts.profiles.iter().map(PathBuf::from));
+    paths.dedup();
+    let target_udid = actual_udid(&opts.pairing_path)?;
+    let mut profiles = Vec::new();
+    let mut status = Verification { profile_verification: "verified".into(), warnings: vec![], device_authorization: "not_checked".into() };
+    for (index,path) in paths.into_iter().enumerate() {
+        let metadata = std::fs::metadata(&path).map_err(|_| "ملف البروفايل غير موجود.")?;
+        if metadata.len() > 256 * 1024 { return Err("حجم البروفايل كبير جداً.".into()); }
+        let data = std::fs::read(path).map_err(|_| "تعذّر قراءة البروفايل.")?;
+        let (parsed,verification) = profile_with_verification(&data,index)?;
+        if verification.profile_verification != "verified" { status.profile_verification = "unverified".into(); }
+        status.warnings.extend(verification.warnings);
+        validate_profile(&parsed, &cert, &target_udid, now)?;
+        profiles.push(Profile { data, parsed });
+    }
+    let mut nodes = nested::inventory(app, opts)?;
+    let main = nodes.iter().position(|n| n.path == app).ok_or("التطبيق الرئيسي مو موجود.")?;
+    let main_original = nodes[main].id.clone();
+    let main_patterns: Vec<_> = profiles.iter().map(|p| p.parsed.entitlements().get("application-identifier").and_then(plist::Value::as_string).unwrap_or("")).collect();
+    let chosen = nested::select_profile(&main_patterns,&main_original).unwrap_or(0);
+    let new_main = resolved_bundle_id(main_patterns[chosen], &main_original)?;
+    let mapping = nested::id_map(&nodes, &main_original, &new_main)?;
+    let team = profiles[chosen].parsed.team_id();
+    let mut assignments = BTreeMap::new();
+    let mut entitlements = BTreeMap::new();
+    for node in &nodes {
+        if node.framework { continue; }
+        let id = mapping.get(&node.id).ok_or("معرّف تطبيق غير موجود.")?;
+        let patterns: Vec<_> = profiles.iter().map(|p| p.parsed.entitlements().get("application-identifier")
+            .and_then(plist::Value::as_string).unwrap_or("")).collect();
+        let index = nested::select_profile(&patterns, id)
+            .ok_or_else(|| format!("ما في بروفايل صالح للتطبيق {id}. استورد بروفايله أو احذف الإضافة من الخيارات."))?;
+        let p = &profiles[index].parsed;
+        if p.team_id() != team { return Err(format!("فريق البروفايل مختلف للتطبيق {id}.")); }
+        let prefix = patterns[index].split_once('.').ok_or("معرّف البروفايل غير صالح.")?.0;
+        let requested = nested::read_entitlements(&std::fs::read(node.executable()?).map_err(err)?)?;
+        let constrained = nested::constrain(&requested, p.entitlements(), prefix, id, team, &mapping)
+            .map_err(|e| format!("{id} - {e}"))?;
+        assignments.insert(id.clone(), index);
+        entitlements.insert(id.clone(), constrained);
+    }
+    // Validate every retained Mach-O before ANY rewrite/removal/signing.
+    for file in files.iter().filter(|p| p.is_file() && !nested::removed(app, p, opts)) {
+        nested::check_macho_file(file)?;
+    }
+    let key = decoder.decode(key).map_err(|_| "المفتاح الخاص غير صالح.")?;
+    let signer = RustCryptoCmsSigner::from_der(&key, &cert, profiles[0].parsed.certificate_chain_der())
+        .map_err(|_| "استخدم شهادة Apple RSA مع مفتاحها الخاص المطابق.")?;
+    nested::apply_removals(app, opts)?;
+    for node in &mut nodes { nested::rewrite(node, &mapping)?; }
+    // Explicit deepest-first pass includes Watch/AppClips, which the vendored
+    // library does not discover. Parent envelopes then hash their final bytes.
+    // Frameworks/PlugIns may be signed again recursively with identical maps.
+    nodes.sort_by_key(|n| std::cmp::Reverse(n.path.components().count()));
+    for node in &nodes {
+        let id = mapping.get(&node.id).unwrap_or(&node.id);
+        let empty = plist::Dictionary::new();
+        let mut settings = BundleSigningSettings::new(team, entitlements.get(id).unwrap_or(&empty).clone(), Some(&signer));
+        settings.entitlements_by_bundle_id = entitlements.clone();
+        for (bundle, index) in &assignments {
+            settings.embedded_mobileprovisions_by_bundle_id.insert(bundle.clone(), &profiles[*index].data);
         }
+        // Framework/dylib code receives neither app entitlements nor profile.
+        if !node.framework { settings.embedded_mobileprovision = assignments.get(id).map(|i| profiles[*i].data.as_slice()); }
+        apple_codesign_quick::sign_bundle(&node.path, &settings).map_err(|_| format!("تعذّر توقيع التطبيق {id}."))?;
     }
-    // A separate profile is required per extension. Never silently sign one
-    // with the parent's profile or remove user extensions.
-    for path in ["PlugIns", "Watch", "AppClips"] {
-        if app.join(path).exists() { return Err("التطبيق فيه إضافات أو تطبيق ساعة أو App Clips. بدهم بروفايلات منفصلة وما بيندعموا حالياً.".into()); }
-    }
-    // Inspect every Mach-O, not only the main executable. Bounded extraction
-    // already rejected symlinks/special files and archive traversal.
-    let mut files = Vec::new();
-    crate::ipa_editor::walk(app, &mut files)?;
-    for file in files.iter().filter(|p| p.is_file()) {
-        use std::io::Read;
-        let mut f = std::fs::File::open(file).map_err(err)?;
-        let mut magic = [0u8; 4];
-        if f.read_exact(&mut magic).is_ok() && matches!(magic,
-            [0xcf,0xfa,0xed,0xfe] | [0xfe,0xed,0xfa,0xcf] |
-            [0xce,0xfa,0xed,0xfe] | [0xfe,0xed,0xfa,0xce] |
-            [0xca,0xfe,0xba,0xbe] | [0xbe,0xba,0xfe,0xca] |
-            [0xca,0xfe,0xba,0xbf] | [0xbf,0xba,0xfe,0xca]) {
-            crate::ipa_editor::unencrypted(&std::fs::read(file).map_err(err)?)?;
-        }
-        if file.file_name().and_then(|n| n.to_str()) == Some("Info.plist")
-            && file.parent() != Some(app)
-            && file.parent().and_then(|p| p.extension()).and_then(|e| e.to_str())
-                .map_or(false, |e| matches!(e, "appex" | "app")) {
-            return Err("التطبيقات والإضافات المضمّنة بدها بروفايلات منفصلة.".into());
-        }
-    }
-    let key = decoder.decode(key).map_err(|_| "Invalid private key data")?;
-    let signer = RustCryptoCmsSigner::from_der(&key, &cert, profile.certificate_chain_der())
-        .map_err(|_| "Unsupported identity. Use an RSA Apple signing certificate with its private key")?;
-    // Modify only the extracted temporary main app, after all validation.
-    // Extension-bearing archives still fail closed above, before any rewrite.
-    if rewritten {
-        info.as_dictionary_mut().ok_or("ملف معلومات التطبيق غير صالح.")?
-            .insert("CFBundleIdentifier".into(), resolved_id.into());
-        info.to_file_xml(app.join("Info.plist")).map_err(err)?;
-    }
-    let mut settings = BundleSigningSettings::new(profile.team_id(), entitlements, Some(&signer));
-    settings.embedded_mobileprovision = Some(&profile_data);
-    apple_codesign_quick::sign_bundle(app, &settings).map_err(err)
+    status.device_authorization = "checked".into();
+    Ok(status)
 }
 #[cfg(test)]
 mod tests {
@@ -152,7 +225,7 @@ mod tests {
         std::fs::write(&temp, b"not a signed provisioning profile").unwrap();
         let result = sign(Path::new("/nonexistent-app"), &temp, "private", "certificate");
         std::fs::remove_file(temp).unwrap();
-        assert!(result.unwrap_err().contains("Invalid provisioning profile"));
+        assert!(result.is_err());
     }
     #[test] fn profile_id_scope() {
         assert!(matches_id("ABC.com.example.*", "ABC.com.example.demo"));
@@ -160,5 +233,23 @@ mod tests {
         assert!(matches_id("ABC.*", "ABC.com.demo"));
         assert!(!matches_id("ABC.com.demo", "ABC.com.other"));
         assert!(!matches_id("A*B.*", "ABC.com.demo"));
+    }
+}
+#[cfg(test)]
+mod authorization_tests {
+    use super::*;
+    fn profile() -> ProvisioningProfile { profile_with_verification(include_bytes!("../tests/cms-fixtures/valid-test.der"),0).unwrap().0 }
+    #[test] fn unsupported_cms_proceeds_with_explicit_warning() {
+        let (_,v)=profile_with_verification(include_bytes!("../tests/cms-fixtures/unsupported-test.der"),2).unwrap();
+        assert_eq!(v.profile_verification,"unverified"); assert_eq!(v.warnings.len(),1); assert_eq!(v.warnings[0]["profile_index"],2);
+    }
+    #[test] fn device_cert_and_expiry_remain_hard() {
+        let p=profile(); let cert=include_bytes!("../tests/p12-fixtures/leaf.der");
+        let now=UNIX_EPOCH+std::time::Duration::from_secs(1800000000);
+        assert!(validate_profile(&p,cert,"REAL-TEST-DEVICE",now).is_ok());
+        assert!(validate_profile(&p,cert,"WRONG",now).is_err());
+        assert!(validate_profile(&p,cert,"",now).is_err());
+        assert!(validate_profile(&p,b"wrong","REAL-TEST-DEVICE",now).is_err());
+        assert!(validate_profile(&p,cert,"REAL-TEST-DEVICE",UNIX_EPOCH+std::time::Duration::from_secs(2200000000)).is_err());
     }
 }

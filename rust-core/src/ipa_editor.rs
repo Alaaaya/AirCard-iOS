@@ -874,17 +874,19 @@ struct Request {
     certificate: String,
     #[serde(default)]
     profile: String,
+    #[serde(flatten)]
+    signing_options: crate::personal_sign::Options,
 }
-fn run(r: Request) -> Result<()> {
+fn run(r: Request) -> Result<crate::personal_sign::Verification> {
     match r.operation.as_str() {
-        "personal_sign" => crate::personal_sign::sign(Path::new(&r.input), Path::new(&r.profile), &r.private_key, &r.certificate),
+        "personal_sign" => return crate::personal_sign::sign_with_options(Path::new(&r.input), Path::new(&r.profile), &r.private_key, &r.certificate, &r.signing_options),
         "validate" => unencrypted(&read_macho(Path::new(&r.input))?),
         "extract" => extract_zip(Path::new(&r.input), Path::new(&r.output)),
         "pack" => pack(Path::new(&r.input), Path::new(&r.output)),
         "deb" => extract_deb(Path::new(&r.input), Path::new(&r.output)),
         "inject" => inject(Path::new(&r.input), &r.executable, &r.libraries),
         _ => Err("Unknown editor operation".into()),
-    }
+    }.map(|_| crate::personal_sign::Verification::default())
 }
 /// Returns an owned UTF-8 JSON result; release via existing al_string_free.
 /// # Safety
@@ -903,7 +905,7 @@ pub unsafe extern "C" fn al_ipa_editor_run(request: *const c_char) -> *mut c_cha
     })
     .unwrap_or_else(|_| Err("Editor rejected malformed input".into()));
     let json = match result {
-        Ok(()) => serde_json::json!({"ok":true}),
+        Ok(status) => serde_json::json!({"ok":true,"profile_verification":status.profile_verification,"warnings":status.warnings,"device_authorization":status.device_authorization}),
         Err(e) => serde_json::json!({"ok":false,"error":e}),
     };
     CString::new(json.to_string()).unwrap().into_raw()

@@ -45,11 +45,17 @@ fn process(text: &str) -> Result<serde_json::Value, &'static str> {
     let data=B64.decode(r.p12).map_err(|_|"invalid")?;
     let profile=B64.decode(r.profile).map_err(|_|"profile")?;
     if profile.len()>256*1024 {return Err("profile")}
-    let profile=apple_codesign_quick::ProvisioningProfile::parse(&profile).map_err(|_|"profile")?;
+    let (profile, verification)=crate::personal_sign::profile_with_verification(&profile,0).map_err(|_|"profile")?;
     let allowed=profile.plist().get("DeveloperCertificates").and_then(plist::Value::as_array).ok_or("profile")?
         .iter().filter_map(|v|v.as_data().map(Vec::from)).collect::<Vec<_>>();
     let (key,cert)=decode(&data,&r.password,&allowed)?;
+    let now = std::time::SystemTime::now();
+    let expiration: std::time::SystemTime = profile.plist().get("ExpirationDate").and_then(plist::Value::as_date).ok_or("profile_expiry")?.into();
+    let creation: std::time::SystemTime = profile.plist().get("CreationDate").and_then(plist::Value::as_date).ok_or("profile_expiry")?.into();
+    if expiration <= now || creation > now { return Err("profile_expiry"); }
     let x509 = x509_cert::Certificate::from_der(&cert).map_err(|_| "invalid")?;
+    let seconds = now.duration_since(std::time::UNIX_EPOCH).map_err(|_| "invalid")?.as_secs();
+    if seconds < x509.tbs_certificate.validity.not_before.to_unix_duration().as_secs() || seconds >= x509.tbs_certificate.validity.not_after.to_unix_duration().as_secs() { return Err("certificate_expiry"); }
     let profile_expiry = profile.plist().get("ExpirationDate").and_then(plist::Value::as_date)
         .map(std::time::SystemTime::from)
         .and_then(|d| d.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
@@ -65,7 +71,7 @@ fn process(text: &str) -> Result<serde_json::Value, &'static str> {
     Ok(serde_json::json!({"ok":true,"key":B64.encode(key),"certificate":B64.encode(cert),
         "name":x509.tbs_certificate.subject.to_string(), "teamID":profile.team_id(),
         "bundleID":profile.entitlements().get("application-identifier").and_then(plist::Value::as_string),
-        "expiry":expiry, "profileType":kind}))
+        "expiry":expiry, "profileType":kind,"profile_verification":verification.profile_verification,"warnings":verification.warnings,"device_authorization":"not_checked"}))
 }
 /// Local memory-only boundary; response is released with al_string_free.
 /// Safety: request must be a valid NUL-terminated UTF-8 string.
