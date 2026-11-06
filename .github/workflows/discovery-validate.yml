@@ -1,0 +1,25 @@
+name: Discovery validate
+on:
+  workflow_dispatch:
+  push:
+    branches: [kat/app-discovery]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package the pure Discovery files and run tests (no release, no artifact)
+        run: |
+          mkdir -p dk/Sources/DiscoveryKit dk/Tests/DiscoveryKitTests
+          for f in DiscoveryCore DiscoveryArchive DiscoveryProviders DiscoveryDownloader; do cp ios-app/Discovery/$f.swift dk/Sources/DiscoveryKit/; done
+          cp tests/DiscoveryTests.swift dk/Tests/DiscoveryKitTests/
+          cat > dk/Package.swift <<'EOF'
+          // swift-tools-version:5.9
+          import PackageDescription
+          let package = Package(name: "DiscoveryKit", platforms: [.macOS(.v13), .iOS(.v16)],
+            products: [.library(name: "DiscoveryKit", targets: ["DiscoveryKit"])],
+            targets: [.target(name: "DiscoveryKit"), .testTarget(name: "DiscoveryKitTests", dependencies: ["DiscoveryKit"])])
+          EOF
+          cd dk && swift test 2>&1 | tail -80
