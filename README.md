@@ -1,178 +1,97 @@
-# Mirsa
+<div align="center">
+  <img src="ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="112" height="112" alt="Mirsa logo" />
+  <h1>Mirsa · مرسى</h1>
+  <p>غيّر تفاصيل آيفونك، على ذوقك.<br />Make your iPhone feel like yours.</p>
+  <p>
+    <img src="https://img.shields.io/badge/MADE_FOR-iPhone-141B2D?style=for-the-badge" alt="Made for iPhone" />
+    <img src="https://img.shields.io/badge/BUILT_WITH-Swift_%2B_Rust-365F69?style=for-the-badge" alt="Built with Swift and Rust" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-B9A47A?style=for-the-badge" alt="MIT license" /></a>
+  </p>
+  <p>Wallet artwork, passcode themes and custom lock-screen wallpapers.<br />Applied on your device, without a jailbreak, on compatible iOS versions.</p>
+  <p><a href="#get-mirsa">Get Mirsa</a> · <a href="#your-toolbox">Your toolbox</a> · <a href="#before-you-start">Before you start</a> · <a href="https://x.com/rasmtk30">Follow @rasmtk30</a></p>
+</div>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Alaaaya/Mirsa/main/app-source/ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="128" height="128" alt="Mirsa Icon" style="border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);" />
-</p>
+---
 
-<p align="center">
-  Apple Wallet card skins, lock screen passcode themes, and PosterBoard wallpapers directly on iOS (18.0 – 27.2 beta 2).
-</p>
+<h2 id="get-mirsa">Get Mirsa</h2>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Platform-iOS%2018.0%E2%80%9327.2%20b2-blue?style=flat-square&logo=apple" alt="Platform" />
-  <img src="https://img.shields.io/badge/Swift-5.0-orange?style=flat-square&logo=swift" alt="Swift" />
-  <img src="https://img.shields.io/badge/Rust-FFI%20Core-red?style=flat-square&logo=rust" alt="Rust" />
-  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License" />
-</p>
+Add the Mirsa source to a compatible source-based installer. Copy this address into its source settings, then select Mirsa Setup.
 
-## Overview
+```text
+https://github.com/Alaaaya/Mirsa/releases/download/setup/source.json
+```
 
-Mirsa customizes Apple Wallet card artwork, lock screen passcode dialers, and lock screen wallpapers on device without a jailbreak.
+The source is an app catalog, not an installation profile. Installing an IPA still requires a signing or sideloading method appropriate for your device.
 
-The app communicates with internal system services over a local loopback tunnel (`10.7.0.1` or `127.0.0.1`) provided by LocalDevVPN. File operations are handled by `AirliftFFI`, a Rust library that interfaces with the AirTraffic service.
+<h2 id="your-toolbox">Your toolbox</h2>
 
-## Compatibility
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <sub>01 / WALLET</sub>
+      <h3>New artwork. Same cards.</h3>
+      <p>Choose custom card backgrounds, detect your cards and apply artwork individually or in a batch. Changes affect appearance, not the card itself.</p>
+    </td>
+    <td width="33%" valign="top">
+      <sub>02 / PASSCODE</sub>
+      <h3>A dialer of your own.</h3>
+      <p>Frame an image across the keypad or create separate button cutouts. Preview the result, adjust its position and share themes as <code>.passthm</code> files.</p>
+    </td>
+    <td width="33%" valign="top">
+      <sub>03 / WALLPAPERS</sub>
+      <h3>Beyond a still image.</h3>
+      <p>Import <code>.tendies</code> archives from Files and apply their PosterBoard assets. A respring refreshes the lock screen after installation.</p>
+    </td>
+  </tr>
+</table>
 
-| iOS Version | Status | Pairing Method | Features Supported |
-| :--- | :--- | :--- | :--- |
-| **iOS 27.0 – 27.0.1** | ✅ Supported | On-device Settings or imported pairing file | Wallet skins, Passcode themes, Tendies wallpapers |
-| **iOS 27.2 beta 1 – beta 2** | ✅ Supported | On-device Settings or imported pairing file | Tested and working |
-| **iOS 18.0 – 26.x** | ✅ Supported | Imported pairing file only | Wallet skins & Passcode themes (via SideStore / LiveContainer / AltStore pairing file) |
-| **iOS 27.2 beta 3+** | ❌ Patched | None | Apple patched the underlying `airlift` exploit. Does not work. |
+<h2 id="before-you-start">Before you start</h2>
 
-> [!IMPORTANT]
-> **Do not update past iOS 27.2 beta 2:** Apple patched the AirTraffic sync exploit in iOS 27.2 beta 3. If you update past beta 2, file injection will no longer work.
+Mirsa needs a pairing record and an active local loopback tunnel, such as LocalDevVPN or a suitable WireGuard configuration. The tunnel lets the app reach services on your own phone.
 
-## Features
+<table>
+  <tr><th align="left">Device software</th><th align="left">Pairing route</th></tr>
+  <tr><td>iOS 18 through 26</td><td>Import an existing pairing record.</td></tr>
+  <tr><td>iOS 27.0 through 27.2 beta 2</td><td>Import a record or use on-device pairing where available.</td></tr>
+  <tr><td>iOS 27.2 beta 3 and later</td><td>The underlying file-injection method is patched. Not supported.</td></tr>
+</table>
 
-### Apple Wallet card skins
-- Writes custom card artwork to Passbook caches (`cardBackgroundCombined@3x.png`, `@2x.png`, and `cardBackgroundCombined.pdf` for transit cards like Suica).
-- Flushes front-face and thumbnail caches so new artwork appears immediately when Wallet opens.
-- Detects card identifiers in real time when you bring up Apple Pay.
-- Apply artwork to individual cards or batch-flash every detected card.
+These are the project's stated compatibility limits; individual features can behave differently between releases. Back up your device before changing system caches, and check compatibility before updating iOS.
 
-### Passcode dialer themes
-- Live dialer preview with touch panning and zoom framing.
-- Full poster layout across all ten buttons, or individual circular button cutouts.
-- Targets system dialer caches (`TelephonyUI-10`).
-- Localized number subtext options, including Ukrainian and Russian Cyrillic layouts.
-- Import and export themes as `.passthm` files.
+<details>
+<summary><strong>Connect your iPhone</strong></summary>
 
-### PosterBoard wallpapers (.tendies)
-- Import and unpack `.tendies` wallpaper archives directly from the Files app.
-- Auto-detects PosterBoard wallpaper containers and active descriptor UUIDs.
-- Injects wallpaper configurations and assets into PosterBoard storage.
-- Automatically triggers a NeoSpring respring after flashing to apply wallpapers without rebooting your iPhone.
+Open Mirsa's Pairing tab and import a pairing record from Files. Supported extensions include `.mobiledevicepairing`, `.plist` and `.mobilepair`.
 
-### Pairing options
-- **Import pairing file**: Supports pairing files (`.mobiledevicepairing`, `.plist`, `.mobilepair`) from **SideStore**, **LiveContainer**, **iLoader**, **AltStore**, **Jitterbug**, or exported from Mac/PC.
-- **On-device pairing (iOS 27+)**: Advertises locally over Bonjour so the phone can pair with itself via Settings > Privacy & Security > Developer Mode > Pair with AirCard-iOS.
-- **Safe unpairing**: Easily delete the active pairing file to re-pair or switch pairing credentials at any time.
+If you already use SideStore, look for `ALTPairingFile.mobiledevicepairing` in its Files folder. Other pairing tools can export a record for you to transfer to the phone.
 
-## Prerequisites
+On compatible iOS 27 releases, you can instead choose **Pair This iPhone**. Keep the displayed PIN handy, follow the Developer Mode pairing prompt in Settings, then return to Mirsa.
 
-1. **iOS 18.0 – 27.2 beta 2** (iOS 27.0+ for on-device Settings pairing, or imported pairing file on iOS 18–26). Note: iOS 27.2 beta 3+ is patched.
-2. **LocalDevVPN / WireGuard**: Running in loopback mode (`10.7.0.1` or `127.0.0.1`) so local connections can reach internal device services.
-3. **Pairing record**: Either on-device pairing or an imported pairing file.
+Keep pairing records private. They authorize access to device services.
 
-## Pairing Setup Guide
+</details>
 
-Mirsa requires a pairing record to communicate with device lockdown services. Some system pairing labels and build artifact filenames still use the upstream name shown below. Choose the method that best matches your setup:
+<details>
+<summary><strong>Build a local copy</strong></summary>
 
-### Option A: SideStore (Recommended)
-If you already use SideStore on your device, it has already created a valid pairing file:
-1. Open **Mirsa** and go to the **Pairing** tab.
-2. Tap **Import Pairing File…**.
-3. In the Files document picker, navigate to:
-   ```text
-   On My iPhone › SideStore › ALTPairingFile.mobiledevicepairing
-   ```
-4. Select `ALTPairingFile.mobiledevicepairing`. The app will load it immediately (`Pairing file loaded ✅`).
+Use a Mac with Xcode and the iOS SDK required by the checked-out source. Install XcodeGen if regenerating the project; install Rust if rebuilding the native core.
 
-### Option B: LiveContainer (with SideStore inside)
-If you run SideStore inside LiveContainer:
-1. Open **Mirsa** › **Pairing** tab › tap **Import Pairing File…**.
-2. In the Files document picker, navigate to:
-   ```text
-   On My iPhone › LiveContainer › SideStore › Documents › ALTPairingFile.mobiledevicepairing
-   ```
-   *(depending on your LiveContainer version, you can also check `On My iPhone › LiveContainer › Data › App › ... › SideStore › Documents`)*
-3. Select `ALTPairingFile.mobiledevicepairing`.
-
-### Option C: iLoader / Jitterbug / AltStore / Computer
-- **iLoader / Jitterbug**: In the respective app, export your pairing file (`<UDID>.mobiledevicepairing`) into the Files app, then import it in Mirsa.
-- **Mac / PC**: Generate a pairing record using `jitterbugpair`, `pymobiledevice3`, or copy it from your computer (`/var/db/lockdown/<UDID>.plist` on macOS or `%ProgramData%\Apple\Lockdown\<UDID>.plist` on Windows), AirDrop/transfer it to your device, and import it into Mirsa.
-- **Manual placement**: You can also drop any `.mobiledevicepairing` or `.plist` directly into `On My iPhone › Mirsa` via the Files app; it will appear under *Discovered in Documents* ready to use.
-
-### Option D: On-Device Pairing (iOS 27+ only)
-On devices running iOS 27 or newer:
-1. In the **Pairing** tab, tap **Pair This iPhone**.
-2. Note the 6-digit PIN displayed on screen.
-3. Open **Settings › Privacy & Security › Developer Mode › Pair with AirCard-iOS**.
-4. Enter the PIN to approve the pairing. Mirsa will complete the handshake and save the credentials.
-
-## Installation
-
-Install the Mirsa IPA using your preferred sideloading method:
-
-- SideStore or AltStore
-- TrollStore
-- LiveContainer
-- Xcode or iOS App Signer
-
-## Building from source
-
-### Requirements
-- macOS 14.0 or newer with Xcode 16 or newer
-- XcodeGen (`brew install xcodegen`)
-- Rust toolchain (only needed if rebuilding `rust-core`)
-
-### Build the IPA
-```bash
+```sh
 git clone https://github.com/Alaaaya/Mirsa-iOS.git
 cd Mirsa-iOS
 ./build-ipa.sh
 ```
 
-The completed package is written to `build/AirCard-iOS.ipa`.
+The unsigned IPA is placed in `build/`. Sign it using your own installation setup.
 
-### Rebuilding the Rust framework
-To compile changes in `rust-core`:
-```bash
-./build-ios.sh
-```
+To rebuild the Rust framework before building the app, run `./build-ios.sh`. App code lives in `ios-app/`; native code lives in `rust-core/`.
 
-## Repository structure
+</details>
 
-```
-Mirsa-iOS/
-├── ios-app/                   # SwiftUI application
-│   ├── AirCardApp.swift       # App entry point and lifecycle
-│   ├── AppViewModel.swift     # State management and exploit orchestration
-│   ├── ContentView.swift      # Main UI views
-│   ├── TendiesView.swift      # PosterBoard wallpaper view
-│   ├── TendiesEngine.swift    # Tendies extraction and injection logic
-│   ├── RespringHelper.swift   # NeoSpring WebKit respring implementation
-│   ├── Models.swift           # Image slicing, theme layout, archive packing
-│   ├── PairingController.swift# Bonjour host and pairing sync
-│   ├── NetworkStatus.swift    # VPN loopback detection
-│   ├── Utilities.swift        # Background keep-alive and helper functions
-│   ├── GrappaHelper.[h,m]     # ATC protocol helpers
-│   ├── Info.plist             # Bundle configuration
-│   └── Assets.xcassets/       # App icons and image sets
-├── AirliftFFI.xcframework/    # Compiled arm64 Rust static library and headers
-├── rust-core/                 # Rust core source code
-├── project.yml                # XcodeGen project definition
-├── build-ipa.sh               # IPA build script
-├── build-ios.sh               # Rust framework build script
-├── LICENSE                    # MIT License
-└── README.md                  # Project documentation
-```
+---
 
-## Credits
+<div align="center">
+  <p><strong>Mirsa · مرسى</strong><br /><a href="https://x.com/rasmtk30">@rasmtk30 on X</a></p>
+</div>
 
-Mirsa is based on [AirCard-iOS by mak5er](https://github.com/mak5er/AirCard-iOS). Original authorship, copyright notices and component licenses are preserved.
-
-- **[@mak5er](https://github.com/mak5er)**: Lead developer, UI, passcode theming, Tendies engine, on-device pairing.
-- **[@merybist](https://github.com/merybist)**: Initial base port.
-- **[AirLift](https://github.com/0xjohnnydev/airlift)** by **[0xjohnny (@0xjohnnydev)](https://github.com/0xjohnnydev)**: AirTraffic and ATAirlock sandbox escape research underlying `AirliftFFI`.
-- **[NeoSpring](https://github.com/rooootdev/neospring)**: Swift implementation by **[@skadz108](https://github.com/skadz108)** and **[@rooootdev](https://github.com/rooootdev)**, and **[@neonmodder123](https://github.com/neonmodder123)** for the WebKit GPU process respring technique.
-- Built upon concepts from the **AirCard** project.
-
-## Contact
-
-[X · @rasmtk30](https://x.com/rasmtk30)
-
-## License
-
-MIT License. See [LICENSE](LICENSE) for details.
+<sub>Based on <a href="https://github.com/mak5er/AirCard-iOS">AirCard-iOS by mak5er</a>, with contributions and research from merybist, Johnny Franks / AirLift, and the NeoSpring authors skadz108, rooootdev and neonmodder123. Original copyright and component licenses remain in their respective files. Distributed under the <a href="LICENSE">MIT License</a>.</sub>
