@@ -15,6 +15,7 @@ pub mod grappa;
 pub mod logging;
 pub mod pairing;
 pub mod container;
+mod ipa_editor;
 pub mod sideload;
 
 // Re-export idevice-ffi's symbols into our staticlib (tunnel_create_rppairing,

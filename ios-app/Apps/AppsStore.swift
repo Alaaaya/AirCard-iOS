@@ -30,7 +30,7 @@ struct ManagedApp: Codable, Identifiable, Hashable {
 
 /// An imported IPA waiting for the user to pick Container or Real App.
 struct PendingImport: Identifiable {
-    let id = UUID()
+    let id: UUID
     let originalIPA: URL
     let extractedApp: URL
     let workDir: URL
@@ -41,6 +41,7 @@ struct PendingImport: Identifiable {
     let wantsNotifications: Bool
     let hasExtensions: Bool
     let sizeBytes: Int64
+    var editOptions: IPAEditOptions? = nil
 }
 
 struct AccountState: Equatable {
@@ -349,38 +350,81 @@ final class AppsStore: ObservableObject {
     // MARK: Import
 
     func importIPA(from url: URL) async {
+        guard busy == nil, pending == nil else { return }
         busy = L.t("busy.importing")
-        defer { busy = nil }
+        MirsaInstallActivity.shared.setPhase(.preparing, title: url.deletingPathExtension().lastPathComponent)
+        var prepared = false
+        defer {
+            busy = nil
+            if !prepared { MirsaInstallActivity.shared.finish(success: false) }
+        }
         let fm = FileManager.default
         let work = fm.temporaryDirectory.appendingPathComponent("import-\(UUID().uuidString)", isDirectory: true)
-        try? fm.createDirectory(at: work, withIntermediateDirectories: true)
         let ipa = work.appendingPathComponent("original.ipa")
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { try fm.copyItem(at: url, to: ipa) } catch { self.error = error.localizedDescription; return }
+        do {
+            try fm.createDirectory(at: work, withIntermediateDirectories: true)
+            try fm.copyItem(at: url, to: ipa)
+            let extractDir = work.appendingPathComponent("x", isDirectory: true)
+            let app = try await Task.detached {
+                try IPAEditorService.run("extract", input: ipa, output: extractDir)
+                return try IPAEditorService.app(in: extractDir)
+            }.value
+            let info = try IPAEditorService.info(in: app)
+            let bid = info["CFBundleIdentifier"] as! String
+            let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? bid
+            let version = (info["CFBundleShortVersionString"] as? String) ?? "1.0"
+            let modes = info["UIBackgroundModes"] as? [String] ?? []
+            let plugins = app.appendingPathComponent("PlugIns")
+            let hasExt = ((try? fm.contentsOfDirectory(atPath: plugins.path)) ?? []).contains { $0.hasSuffix(".appex") }
+            let size = (try fm.attributesOfItem(atPath: ipa.path)[.size] as? NSNumber)?.int64Value ?? 0
+            pending = PendingImport(id: UUID(), originalIPA: ipa, extractedApp: app, workDir: work, bundleID: bid,
+                                    name: name, version: version, icon: Self.findIcon(in: app, info: info),
+                                    wantsNotifications: modes.contains("remote-notification"),
+                                    hasExtensions: hasExt, sizeBytes: size)
+            if !url.standardizedFileURL.path.hasPrefix(DownloadsLibrary.root.standardizedFileURL.path + "/") {
+                DownloadsLibrary.shared.add(ipa: ipa, bundleID: bid, name: name, version: version, size: size, icon: pending?.icon)
+            }
+            prepared = true
+            MirsaInstallActivity.shared.setPhase(.ready, title: name)
+        } catch {
+            self.error = error.localizedDescription
+            try? fm.removeItem(at: work)
+        }
+    }
 
-        let extractDir = work.appendingPathComponent("x", isDirectory: true)
-        let ok = await Task.detached { SideloadService.unzip(ipa.path, to: extractDir.path) }.value
-        guard ok,
-              let app = (try? fm.contentsOfDirectory(at: extractDir.appendingPathComponent("Payload"), includingPropertiesForKeys: nil))?
-                .first(where: { $0.pathExtension == "app" }),
-              let info = NSDictionary(contentsOf: app.appendingPathComponent("Info.plist")) as? [String: Any],
-              let bid = info["CFBundleIdentifier"] as? String
-        else { self.error = L.t("err.badIPA"); try? fm.removeItem(at: work); return }
-
-        let name = (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? bid
-        let version = (info["CFBundleShortVersionString"] as? String) ?? "1.0"
-        let modes = info["UIBackgroundModes"] as? [String] ?? []
-        let plugins = app.appendingPathComponent("PlugIns")
-        let hasExt = ((try? fm.contentsOfDirectory(atPath: plugins.path)) ?? []).contains { $0.hasSuffix(".appex") }
-        let size = (try? fm.attributesOfItem(atPath: ipa.path)[.size] as? Int64) ?? 0
-
-        pending = PendingImport(originalIPA: ipa, extractedApp: app, workDir: work, bundleID: bid,
-                                name: name, version: version, icon: Self.findIcon(in: app, info: info),
-                                wantsNotifications: modes.contains("remote-notification"),
-                                hasExtensions: hasExt, sizeBytes: size)
-        if !url.standardizedFileURL.path.hasPrefix(DownloadsLibrary.root.standardizedFileURL.path) {
-            DownloadsLibrary.shared.add(ipa: ipa, bundleID: bid, name: name, version: version, size: size, icon: pending?.icon)
+    /// Transactional editor. PendingImport is replaced only after the changed
+    /// Payload *and* the saved refresh IPA are ready.
+    func editPending(_ options: IPAEditOptions, libraries: [URL]) async throws {
+        guard let p = pending, busy == nil else { throw SideloadError.message("No editable IPA is ready.") }
+        busy = L.isArabic ? "عم نجهز التعديلات" : "Preparing edits"
+        MirsaInstallActivity.shared.setPhase(.preparing, title: p.name)
+        defer { busy = nil }
+        do {
+            let edited = try await Task.detached { try IPAEditorService.prepare(p, options: options, libraries: libraries) }.value
+            guard pending?.id == p.id else {
+                try? FileManager.default.removeItem(at: edited.stage)
+                try? FileManager.default.removeItem(at: edited.ipa)
+                throw SideloadError.message("The import was cancelled.")
+            }
+            pending = PendingImport(id: p.id, originalIPA: edited.ipa, extractedApp: edited.app,
+                                    workDir: p.workDir, bundleID: options.bundleID.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    name: options.displayName.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    version: options.version.trimmingCharacters(in: .whitespacesAndNewlines),
+                                    icon: Self.findIcon(in: edited.app, info: edited.info),
+                                    wantsNotifications: p.wantsNotifications, hasExtensions: p.hasExtensions,
+                                    sizeBytes: edited.size, editOptions: options)
+            // x/ remains the immutable baseline for future editor sessions.
+            if p.extractedApp.deletingLastPathComponent().lastPathComponent == "Payload" {
+                let oldStage = p.extractedApp.deletingLastPathComponent().deletingLastPathComponent()
+                if oldStage.lastPathComponent.hasPrefix("edit-") { try? FileManager.default.removeItem(at: oldStage) }
+            }
+            if p.originalIPA.lastPathComponent.hasPrefix("edited-") { try? FileManager.default.removeItem(at: p.originalIPA) }
+            MirsaInstallActivity.shared.setPhase(.ready, title: options.displayName)
+        } catch {
+            MirsaInstallActivity.shared.setPhase(.ready, title: p.name)
+            throw error
         }
     }
 
@@ -408,7 +452,9 @@ final class AppsStore: ObservableObject {
     }
 
     func cancelPending() {
-        if let p = pending { try? FileManager.default.removeItem(at: p.workDir) }
+        guard busy == nil, let p = pending else { return }
+        MirsaInstallActivity.shared.cancel()
+        try? FileManager.default.removeItem(at: p.workDir)
         pending = nil
     }
 
@@ -422,7 +468,7 @@ final class AppsStore: ObservableObject {
         // Keep the original IPA: needed for refresh and for moving between locations.
         let orig = Self.originalIPA(p.bundleID)
         try? fm.removeItem(at: orig)
-        do { try fm.moveItem(at: p.originalIPA, to: orig) } catch { self.error = error.localizedDescription; return }
+        do { try fm.moveItem(at: p.originalIPA, to: orig) } catch { self.error = error.localizedDescription; MirsaInstallActivity.shared.finish(success: false); return }
         if let icon = p.icon, let png = icon.pngData() { try? png.write(to: Self.iconURL(p.bundleID)) }
 
         var app = apps.first(where: { $0.id == p.bundleID }) ?? ManagedApp(
@@ -433,6 +479,7 @@ final class AppsStore: ObservableObject {
             await backupData(app, quiet: true)
         }
         app.name = p.name; app.version = p.version; app.sizeBytes = p.sizeBytes
+        app.wantsNotifications = p.wantsNotifications; app.hasExtensions = p.hasExtensions
 
         switch location {
         case .container:
@@ -450,6 +497,9 @@ final class AppsStore: ObservableObject {
     // MARK: Container
 
     private func installToContainer(_ app: inout ManagedApp, extracted: URL?) async -> Bool {
+        MirsaInstallActivity.shared.setPhase(.signing, title: app.name)
+        var activitySucceeded = false
+        defer { MirsaInstallActivity.shared.finish(success: activitySucceeded) }
         guard await ensureSession() else { error = L.t("err.notSignedIn"); return false }
         busy = L.t("busy.signing")
         defer { busy = nil }
@@ -463,9 +513,10 @@ final class AppsStore: ObservableObject {
                 let tmp = fm.temporaryDirectory.appendingPathComponent("c-\(UUID().uuidString)")
                 defer { try? fm.removeItem(at: tmp) }
                 let ipa = Self.originalIPA(app.id).path
-                guard await Task.detached(operation: { SideloadService.unzip(ipa, to: tmp.path) }).value,
-                      let a = (try? fm.contentsOfDirectory(at: tmp.appendingPathComponent("Payload"), includingPropertiesForKeys: nil))?
-                        .first(where: { $0.pathExtension == "app" }) else { throw SideloadError.message(L.t("err.badIPA")) }
+                let a = try await Task.detached {
+                    try IPAEditorService.run("extract", input: URL(fileURLWithPath: ipa), output: tmp)
+                    return try IPAEditorService.app(in: tmp)
+                }.value
                 try fm.moveItem(at: a, to: dest)
             }
             let path = dest.path
@@ -477,6 +528,7 @@ final class AppsStore: ObservableObject {
             app.expires = nil
             try? fm.createDirectory(at: Self.dataDir(app.id), withIntermediateDirectories: true)
             toast = L.f("toast.installed", app.name)
+            activitySucceeded = true
             return true
         } catch {
             try? fm.removeItem(at: dest)
@@ -595,6 +647,9 @@ final class AppsStore: ObservableObject {
     // MARK: Real apps
 
     private func installAsReal(_ app: inout ManagedApp, vm: AppViewModel?) async -> Bool {
+        MirsaInstallActivity.shared.setPhase(.signing, title: app.name)
+        var activitySucceeded = false
+        defer { MirsaInstallActivity.shared.finish(success: activitySucceeded) }
         let alreadyReal = app.location == .real && apps.contains(where: { $0.id == app.id && $0.location == .real })
         if !alreadyReal && slotsLeft <= 0 { error = L.t("choice.full"); return false }
         guard networkReady(vm) else { error = L.t("err.vpn"); return false }
@@ -604,8 +659,12 @@ final class AppsStore: ObservableObject {
         let ipa = Self.originalIPA(app.id).path
         do {
             let o = try await Task.detached {
-                try SideloadService.install(appPath: ipa) { f, _ in
-                    Task { @MainActor in AppsStore.shared.progress = f }
+                try SideloadService.install(appPath: ipa) { f, stage in
+                    Task { @MainActor in
+                        AppsStore.shared.progress = f
+                        if stage == "Installing", f == 0.5 { MirsaInstallActivity.shared.setPhase(.installing) }
+                        MirsaInstallActivity.shared.updateProgress(f)
+                    }
                 }
             }.value
             app.location = .real
@@ -614,6 +673,7 @@ final class AppsStore: ObservableObject {
             else { app.expires = Date().addingTimeInterval(7 * 86_400) }
             toast = L.f("toast.installed", app.name)
             await refreshAccount()
+            activitySucceeded = true
             return true
         } catch {
             self.error = Self.friendly(error)
@@ -690,6 +750,9 @@ final class AppsStore: ObservableObject {
     /// Container apps must be signed by the same team as the AirCard that loads
     /// them. This installs a copy of AirCard signed with the user's Apple ID.
     func installSelf(vm: AppViewModel?, from source: URL? = nil) async {
+        MirsaInstallActivity.shared.setPhase(.signing, title: "Mirsa")
+        var activitySucceeded = false
+        defer { MirsaInstallActivity.shared.finish(success: activitySucceeded) }
         guard networkReady(vm) else { error = L.t("err.vpn"); return }
         guard await ensureSession() else { error = L.t("err.notSignedIn"); return }
         busy = L.t("busy.installing"); progress = 0
@@ -728,11 +791,18 @@ final class AppsStore: ObservableObject {
             }
             let path = copy.path
             let o = try await Task.detached {
-                try SideloadService.install(appPath: path) { f, _ in Task { @MainActor in AppsStore.shared.progress = f } }
+                try SideloadService.install(appPath: path) { f, stage in
+                    Task { @MainActor in
+                        AppsStore.shared.progress = f
+                        if stage == "Installing", f == 0.5 { MirsaInstallActivity.shared.setPhase(.installing) }
+                        MirsaInstallActivity.shared.updateProgress(f)
+                    }
+                }
             }.value
             installedSelfBundleID = o["bundle_id"] as? String
             needsRepair = false
             toast = L.f("toast.installed", "Mirsa")
+            activitySucceeded = true
         } catch { self.error = Self.friendly(error) }
     }
 

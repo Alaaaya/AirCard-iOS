@@ -646,6 +646,8 @@ struct InstallChoiceSheet: View {
     @ObservedObject var store: AppsStore
     let onChoose: (AppLocation) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var showEditor = false
+    private var current: PendingImport { store.pending ?? pending }
     @State private var showLogin = false
     @State private var afterLogin: AppLocation?
 
@@ -656,6 +658,22 @@ struct InstallChoiceSheet: View {
                 VStack(spacing: 18) {
                     Capsule().fill(.white.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
                     appHeader
+                    Button { showEditor = true } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "slider.horizontal.3").font(.title3)
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(L.isArabic ? "تعديل التطبيق والتويكس" : "Edit IPA & inject tweaks").font(.headline)
+                                Text(L.isArabic ? "الاسم، الأيقونة، الإصدار وملفاتك الخاصة" : "Name, icon, version and your own code")
+                                    .font(.caption).foregroundStyle(.white.opacity(0.6))
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        }
+                        .foregroundStyle(.white).padding(16).appsGlass(cornerRadius: 22, tint: .purple)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.busy != nil)
+
 
                     optionCard(selected: true,
                                icon: "shippingbox.fill", iconTint: Color(red: 0.5, green: 0.4, blue: 1),
@@ -702,6 +720,10 @@ struct InstallChoiceSheet: View {
             }
         }
         .preferredColorScheme(.dark)
+        .environment(\.layoutDirection, .leftToRight)
+        .sheet(isPresented: $showEditor) {
+            IPAEditorView(pending: current, store: store)
+        }
         .sheet(isPresented: $showLogin, onDismiss: {
             if let l = afterLogin, store.account != nil {
                 afterLogin = nil
@@ -725,17 +747,17 @@ struct InstallChoiceSheet: View {
     private var appHeader: some View {
         HStack(spacing: 14) {
             Group {
-                if let i = pending.icon { Image(uiImage: i).resizable().scaledToFill() }
-                else { Color.purple.overlay(Text(String(pending.name.prefix(1))).font(.title.bold()).foregroundStyle(.white)) }
+                if let i = current.icon { Image(uiImage: i).resizable().scaledToFill() }
+                else { Color.purple.overlay(Text(String(current.name.prefix(1))).font(.title.bold()).foregroundStyle(.white)) }
             }
             .frame(width: 72, height: 72)
             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))
             .shadow(color: .black.opacity(0.35), radius: 8, y: 4)
             VStack(alignment: .leading, spacing: 4) {
-                Text(L.f("choice.title", pending.name)).font(.title3.bold()).foregroundStyle(.white)
-                Text("\(pending.version) · \(ByteCountFormatter.string(fromByteCount: pending.sizeBytes, countStyle: .file))")
+                Text(L.f("choice.title", current.name)).font(.title3.bold()).foregroundStyle(.white)
+                Text("\(current.version) · \(ByteCountFormatter.string(fromByteCount: current.sizeBytes, countStyle: .file))")
                     .font(.subheadline).foregroundStyle(.white.opacity(0.65))
-                Text(pending.bundleID).font(.caption2).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
+                Text(current.bundleID).font(.caption2).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
             }
             Spacer()
         }
