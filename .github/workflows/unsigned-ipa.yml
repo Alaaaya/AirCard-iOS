@@ -52,7 +52,6 @@ jobs:
       - name: Build unsigned IPA
         run: |
           bash build-ipa.sh
-          mv build/AirCard-iOS.ipa build/Mirsa.ipa
 
       - uses: actions/upload-artifact@v4
         with:

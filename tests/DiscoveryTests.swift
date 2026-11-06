@@ -3,7 +3,7 @@ import Foundation
 #if canImport(DiscoveryKit)
 @testable import DiscoveryKit
 #else
-@testable import AirCard_iOS
+@testable import Mirsa
 #endif
 
 // MARK: - zip / macho builders

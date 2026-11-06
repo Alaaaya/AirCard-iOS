@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import AirCard_iOS
+@testable import Mirsa
 
 private final class SnapshotSecrets: HiddenSecretStore {
     var d: [String: Data] = [:]

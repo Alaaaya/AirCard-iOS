@@ -2,7 +2,7 @@ import XCTest
 #if canImport(DiscoveryKit)
 @testable import DiscoveryKit
 #else
-@testable import AirCard_iOS
+@testable import Mirsa
 #endif
 
 private final class MemSecrets: HiddenSecretStore {

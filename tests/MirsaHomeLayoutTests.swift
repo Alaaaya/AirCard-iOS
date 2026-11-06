@@ -1,5 +1,5 @@
 import XCTest
-@testable import AirCard_iOS
+@testable import Mirsa
 
 final class MirsaHomeLayoutTests: XCTestCase {
     private func base() -> MirsaHomeLayout { MirsaHomeLayout.fromLegacy(order: ["a", "b", "c", "d"]) }

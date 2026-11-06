@@ -1,5 +1,5 @@
 import XCTest
-@testable import AirCard_iOS
+@testable import Mirsa
 
 @_silgen_name("mirsa_verify_profile_signer_chain")
 private func verifyProfileSigner(_ signer: UnsafePointer<UInt8>?, _ signerLength: Int,

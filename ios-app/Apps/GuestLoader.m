@@ -38,18 +38,18 @@ static NSString *const kErrorKey  = @"aircard.guest.lastError";
 
 static NSBundle *gGuestBundle = nil;
 
-static NSBundle *AirCardGuestMainBundle(id self, SEL _cmd) {
+static NSBundle *MirsaGuestMainBundle(id self, SEL _cmd) {
     return gGuestBundle;
 }
 
-static void AirCardGuestFail(NSString *msg) {
+static void MirsaGuestFail(NSString *msg) {
     NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
     [d setObject:msg forKey:kErrorKey];
     [d synchronize];
-    NSLog(@"[AirCard Container] %@", msg);
+    NSLog(@"[Mirsa Container] %@", msg);
 }
 
-static const struct mach_header_64 *AirCardFindImage(const char *path) {
+static const struct mach_header_64 *MirsaFindImage(const char *path) {
     char want[PATH_MAX];
     if (!realpath(path, want)) strlcpy(want, path, sizeof(want));
     uint32_t n = _dyld_image_count();
@@ -65,7 +65,7 @@ static const struct mach_header_64 *AirCardFindImage(const char *path) {
     return NULL;
 }
 
-static uint64_t AirCardEntryOffset(const struct mach_header_64 *h) {
+static uint64_t MirsaEntryOffset(const struct mach_header_64 *h) {
     const uint8_t *p = (const uint8_t *)(h + 1);
     for (uint32_t i = 0; i < h->ncmds; i++) {
         const struct load_command *lc = (const struct load_command *)p;
@@ -81,7 +81,7 @@ static char *gOrigHome, *gOrigFixed, *gOrigTmp;
 
 /// Asks the kernel to validate the guest's signature and returns its reason
 /// (F_ADDFILESIGS_RETURN + F_CHECK_LV), for the error shown in Mirsa.
-NSString *AirCardKernelSignatureCheck(const char *path) {
+NSString *MirsaKernelSignatureCheck(const char *path) {
     int fd = open(path, O_RDONLY);
     if (fd < 0) return [NSString stringWithFormat:@"open errno=%d", errno];
     struct mach_header_64 h;
@@ -120,13 +120,13 @@ NSString *AirCardKernelSignatureCheck(const char *path) {
     return r;
 }
 
-static void AirCardRestoreEnv(void) {
+static void MirsaRestoreEnv(void) {
     if (gOrigHome) setenv("HOME", gOrigHome, 1); else unsetenv("HOME");
     if (gOrigFixed) setenv("CFFIXED_USER_HOME", gOrigFixed, 1); else unsetenv("CFFIXED_USER_HOME");
     if (gOrigTmp) setenv("TMPDIR", gOrigTmp, 1); else unsetenv("TMPDIR");
 }
 
-static void AirCardPrepareDataDir(NSString *data) {
+static void MirsaPrepareDataDir(NSString *data) {
     NSFileManager *fm = NSFileManager.defaultManager;
     for (NSString *sub in @[@"Documents", @"Library/Preferences", @"Library/Caches",
                             @"Library/Application Support", @"tmp"]) {
@@ -141,7 +141,7 @@ static void AirCardPrepareDataDir(NSString *data) {
 
 /// Returns only when no guest launch is pending or the launch failed.
 /// On success the guest's main() runs and the process exits with its status.
-int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
+int MirsaGuestLaunchIfRequested(int argc, char *argv[]) {
     @autoreleasepool {
         NSUserDefaults *d = NSUserDefaults.standardUserDefaults;
         NSString *bundlePath = [d stringForKey:kBundleKey];
@@ -156,7 +156,7 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
         NSBundle *guest = [NSBundle bundleWithPath:bundlePath];
         NSString *exe = guest.executablePath;
         if (!guest || exe.length == 0) {
-            AirCardGuestFail([NSString stringWithFormat:@"Guest bundle missing: %@", bundlePath]);
+            MirsaGuestFail([NSString stringWithFormat:@"Guest bundle missing: %@", bundlePath]);
             return -1;
         }
 
@@ -166,32 +166,32 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
         gOrigHome = oh ? strdup(oh) : NULL;
         gOrigFixed = oc ? strdup(oc) : NULL;
         gOrigTmp = ot ? strdup(ot) : NULL;
-        if (dataPath.length) AirCardPrepareDataDir(dataPath);
+        if (dataPath.length) MirsaPrepareDataDir(dataPath);
 
         // +[NSBundle mainBundle] -> guest bundle (Info.plist, resources, bundle id).
         gGuestBundle = guest;
         Method m = class_getClassMethod(NSBundle.class, @selector(mainBundle));
-        IMP original = method_setImplementation(m, (IMP)AirCardGuestMainBundle);
+        IMP original = method_setImplementation(m, (IMP)MirsaGuestMainBundle);
 
         void *handle = dlopen(exe.fileSystemRepresentation, RTLD_LAZY | RTLD_GLOBAL);
         if (!handle) {
             const char *err = dlerror();
-            NSString *kc = AirCardKernelSignatureCheck(exe.fileSystemRepresentation);
-            AirCardGuestFail([NSString stringWithFormat:@"[kernel] %@\n\ndlopen failed: %s", kc, err ? err : "unknown"]);
+            NSString *kc = MirsaKernelSignatureCheck(exe.fileSystemRepresentation);
+            MirsaGuestFail([NSString stringWithFormat:@"[kernel] %@\n\ndlopen failed: %s", kc, err ? err : "unknown"]);
             // Restore so AirCard itself keeps working.
             gGuestBundle = nil;
             method_setImplementation(m, original);
-            AirCardRestoreEnv();
+            MirsaRestoreEnv();
             return -1;
         }
 
-        const struct mach_header_64 *h = AirCardFindImage(exe.fileSystemRepresentation);
-        uint64_t off = h ? AirCardEntryOffset(h) : 0;
+        const struct mach_header_64 *h = MirsaFindImage(exe.fileSystemRepresentation);
+        uint64_t off = h ? MirsaEntryOffset(h) : 0;
         if (!h || off == 0) {
-            AirCardGuestFail(@"Guest has no LC_MAIN entry point");
+            MirsaGuestFail(@"Guest has no LC_MAIN entry point");
             gGuestBundle = nil;
             method_setImplementation(m, original);
-            AirCardRestoreEnv();
+            MirsaRestoreEnv();
             return -1;
         }
 
@@ -200,7 +200,7 @@ int AirCardGuestLaunchIfRequested(int argc, char *argv[]) {
 
         char *gargv[2] = { (char *)exe.fileSystemRepresentation, NULL };
         char *apple[1] = { NULL };
-        NSLog(@"[AirCard Container] launching %@", guest.bundleIdentifier);
+        NSLog(@"[Mirsa Container] launching %@", guest.bundleIdentifier);
         int rc = entry(1, gargv, *_NSGetEnviron(), apple);
         exit(rc);
     }
@@ -222,7 +222,7 @@ char *MirsaProcessFlags(void) {
 }
 
 char *MirsaKernelCheck(const char *path) {
-    return strdup(AirCardKernelSignatureCheck(path).UTF8String);
+    return strdup(MirsaKernelSignatureCheck(path).UTF8String);
 }
 
 // Relaunch Mirsa straight into the guest app: ask LaunchServices to open our

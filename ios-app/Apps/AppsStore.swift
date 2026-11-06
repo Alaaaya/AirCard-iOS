@@ -810,7 +810,7 @@ final class AppsStore: ObservableObject {
         defer { busy = nil }
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent("self-\(UUID().uuidString)", isDirectory: true)
-        let copy = tmp.appendingPathComponent("AirCard.app", isDirectory: true)
+        let copy = tmp.appendingPathComponent("Mirsa.app", isDirectory: true)
         defer { try? fm.removeItem(at: tmp) }
         do {
             try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
