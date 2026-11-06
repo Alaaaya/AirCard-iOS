@@ -98,6 +98,15 @@ pub(crate) fn validate_profile(p: &ProvisioningProfile, cert: &[u8], udid: &str,
         .is_some_and(|t| t != p.team_id()) { return Err("فريق البروفايل غير متطابق.".into()); }
     Ok(())
 }
+fn validate_key_certificate(key: &[u8], cert: &x509_cert::Certificate) -> Result<(),String> {
+    use rsa::{pkcs8::DecodePrivateKey, pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey}};
+    let private = rsa::RsaPrivateKey::from_pkcs8_der(key)
+        .or_else(|_| rsa::RsaPrivateKey::from_pkcs1_der(key)).map_err(|_| "المفتاح الخاص RSA غير صالح.")?;
+    let bits = cert.tbs_certificate.subject_public_key_info.subject_public_key.as_bytes().ok_or("الشهادة غير صالحة.")?;
+    let public = rsa::RsaPublicKey::from_pkcs1_der(bits).map_err(|_| "شهادة RSA غير صالحة.")?;
+    if public != rsa::RsaPublicKey::from(&private) { return Err("المفتاح الخاص ما بيطابق الشهادة المختارة.".into()); }
+    Ok(())
+}
 fn actual_udid(pairing_path: &str) -> Result<String,String> {
     if pairing_path.is_empty() { return Err("وصل الجهاز وفعّل الاقتران أولاً للتحقق من UDID الحقيقي.".into()); }
     let bytes = std::fs::read(pairing_path).map_err(|_| "تعذّر قراءة ملف الاقتران.")?;
@@ -179,6 +188,7 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
         nested::check_macho_file(file)?;
     }
     let key = decoder.decode(key).map_err(|_| "المفتاح الخاص غير صالح.")?;
+    validate_key_certificate(&key, &x509)?;
     let signer = RustCryptoCmsSigner::from_der(&key, &cert, profiles[0].parsed.certificate_chain_der())
         .map_err(|_| "استخدم شهادة Apple RSA مع مفتاحها الخاص المطابق.")?;
     nested::apply_removals(app, opts)?;
@@ -251,5 +261,21 @@ mod authorization_tests {
         assert!(validate_profile(&p,cert,"",now).is_err());
         assert!(validate_profile(&p,b"wrong","REAL-TEST-DEVICE",now).is_err());
         assert!(validate_profile(&p,cert,"REAL-TEST-DEVICE",UNIX_EPOCH+std::time::Duration::from_secs(2200000000)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod key_binding_tests {
+    use super::*;
+    #[test] fn selected_certificate_must_match_actual_private_key() {
+        use isideload_p12_keystore::{KeyStore,KeyStoreEntry,Pkcs12ImportPolicy};
+        let store=KeyStore::from_pkcs12(include_bytes!("../tests/p12-fixtures/modern.p12"),"mirsa-test",Pkcs12ImportPolicy::Raw).unwrap();
+        let key=store.entries().find_map(|(_,e)| if let KeyStoreEntry::PrivateKeyChain(c)=e {Some(c.key().as_der().to_vec())} else {None}).unwrap();
+        let cert=x509_cert::Certificate::from_der(include_bytes!("../tests/p12-fixtures/leaf.der")).unwrap();
+        assert!(validate_key_certificate(&key,&cert).is_ok());
+        use rsa::pkcs8::EncodePrivateKey;
+        let n=rsa::BigUint::from(3233u32); let e=rsa::BigUint::from(17u32); let d=rsa::BigUint::from(2753u32);
+        let wrong=rsa::RsaPrivateKey::from_components(n,e,d,vec![rsa::BigUint::from(61u32),rsa::BigUint::from(53u32)]).unwrap();
+        assert!(validate_key_certificate(wrong.to_pkcs8_der().unwrap().as_bytes(),&cert).is_err());
     }
 }
