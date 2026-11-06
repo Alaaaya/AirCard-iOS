@@ -10,6 +10,7 @@ public func aircardSwiftMain() {
 struct AirCardApp: App {
     @UIApplicationDelegateAdaptor(MirsaDownloadAppDelegate.self) private var downloadDelegate
     @StateObject private var vm = AppViewModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
         // Route Rust tracing/idevice logs into the app's vm log array.
@@ -37,6 +38,9 @@ struct AirCardApp: App {
                 if AppsStore.isSetupMode { SetupView() } else { ContentView() }
             }
             .environmentObject(vm)
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                WindowsHandoff.shared.setActive(phase == .active)
+            }
         }
     }
 }
