@@ -11,8 +11,8 @@ import Glibc
 /// redirect hops) goes through this policy. HTTPS only, public DNS names only.
 /// IP literals are rejected outright: an IPA host is never a bare address, and
 /// refusing them also covers decimal / hex / octal tricks.
-/// Limit: DNS rebinding cannot be fully excluded client-side, so the policy is
-/// re-applied on every redirect hop and size/time limits bound the damage.
+/// IPA connections additionally use the pinned Rust transport; URL policy
+/// alone is not a DNS rebinding defense.
 enum DiscoveryURLPolicy {
     enum Violation: Error, Equatable, CustomStringConvertible {
         case notHTTPS, noHost, credentialsInURL, badPort, localHost, ipLiteral, tooLong, blockedSource

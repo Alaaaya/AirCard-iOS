@@ -1,8 +1,13 @@
 import Foundation
+#if canImport(AirliftFFI)
+import AirliftFFI
+#endif
 
-/// Bounded IPA download. HTTPS policy on the first URL and every redirect hop,
-/// capped size, capped time, HTML/CAPTCHA/expiry pages reported explicitly.
-final class DiscoveryDownloader: NSObject, URLSessionDownloadDelegate {
+/// Shared by candidate verification AND the accepted-card download path.
+/// Rust reqwest pins the vetted DNS addresses for each socket, retains the
+/// original hostname for TLS/SNI and manually revalidates every redirect.
+/// There is deliberately no URLSession fallback.
+final class DiscoveryDownloader {
     struct Limits { var maxBytes: Int64 = 3 * 1024 * 1024 * 1024; var maxRedirects = 5; var requestTimeout: TimeInterval = 30; var totalTimeout: TimeInterval = 1800 }
 
     enum Failure: Error, LocalizedError, Equatable {
@@ -22,81 +27,72 @@ final class DiscoveryDownloader: NSObject, URLSessionDownloadDelegate {
         }
     }
 
+
     private let limits: Limits
-    private var session: URLSession!
-    private var continuation: CheckedContinuation<URL, Error>?
-    private var redirects = 0
-    private var failure: Failure?
-    private var progressHandler: ((Double) -> Void)?
-    private var task: URLSessionDownloadTask?
-
-    init(limits: Limits = Limits()) {
-        self.limits = limits
-        super.init()
-        let c = URLSessionConfiguration.ephemeral
-        c.timeoutIntervalForRequest = limits.requestTimeout
-        c.timeoutIntervalForResource = limits.totalTimeout
-        c.httpCookieStorage = nil
-        session = URLSession(configuration: c, delegate: self, delegateQueue: nil)
+    #if canImport(AirliftFFI)
+    private final class Cancellation: @unchecked Sendable {
+        let pointer: UnsafeMutableRawPointer?
+        init() { pointer = al_discovery_cancel_new() }
+        deinit { al_discovery_cancel_free(pointer) }
+        func cancel() { al_discovery_cancel(pointer) }
     }
+    private let cancellation = Cancellation()
+    #endif
 
-    func cancel() { failure = .cancelled; task?.cancel() }
+    init(limits: Limits = Limits()) { self.limits = limits }
+
+    func cancel() {
+        #if canImport(AirliftFFI)
+        cancellation.cancel()
+        #endif
+    }
 
     func download(_ url: URL, progress: @escaping (Double) -> Void) async throws -> URL {
         if let v = DiscoveryURLPolicy.check(url) { throw Failure.unsafe(v.description) }
-        guard await DiscoveryDNSPolicy.permits(url) else { throw Failure.unsafe("Non-public DNS destination refused.") }
-        progressHandler = progress
-        return try await withCheckedThrowingContinuation { cont in
-            continuation = cont
-            let t = session.downloadTask(with: url)
-            task = t
-            t.resume()
-        }
-    }
-
-    private func finish(_ r: Result<URL, Error>) {
-        guard let c = continuation else { return }
-        continuation = nil
-        session.finishTasksAndInvalidate()
-        c.resume(with: r)
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        redirects += 1
-        if redirects > limits.maxRedirects { failure = .tooManyRedirects; task.cancel(); completionHandler(nil); return }
-        guard let target = request.url else { failure = .unsafe("Missing redirect URL."); task.cancel(); completionHandler(nil); return }
-        if let v = DiscoveryURLPolicy.check(target) { failure = .unsafe("Redirect refused: " + v.description); task.cancel(); completionHandler(nil); return }
-        Task {
-            guard await DiscoveryDNSPolicy.permits(target) else {
-                failure = .unsafe("Redirect to a non-public DNS destination refused.")
-                task.cancel(); completionHandler(nil); return
-            }
-            completionHandler(request)
-        }
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64,
-                    totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        if totalBytesWritten > limits.maxBytes || totalBytesExpectedToWrite > limits.maxBytes { failure = .tooBig; downloadTask.cancel(); return }
-        if totalBytesExpectedToWrite > 0 { progressHandler?(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)) }
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        if let h = downloadTask.response as? HTTPURLResponse {
-            if !(200..<300).contains(h.statusCode) { failure = .http(h.statusCode); return }
-            let ct = (h.value(forHTTPHeaderField: "Content-Type") ?? "").lowercased()
-            if ct.contains("text/html") { failure = .htmlPage; return }
-        }
+        #if canImport(AirliftFFI)
         let dest = FileManager.default.temporaryDirectory.appendingPathComponent("discovery-\(UUID().uuidString).ipa")
-        do { try FileManager.default.moveItem(at: location, to: dest); finish(.success(dest)) }
-        catch { failure = .network(error.localizedDescription) }
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let f = failure { finish(.failure(f)); return }
-        if let error { finish(.failure(Failure.network(error.localizedDescription))); return }
-        // success path already resumed in didFinishDownloadingTo
-        finish(.failure(Failure.network("No file received.")))
+        let token = cancellation
+        let maxBytes = UInt64(max(0, limits.maxBytes))
+        let seconds = UInt64(max(1, min(1800, limits.totalTimeout)))
+        let source = url.absoluteString
+        progress(0)
+        return try await withTaskCancellationHandler(operation: {
+            let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
+                // Dedicated GCD worker, not a Tokio thread or a MainActor task.
+                DispatchQueue.global(qos: .utility).async {
+                    let error = source.withCString { sourcePtr in
+                        dest.path.withCString { destPtr in
+                            al_discovery_download(sourcePtr, destPtr, maxBytes, seconds, token.pointer)
+                        }
+                    }
+                    if let error {
+                        let message = String(cString: error)
+                        al_string_free(error)
+                        try? FileManager.default.removeItem(at: dest)
+                        continuation.resume(throwing: Failure.network(message))
+                        return
+                    }
+                    do {
+                        // Bytes must describe an actual bounded IPA, even when
+                        // a caller forgets to run the richer identity check.
+                        var archiveLimits = IPALimits()
+                        archiveLimits.maxFileSize = maxBytes
+                        _ = try IPAValidator.validate(file: dest, expectedBundleID: nil,
+                            expectedVersion: nil, deviceOS: nil, limits: archiveLimits)
+                        continuation.resume(returning: dest)
+                    } catch {
+                        try? FileManager.default.removeItem(at: dest)
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            progress(1)
+            return result
+        }, onCancel: { token.cancel() })
+        #else
+        // Pure Swift policy-test builds have no Rust transport. Never silently
+        // restore the vulnerable unpinned URLSession path.
+        throw Failure.unsafe("Pinned download transport is unavailable.")
+        #endif
     }
 }

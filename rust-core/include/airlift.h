@@ -27,6 +27,14 @@ int32_t al_log_init(ALLogCallback cb, void *ctx);
 // Free any char* returned by this library.
 void al_string_free(char *p);
 
+// Opaque cancellation token, owned by the Swift download operation. Never free
+// until its blocking worker returns. No URL/headers/secrets in returned errors.
+void *al_discovery_cancel_new(void);
+void al_discovery_cancel(void *token);
+void al_discovery_cancel_free(void *token);
+char *al_discovery_download(const char *url, const char *dest, uint64_t max_bytes,
+                            uint64_t total_seconds, const void *token);
+
 // ---------------------------------------------------------------------------
 // Pairing — RPPairing host
 // ---------------------------------------------------------------------------
