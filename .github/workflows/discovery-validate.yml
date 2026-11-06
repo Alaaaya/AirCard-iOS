@@ -23,7 +23,7 @@ jobs:
             products: [.library(name: "DiscoveryKit", targets: ["DiscoveryKit"])],
             targets: [.target(name: "DiscoveryKit"), .testTarget(name: "DiscoveryKitTests", dependencies: ["DiscoveryKit"])])
           EOF
-          cd dk && swift test 2>&1 | tee /tmp/t.log | tail -80
+          cd dk && swift test 2>&1 | tee /tmp/t.log
   backend:
     runs-on: ubuntu-latest
     steps:
