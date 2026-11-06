@@ -299,24 +299,24 @@ struct AppsTab: View {
     }
 
     private var segmentControl: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 4) {
             segButton(.container, title: L.t("seg.container"), trailing: "∞")
             segButton(.real, title: L.t("seg.real"), trailing: "\(store.slotsUsed)/\(store.realLimit)")
             segButton(.downloads, title: tr("Downloads", "التنزيلات"), trailing: "\(downloads.items.count)")
         }
+        .frame(maxWidth: .infinity)
         .padding(4)
         .appsGlassCapsule()
         .environment(\.layoutDirection, .leftToRight)
-        }
     }
 
     private func segButton(_ s: AppsSegment, title: String, trailing: String) -> some View {
         Button {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) { segment = s }
         } label: {
-            HStack(spacing: 6) {
-                Text(title).font(.subheadline.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+            VStack(spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.7).allowsTightening(true)
                 Text(trailing)
                     .font(.caption.weight(.bold).monospacedDigit())
                     .foregroundStyle(.white.opacity(segment == s ? 0.9 : 0.5))
@@ -336,6 +336,8 @@ struct AppsTab: View {
             }
         }
         .buttonStyle(.plain)
+        .frame(minWidth: 0, maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     private var currentApps: [ManagedApp] { segment == .container ? store.containerApps : store.realApps }

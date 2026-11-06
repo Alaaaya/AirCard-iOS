@@ -33,3 +33,14 @@ Do not request private certificates in chat or promise an untested format fix.
 Required device acceptance
 Settings has no Choose IPA/sign-export. Import in hub, select app Sign,
 saved identity required, successful signed output remains in personal library.
+
+## Main Apps segmented control regression
+Source cause confirmed: leftover horizontal ScrollView proposes unbounded horizontal
+space to its HStack. Inner flexible frames then do not expand to the parent viewport.
+Screenshot matches the resulting short intrinsic-width pill. Removed horizontal
+ScrollView, constrained full viewport width, gave each button equal flexible width.
+Moved counts to compact second line to preserve long Arabic labels on narrow phones.
+Both themes share this same control; themed background and LTR are unchanged.
+Static regression checks cover widths 320, 375, 393, 430 with 40pt parent inset,
+8pt control inset, two 4pt gaps: equal finite segments remain inside available width.
+Actual glyph layout/Dynamic Type and theme screenshots still need device/simulator checks.
