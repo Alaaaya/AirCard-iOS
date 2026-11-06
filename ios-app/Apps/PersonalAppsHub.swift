@@ -366,9 +366,9 @@ struct PersonalAppsHub: View {
                         }.frame(maxWidth: .infinity).padding(24).appsGlass()
                     }
                     if gridMode {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 18) {
-                            ForEach(sortedApps) { app in compactTile(app).contextMenu { appMenu(app) } }
-                        }
+                        PersonalAppsHome(apps: sortedApps, allAppIDs: library.apps.map(\.id), library: library,
+                                         onOpen: { detail = $0 }, menu: { appMenu($0) }, iconOverlay: { _ in EmptyView() })
+                            .frame(minHeight: 520)
                     } else {
                     ForEach(sortedApps) { app in
                         projectCard(app)

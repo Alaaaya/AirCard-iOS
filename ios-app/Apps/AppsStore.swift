@@ -68,6 +68,7 @@ final class AppsStore: ObservableObject {
     @Published var downloadHasKnownSize = false
     var downloadTask: Task<URL, Error>?
     var downloadID: UUID?
+    var downloadOperationID: UUID?
     @Published var pending: PendingImport? = nil
     @Published var prompt: SideloadPrompt? = nil
     @Published var error: String? = nil
@@ -351,6 +352,7 @@ final class AppsStore: ObservableObject {
 
     func importIPA(from url: URL) async {
         guard busy == nil, pending == nil else { return }
+        let feedbackID = UUID()
         busy = L.t("busy.importing")
         MirsaInstallActivity.shared.setPhase(.preparing, title: url.deletingPathExtension().lastPathComponent)
         var prepared = false
@@ -390,6 +392,7 @@ final class AppsStore: ObservableObject {
             MirsaInstallActivity.shared.setPhase(.ready, title: name)
         } catch {
             self.error = error.localizedDescription
+            MirsaCompletionFeedback.shared.finish(operationID: feedbackID, outcome: MirsaCompletionFeedback.outcome(for: error))
             try? fm.removeItem(at: work)
         }
     }
@@ -468,7 +471,12 @@ final class AppsStore: ObservableObject {
         // Keep the original IPA: needed for refresh and for moving between locations.
         let orig = Self.originalIPA(p.bundleID)
         try? fm.removeItem(at: orig)
-        do { try fm.moveItem(at: p.originalIPA, to: orig) } catch { self.error = error.localizedDescription; MirsaInstallActivity.shared.finish(success: false); return }
+        do { try fm.moveItem(at: p.originalIPA, to: orig) } catch {
+            self.error = error.localizedDescription
+            MirsaInstallActivity.shared.finish(success: false)
+            MirsaCompletionFeedback.shared.finish(operationID: p.id, outcome: MirsaCompletionFeedback.outcome(for: error))
+            return
+        }
         if let icon = p.icon, let png = icon.pngData() { try? png.write(to: Self.iconURL(p.bundleID)) }
 
         var app = apps.first(where: { $0.id == p.bundleID }) ?? ManagedApp(
@@ -499,7 +507,14 @@ final class AppsStore: ObservableObject {
     private func installToContainer(_ app: inout ManagedApp, extracted: URL?) async -> Bool {
         MirsaInstallActivity.shared.setPhase(.signing, title: app.name)
         var activitySucceeded = false
-        defer { MirsaInstallActivity.shared.finish(success: activitySucceeded) }
+        let operation = MirsaOperationProgress.shared.begin(appID: app.id, phase: .signing)
+        var operationOutcome: MirsaCompletionFeedback.Outcome = .failure
+        defer {
+            MirsaInstallActivity.shared.finish(success: activitySucceeded)
+            MirsaOperationProgress.shared.finish(operation)
+            MirsaCompletionFeedback.shared.finish(operationID: operation,
+                outcome: activitySucceeded ? .success : operationOutcome)
+        }
         guard await ensureSession() else { error = L.t("err.notSignedIn"); return false }
         busy = L.t("busy.signing")
         defer { busy = nil }
@@ -532,6 +547,7 @@ final class AppsStore: ObservableObject {
             return true
         } catch {
             try? fm.removeItem(at: dest)
+            operationOutcome = MirsaCompletionFeedback.outcome(for: error)
             self.error = error.localizedDescription
             return false
         }
@@ -633,6 +649,13 @@ final class AppsStore: ObservableObject {
     }
 
     func resign(_ app: ManagedApp) async {
+        guard busy == nil else { return }
+        let operation = MirsaOperationProgress.shared.begin(appID: app.id, phase: .signing)
+        var outcome: MirsaCompletionFeedback.Outcome = .failure
+        defer {
+            MirsaOperationProgress.shared.finish(operation)
+            MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: outcome)
+        }
         guard await ensureSession() else { error = L.t("err.notSignedIn"); return }
         busy = L.t("busy.signing"); defer { busy = nil }
         var a = app
@@ -641,15 +664,28 @@ final class AppsStore: ObservableObject {
             let o = try await Task.detached { try SideloadService.containerSign(appDir: path) }.value
             a.signedSerial = o["cert_serial"] as? String
             upsert(a)
-        } catch { self.error = error.localizedDescription }
+            outcome = .success
+        } catch {
+            outcome = MirsaCompletionFeedback.outcome(for: error)
+            self.error = error.localizedDescription
+        }
     }
 
     // MARK: Real apps
 
-    private func installAsReal(_ app: inout ManagedApp, vm: AppViewModel?) async -> Bool {
+    private func installAsReal(_ app: inout ManagedApp, vm: AppViewModel?, feedback: Bool = true) async -> Bool {
         MirsaInstallActivity.shared.setPhase(.signing, title: app.name)
         var activitySucceeded = false
-        defer { MirsaInstallActivity.shared.finish(success: activitySucceeded) }
+        let operation = MirsaOperationProgress.shared.begin(appID: app.id, phase: .signing)
+        var operationOutcome: MirsaCompletionFeedback.Outcome = .failure
+        defer {
+            MirsaInstallActivity.shared.finish(success: activitySucceeded)
+            MirsaOperationProgress.shared.finish(operation)
+            if feedback {
+                MirsaCompletionFeedback.shared.finish(operationID: operation,
+                    outcome: activitySucceeded ? .success : operationOutcome)
+            }
+        }
         let alreadyReal = app.location == .real && apps.contains(where: { $0.id == app.id && $0.location == .real })
         if !alreadyReal && slotsLeft <= 0 { error = L.t("choice.full"); return false }
         guard networkReady(vm) else { error = L.t("err.vpn"); return false }
@@ -661,6 +697,11 @@ final class AppsStore: ObservableObject {
             let o = try await Task.detached {
                 try SideloadService.install(appPath: ipa) { f, stage in
                     Task { @MainActor in
+                        // The bridge mixes fixed milestones and transport callbacks under
+                        // the same stage label. Keep icons indeterminate, never show synthetic %.
+                        MirsaOperationProgress.shared.update(operation,
+                            phase: stage == "Installing" || stage == "Done" ? .installing : .signing,
+                            fraction: nil)
                         AppsStore.shared.progress = f
                         if stage == "Installing", f == 0.5 { MirsaInstallActivity.shared.setPhase(.installing) }
                         MirsaInstallActivity.shared.updateProgress(f)
@@ -676,6 +717,7 @@ final class AppsStore: ObservableObject {
             activitySucceeded = true
             return true
         } catch {
+            operationOutcome = MirsaCompletionFeedback.outcome(for: error)
             self.error = Self.friendly(error)
             return false
         }
@@ -699,13 +741,13 @@ final class AppsStore: ObservableObject {
         }
         for app in realApps where due(app.expires) {
             var a = app
-            if await installAsReal(&a, vm: vm) { upsert(a); n += 1 }
+            if await installAsReal(&a, vm: vm, feedback: false) { upsert(a); n += 1 }
         }
         await resignContainerIfCertChanged()
         if n > 0 { toast = L.f("toast.refreshed", n) }
         if withinDays != nil, let own = ownExpiry, due(own) {
             scheduleExpiryReminders()
-            await installSelf(vm: vm)
+            await installSelf(vm: vm, feedback: false)
         }
         return n
     }
@@ -749,10 +791,19 @@ final class AppsStore: ObservableObject {
 
     /// Container apps must be signed by the same team as the AirCard that loads
     /// them. This installs a copy of AirCard signed with the user's Apple ID.
-    func installSelf(vm: AppViewModel?, from source: URL? = nil) async {
+    func installSelf(vm: AppViewModel?, from source: URL? = nil, feedback: Bool = true) async {
         MirsaInstallActivity.shared.setPhase(.signing, title: "Mirsa")
         var activitySucceeded = false
-        defer { MirsaInstallActivity.shared.finish(success: activitySucceeded) }
+        let operation = MirsaOperationProgress.shared.begin(appID: "com.alaa.mirsa", phase: .signing)
+        var operationOutcome: MirsaCompletionFeedback.Outcome = .failure
+        defer {
+            MirsaInstallActivity.shared.finish(success: activitySucceeded)
+            MirsaOperationProgress.shared.finish(operation)
+            if feedback {
+                MirsaCompletionFeedback.shared.finish(operationID: operation,
+                    outcome: activitySucceeded ? .success : operationOutcome)
+            }
+        }
         guard networkReady(vm) else { error = L.t("err.vpn"); return }
         guard await ensureSession() else { error = L.t("err.notSignedIn"); return }
         busy = L.t("busy.installing"); progress = 0
@@ -793,6 +844,11 @@ final class AppsStore: ObservableObject {
             let o = try await Task.detached {
                 try SideloadService.install(appPath: path) { f, stage in
                     Task { @MainActor in
+                        // The bridge mixes fixed milestones and transport callbacks under
+                        // the same stage label. Keep icons indeterminate, never show synthetic %.
+                        MirsaOperationProgress.shared.update(operation,
+                            phase: stage == "Installing" || stage == "Done" ? .installing : .signing,
+                            fraction: nil)
                         AppsStore.shared.progress = f
                         if stage == "Installing", f == 0.5 { MirsaInstallActivity.shared.setPhase(.installing) }
                         MirsaInstallActivity.shared.updateProgress(f)
@@ -803,7 +859,8 @@ final class AppsStore: ObservableObject {
             needsRepair = false
             toast = L.f("toast.installed", "Mirsa")
             activitySucceeded = true
-        } catch { self.error = Self.friendly(error) }
+        } catch { operationOutcome = MirsaCompletionFeedback.outcome(for: error)
+            self.error = Self.friendly(error) }
     }
 
     /// Turn the raw connection error into something readable, keeping the detail.

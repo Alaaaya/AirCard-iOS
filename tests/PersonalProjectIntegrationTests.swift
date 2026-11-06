@@ -38,6 +38,40 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         try await snapshot(PersonalProjectDetailView(app: app), name: "Arabic-project-details-real-SwiftUI-fixture")
     }
 
+    func testTweakChipSnapshotHomeToggleAndHiddenUI() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "PersonalUIFixture", withExtension: "zip"))
+        let library = PersonalAppsLibrary.shared
+        let tweaks = IPATweakLibrary.shared
+        let defaults = UserDefaults.standard
+        let gridKey = "mirsa.personal.projects.grid"
+        let oldGrid = defaults.object(forKey: gridKey)
+        let beforeApps = Set(library.apps.map(\.id)), beforeTweaks = Set(tweaks.items.map(\.id))
+        // Harmless synthetic bytes named like a dylib; imported as data, never loaded or executed.
+        let dylib = FileManager.default.temporaryDirectory.appendingPathComponent("testdylib-\(UUID().uuidString).dylib")
+        try Data("not executable fixture".utf8).write(to: dylib)
+        defer {
+            try? FileManager.default.removeItem(at: dylib)
+            for t in tweaks.items where !beforeTweaks.contains(t.id) { try? tweaks.delete(t) }
+            for a in library.apps where !beforeApps.contains(a.id) { try? library.delete(a) }
+            if let oldGrid { defaults.set(oldGrid, forKey: gridKey) } else { defaults.removeObject(forKey: gridKey) }
+        }
+        try await library.add(fixture, signed: false)
+        let app = try XCTUnwrap(library.apps.first { !beforeApps.contains($0.id) })
+        try? await tweaks.addFile(dylib)
+        let tweak = tweaks.items.first { !beforeTweaks.contains($0.id) }
+        if let tweak {
+            var draft = PersonalProjectDraft(name: "Fixture", bundleID: app.bundleID, version: "1.0")
+            draft.tweakIDs = [tweak.id]
+            try JSONEncoder().encode(draft).write(to: library.draftURL(app), options: .atomic)
+            XCTAssertEqual(try JSONDecoder().decode(PersonalProjectDraft.self, from: Data(contentsOf: library.draftURL(app))).tweakIDs, [tweak.id])
+        }
+        defaults.set(false, forKey: gridKey)
+        try await snapshot(PersonalAppsHub(), name: "Personal-list-default-tweak-chip-x")
+        defaults.set(true, forKey: gridKey)
+        try await snapshot(PersonalAppsHub(), name: "Personal-home-toggle-grid")
+        try await snapshot(HiddenAppsView(store: HiddenAppsStore.shared) { PersonalHiddenGrid(apps: library.apps, pendingHide: .constant(nil)) }, name: "Arabic-hidden-apps-PIN-UI")
+    }
+
     private func snapshot<V: View>(_ view: V, name: String) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let original = scene.windows.first(where: \.isKeyWindow)

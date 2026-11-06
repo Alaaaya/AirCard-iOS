@@ -10,6 +10,8 @@ import UIKit
 
 extension AppsStore {
     func cancelDownload() {
+        guard isDownloading else { return }
+        if let operation = downloadOperationID { MirsaOperationProgress.shared.finish(operation) }
         MirsaInstallActivity.shared.cancel()
         downloadTask?.cancel()
         isDownloading = false
@@ -20,9 +22,17 @@ extension AppsStore {
 
     /// URLSession deletes partial downloads on cancellation (no resume data).
     /// The returned complete file belongs to the caller and must be removed.
-    func downloadIPA(from url: URL, message: String) async throws -> URL {
+    func downloadIPA(from url: URL, message: String, appID: String? = nil) async throws -> URL {
         guard downloadTask == nil, busy == nil else { throw CancellationError() }
         let id = UUID()
+        let knownID = appID.flatMap { candidate in apps.contains(where: { $0.id == candidate }) ? candidate : nil }
+        let operation = MirsaOperationProgress.shared.begin(appID: knownID, phase: .downloading,
+            cancel: { [weak self] in self?.cancelDownload() })
+        downloadOperationID = operation
+        defer {
+            MirsaOperationProgress.shared.finish(operation)
+            if downloadOperationID == operation { downloadOperationID = nil }
+        }
         downloadID = id
         busy = message
         progress = 0
@@ -32,6 +42,8 @@ extension AppsStore {
         let task = Task<URL, Error> {
             try await BackgroundIPADownloads.shared.download(url) { [weak self] received, expected in
                 guard let self, self.downloadID == id, self.isDownloading else { return }
+                MirsaOperationProgress.shared.update(operation, phase: .downloading,
+                    fraction: expected > 0 ? Double(received) / Double(expected) : nil)
                 self.downloadHasKnownSize = expected > 0
                 self.progress = expected > 0 ? min(1, max(0, Double(received) / Double(expected))) : 0
             }
@@ -45,6 +57,7 @@ extension AppsStore {
             progress = 0
             busy = nil
         }
+        do {
         return try await withTaskCancellationHandler {
             let file = try await task.value
             do {
@@ -58,6 +71,10 @@ extension AppsStore {
         } onCancel: {
             task.cancel()
         }
+        } catch {
+            MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: MirsaCompletionFeedback.outcome(for: error))
+            throw error
+        }
     }
 }
 
@@ -68,12 +85,12 @@ extension AppsStore {
     /// already managed) it installs straight away; otherwise the usual
     /// Container / Real App choice sheet appears.
     @discardableResult
-    func installFromURL(_ url: URL, location: AppLocation? = nil, vm: AppViewModel? = nil) async -> Bool {
+    func installFromURL(_ url: URL, location: AppLocation? = nil, vm: AppViewModel? = nil, appID: String? = nil) async -> Bool {
         let vm = vm ?? AppViewModel.shared
         guard downloadTask == nil, busy == nil else { return false }
         let file: URL
         do {
-            file = try await downloadIPA(from: url, message: tr("Downloading…", "عم ينزّل…"))
+            file = try await downloadIPA(from: url, message: tr("Downloading…", "عم ينزّل…"), appID: appID)
         } catch {
             if !(error is CancellationError) && (error as? URLError)?.code != .cancelled {
                 self.error = error.localizedDescription
@@ -201,7 +218,7 @@ final class GitHubWatcher: ObservableObject {
                 break   // one choice sheet at a time
             }
             let pendingBID = { () -> String? in store.pending?.bundleID }
-            if await store.installFromURL(asset.browser_download_url, location: known) {
+            if await store.installFromURL(asset.browser_download_url, location: known, appID: s.appID) {
                 sources[i].lastTag = rel.tag_name
                 if sources[i].appID == nil { sources[i].appID = pendingBID() ?? store.apps.last?.id }
             }

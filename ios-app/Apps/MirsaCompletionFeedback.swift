@@ -16,10 +16,17 @@ final class MirsaCompletionFeedback {
     private var order: [UUID] = []
     private var player: AVAudioPlayer?
 
-    func finish(operationID: UUID, outcome: Outcome) {
-        guard completed.insert(operationID).inserted else { return }
+    /// Pure bookkeeping seam: no UIKit/audio calls, including when tested.
+    @discardableResult
+    func consumeCompletion(_ operationID: UUID) -> Bool {
+        guard completed.insert(operationID).inserted else { return false }
         order.append(operationID)
         if order.count > 256 { completed.remove(order.removeFirst()) }
+        return true
+    }
+
+    func finish(operationID: UUID, outcome: Outcome) {
+        guard consumeCompletion(operationID) else { return }
         guard enabled, UIApplication.shared.applicationState == .active else { return }
         switch outcome {
         case .cancelled: return

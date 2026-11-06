@@ -140,6 +140,7 @@ struct AppsTab: View {
 
             if homeLayout {
                 MirsaHomeScreen(apps: hiddenStore.visible(store.containerApps + store.realApps, ns: .main, id: { $0.id }),
+                                allAppIDs: (store.containerApps + store.realApps).map(\.id),
                                 onLaunch: { launchIfIdle($0) },
                                 onSettings: { showSettings = true },
                                 onImport: { showImportOptions = true },
@@ -767,6 +768,7 @@ struct InstallChoiceSheet: View {
     private var current: PendingImport { store.pending ?? pending }
     @State private var showLogin = false
     @State private var afterLogin: AppLocation?
+    @State private var showCertificate = false
 
     var body: some View {
         ZStack {
@@ -804,6 +806,17 @@ struct InstallChoiceSheet: View {
                                title: L.t("choice.real"), sub: L.f("choice.realSub", store.realLimit),
                                trailing: "\(store.slotsLeft)/\(store.realLimit)", disabled: store.slotsLeft == 0) {
                         dismissThen(.real)
+                    }
+
+                    optionCard(selected: false,
+                               icon: "key.fill", iconTint: Color(red: 0.95, green: 0.7, blue: 0.2),
+                               title: personalText("Install with certificate", "تثبيت عبر الشهادة"),
+                               sub: personalText("Uses your saved P12 and profile. No Apple ID.", "بيستخدم شهادتك المحفوظة. بدون Apple ID."),
+                               trailing: "∞", disabled: store.busy != nil) {
+                        showCertificate = true
+                    }
+                    .sheet(isPresented: $showCertificate) {
+                        CertificateInstallSheet(pending: current, store: store) { dismiss() }
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
