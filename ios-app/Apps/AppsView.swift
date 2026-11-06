@@ -123,6 +123,7 @@ struct AppsTab: View {
     @State private var shortcutError: String?
     @State private var shortcutGuideApp: ManagedApp?
     @ObservedObject private var downloads = DownloadsLibrary.shared
+    @AppStorage("mirsa.apps.homeLayout") private var homeLayout = false
     @Namespace private var segNS
 
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
@@ -132,6 +133,27 @@ struct AppsTab: View {
         ZStack(alignment: .bottomTrailing) {
             AuroraBackground()
 
+            if homeLayout {
+                MirsaHomeScreen(apps: store.containerApps + store.realApps,
+                                onLaunch: { store.launch($0) },
+                                onSettings: { showSettings = true },
+                                onImport: { showPicker = true },
+                                onDownloads: { segment = .downloads },
+                                menu: { app in menu(for: app) })
+                if segment == .downloads {
+                    VStack {
+                        HStack {
+                            Text(tr("Downloads", "التنزيلات")).font(.headline)
+                            Spacer()
+                            Button(L.t("settings.done")) { segment = .container }
+                        }
+                        DownloadsList(store: store)
+                        Spacer()
+                    }
+                    .padding(20)
+                    .background(.ultraThinMaterial)
+                }
+            } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     header
@@ -149,6 +171,8 @@ struct AppsTab: View {
             fab
                 .padding(.trailing, 22)
                 .padding(.bottom, theme == MirsaTheme.liquid.rawValue ? 18 : 26)
+
+            }
 
             if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress, isDownloading: store.isDownloading, hasKnownSize: store.downloadHasKnownSize, onCancel: { store.cancelDownload() }) }
         }
@@ -962,6 +986,8 @@ struct PromptSheet: View {
 // MARK: - Settings
 
 struct AppsSettingsSheet: View {
+    @AppStorage("mirsa.apps.homeLayout") private var homeLayout = false
+    @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
     @EnvironmentObject var vm: AppViewModel
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     @ObservedObject var store: AppsStore
@@ -981,6 +1007,18 @@ struct AppsSettingsSheet: View {
                         Button(L.t("settings.signOut"), role: .destructive) { store.signOut() }
                     } else {
                         Button(L.t("hero.signIn"), action: onSignIn)
+                    }
+                }
+                Section(tr("Apps layout", "واجهة التطبيقات")) {
+                    Toggle(tr("Home Screen", "الشاشة الرئيسية"), isOn: $homeLayout)
+                    Text(tr("Off keeps your current apps view unchanged. Home Screen uses pages and a glass dock.", "لما تطفّي الخيار بتضل الواجهة الحالية نفسها. الشاشة الرئيسية فيها صفحات ودوك زجاجي."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    if homeLayout {
+                        Picker(tr("Wallpaper", "الخلفية"), selection: $wallpaper) {
+                            Text(tr("Ocean", "بحر")).tag("ocean")
+                            Text(tr("Sunset", "غروب")).tag("sunset")
+                            Text(tr("Graphite", "داكن")).tag("graphite")
+                        }
                     }
                 }
                 Section(tr("Theme", "الثيم")) {
@@ -1079,6 +1117,8 @@ struct AppInfoSheet: View {
 struct LicensesView: View {
     private struct Item: Identifiable { let id = UUID(); let name: String; let license: String; let url: String; let note: String }
     private let items: [Item] = [
+        Item(name: "FlekDeck UI inspiration", license: "AGPL-3.0 (upstream)", url: "https://github.com/NightVibes33/FlekDeck",
+             note: "Home Screen visual reference. Mirsa's optional implementation is independently written; no FlekDeck source code or artwork is bundled."),
         Item(name: "isideload", license: "MIT", url: "https://github.com/nab138/isideload",
              note: "Apple ID sign-in, anisette, development certificates, App IDs, provisioning profiles and app signing."),
         Item(name: "idevice", license: "MIT", url: "https://github.com/jkcoxson/idevice",
