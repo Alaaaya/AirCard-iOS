@@ -291,10 +291,8 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                     req.usesLanguageCorrection = false
                     if #available(iOS 18.0, *) { req.automaticallyDetectsLanguage = true }
                     try? VNImageRequestHandler(cgImage: cg).perform([req])
-                    let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "
-")
-                    text += "
-" + ocr
+                    let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+                    text += "\n" + ocr
                 }
             }
             XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
