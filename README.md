@@ -31,28 +31,51 @@
 
 ---
 
-## Install
+<a id="install"></a>
+<h2>How to install / طريقة التثبيت</h2>
 
-**Start with Mirsa Setup.** Add the Mirsa source to your installer's source settings, then select **Mirsa Setup** from the catalog.
+<strong>Install Mirsa first · ثبّت مرسى أولاً</strong>
+
+Download **Mirsa.ipa** from the [latest release](https://github.com/Alaaaya/Mirsa-iOS/releases/latest), or use the [direct IPA download](https://github.com/Alaaaya/Mirsa-iOS/releases/latest/download/Mirsa.ipa). On your iPhone, sign and install it with a signer such as Feather or ESign using your certificate (`.p12` + `.mobileprovision`). Without a certificate, use a computer with SideStore or Sideloadly to sideload the IPA.
+
+نزّل **Mirsa.ipa** من [آخر إصدار](https://github.com/Alaaaya/Mirsa-iOS/releases/latest)، أو من [رابط IPA المباشر](https://github.com/Alaaaya/Mirsa-iOS/releases/latest/download/Mirsa.ipa). إذا عندك شهادة (`.p12` + `.mobileprovision`)، وقّع التطبيق وثبّته مباشرة من الآيفون ببرنامج مثل Feather أو ESign. بدون شهادة، استخدم كمبيوتر مع SideStore أو Sideloadly لتثبيت ملف IPA.
+
+<strong>Set up pairing · جهّز الاقتران</strong>
+
+**iOS 18–26** needs a Windows PC or Mac **once**. Apple only issues pairing records to a trusted computer connected by cable. Connect your iPhone, unlock it and tap **Trust**, then export its pairing file with iLoader or jitterbugpair. Transfer the file privately to your iPhone and import it in **Mirsa > Tools > Pairing**. A friend's computer is fine; setup usually takes about five minutes. Keep the file private. It stays valid until trust is reset; an iOS update may require you to create it again.
+
+على **iOS 18–26** بدك كمبيوتر Windows أو Mac **مرة واحدة**. Apple بتعطي ملف الاقتران بس لكمبيوتر موثوق متصل بكابل. وصّل الآيفون، افتح القفل واضغط **وثوق**، وبعدين صدّر ملف الاقتران باستخدام iLoader أو jitterbugpair. انقل الملف بشكل خاص للآيفون واستورده من **مرسى > الأدوات > الاقتران**. حتى كمبيوتر صاحبك بينفع، والخطوات عادة بتاخد حوالي خمس دقايق. خليك محتفظ بالملف بشكل خاص. بيضل صالح لحد ما تنعاد إعدادات الثقة، وتحديث iOS ممكن يحتاج تعمل ملف جديد.
+
+On **iOS 27.0–27.2 beta 2**, Mirsa offers **on-device pairing**, with no computer needed. Open **Tools > Pairing**, choose **Pair This iPhone** and follow the prompts. Importing an existing pairing file is also supported. This on-device option does not apply to iOS 18–26.
+
+على **iOS 27.0–27.2 beta 2** فيك تعمل **الاقتران من داخل مرسى بدون كمبيوتر**. افتح **الأدوات > الاقتران**، اختار **Pair This iPhone** واتبع التعليمات. كمان فيك تستورد ملف اقتران موجود. خيار الاقتران من الجهاز مو متاح على iOS 18–26.
+
+<strong>Connect and install apps · اتصل وثبّت التطبيقات</strong>
+
+Turn on **Wi-Fi** and **LocalDevVPN**, and keep the VPN connected while Mirsa uses device services. You can then add sources in Mirsa and install apps from their catalogs. Pairing does not remove the customization limits in the [compatibility table](#compatibility).
+
+شغّل **Wi-Fi** و**LocalDevVPN**، وخلّي الـVPN متصل أثناء استخدام مرسى لخدمات الجهاز. بعدها فيك تضيف السورسات داخل مرسى وتثبّت التطبيقات منها. الاقتران ما بيلغي حدود أدوات التخصيص المذكورة في [جدول التوافق](#compatibility).
+
+<details>
+<summary><strong>Mirsa source · سورس مرسى</strong></summary>
+
+Add this catalog URL to your installer's source settings, then select **Mirsa Setup**. The source is an app catalog, not an installation profile; the IPA still needs signing or sideloading.
+
+أضف رابط السورس لإعدادات السورسات ببرنامج التثبيت، وبعدين اختار **Mirsa Setup**. السورس كتالوج تطبيقات، مو ملف تعريف تثبيت؛ ملف IPA بيضل بحاجة توقيع أو تثبيت من الكمبيوتر.
 
 ```text
 https://github.com/Alaaaya/Mirsa/releases/download/setup/source.json
 ```
 
-<details>
-<summary><strong>Need a direct source link?</strong></summary>
+If release-download redirects fail, use the direct source below. Both URLs serve the same catalog.
 
-If your installer has trouble with release-download redirects, use this alternative.
+إذا رابط التحميل ما اشتغل بسبب إعادة التوجيه، استخدم الرابط المباشر تحت. الرابطين لنفس الكتالوج.
 
 ```text
 https://raw.githubusercontent.com/Alaaaya/Mirsa/main/source.json
 ```
 
-Both addresses serve the Mirsa catalog.
-
 </details>
-
-The source is an app catalog, not an installation profile. You still need a signing or sideloading method appropriate for your device to install an IPA.
 
 ## Customize
 
@@ -88,7 +111,7 @@ Mirsa needs two things before it can apply changes.
 <details>
 <summary><strong>Import a pairing record</strong></summary>
 
-Open Mirsa's **Pairing** tab and import your record from Files.
+Open **Mirsa > Tools > Pairing** and import your record from Files.
 
 Supported formats are `.mobiledevicepairing`, `.plist` and `.mobilepair`.
 
