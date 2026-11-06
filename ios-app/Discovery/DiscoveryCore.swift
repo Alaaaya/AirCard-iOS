@@ -233,3 +233,22 @@ enum SourcesDiscovery {
         return DiscoveryMatcher.dedupe(out)
     }
 }
+
+// MARK: - Provenance sidecar
+
+struct DiscoveryProvenance: Codable, Equatable {
+    var bundleID: String
+    var version: String
+    var sourceName: String
+    var sourceURL: String
+    /// Host + path only. Signed query strings expire and are never stored.
+    var downloadLocation: String
+    var origin: String
+    var identity: String
+    var sourceAuthorizedByOwner: Bool
+    var sha256: String
+    var addedAt: Date
+
+    static func strip(_ u: URL) -> String { (u.host ?? "") + u.path }
+    static let fileName = "provenance.json"
+}

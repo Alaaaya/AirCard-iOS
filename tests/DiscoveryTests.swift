@@ -17,15 +17,30 @@ private func le16(_ v: Int) -> Data { Data([UInt8(v & 255), UInt8((v >> 8) & 255
 private func le32(_ v: UInt32) -> Data { Data([UInt8(v & 255), UInt8((v >> 8) & 255), UInt8((v >> 16) & 255), UInt8((v >> 24) & 255)]) }
 
 private func makeZip(_ files: [(String, Data)]) -> Data {
-    var out = Data(), central = Data()
+    var out = Data()
+    var central = Data()
     for (name, body) in files {
-        let off = out.count, n = Data(name.utf8), crc = crc32(body)
-        out += le32(0x04034b50) + le16(20) + le16(0) + le16(0) + le16(0) + le16(0) + le32(crc) + le32(UInt32(body.count)) + le32(UInt32(body.count)) + le16(n.count) + le16(0) + n + body
-        central += le32(0x02014b50) + le16(20) + le16(20) + le16(0) + le16(0) + le16(0) + le16(0) + le32(crc) + le32(UInt32(body.count)) + le32(UInt32(body.count)) + le16(n.count) + le16(0) + le16(0) + le16(0) + le16(0) + le32(0) + le32(UInt32(off)) + n
+        let off = out.count
+        let n = Data(name.utf8)
+        let crc = crc32(body)
+        let size = UInt32(body.count)
+        var lh = Data()
+        lh.append(le32(0x04034b50)); lh.append(le16(20)); lh.append(le16(0)); lh.append(le16(0)); lh.append(le16(0)); lh.append(le16(0))
+        lh.append(le32(crc)); lh.append(le32(size)); lh.append(le32(size)); lh.append(le16(n.count)); lh.append(le16(0))
+        lh.append(n); lh.append(body)
+        out.append(lh)
+        var ch = Data()
+        ch.append(le32(0x02014b50)); ch.append(le16(20)); ch.append(le16(20)); ch.append(le16(0)); ch.append(le16(0)); ch.append(le16(0)); ch.append(le16(0))
+        ch.append(le32(crc)); ch.append(le32(size)); ch.append(le32(size)); ch.append(le16(n.count))
+        ch.append(le16(0)); ch.append(le16(0)); ch.append(le16(0)); ch.append(le16(0)); ch.append(le32(0)); ch.append(le32(UInt32(off))); ch.append(n)
+        central.append(ch)
     }
     let cdOff = out.count
-    out += central
-    out += le32(0x06054b50) + le16(0) + le16(0) + le16(files.count) + le16(files.count) + le32(UInt32(central.count)) + le32(UInt32(cdOff)) + le16(0)
+    out.append(central)
+    var end = Data()
+    end.append(le32(0x06054b50)); end.append(le16(0)); end.append(le16(0)); end.append(le16(files.count)); end.append(le16(files.count))
+    end.append(le32(UInt32(central.count))); end.append(le32(UInt32(cdOff))); end.append(le16(0))
+    out.append(end)
     return out
 }
 
@@ -33,12 +48,11 @@ private func plist(_ d: [String: Any]) -> Data { try! PropertyListSerialization.
 
 /// Minimal 64-bit little endian Mach-O with optional LC_ENCRYPTION_INFO_64.
 private func macho(cpu: UInt32 = 0x0100000C, encrypted: Bool = false, withCmd: Bool = true) -> Data {
+    var words: [UInt32] = [0xFEEDFACF, cpu, 0, 2, withCmd ? 1 : 0, withCmd ? 24 : 0, 0, 0]
+    if withCmd { words += [0x2C, 24, 0, 0x1000, encrypted ? 1 : 0, 0] }
     var d = Data()
-    func w(_ v: UInt32) { d += le32(v) }
-    let cmds: [UInt32] = withCmd ? [0x2C, 24, 0, 0x1000, encrypted ? 1 : 0, 0] : []
-    w(0xFEEDFACF); w(cpu); w(0); w(2); w(withCmd ? 1 : 0); w(UInt32(cmds.count * 4)); w(0); w(0)
-    for c in cmds { w(c) }
-    d += Data(repeating: 0, count: 64)
+    for w in words { d.append(le32(w)) }
+    d.append(Data(repeating: 0, count: 64))
     return d
 }
 
