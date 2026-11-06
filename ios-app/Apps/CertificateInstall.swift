@@ -74,7 +74,11 @@ enum CertificateInstall {
         }.value
         let exportDir = signed.url.deletingLastPathComponent()
         let kept: URL
-        do { kept = try retain(signed.url) } catch { throw error }
+        do { kept = try retain(signed.url) }
+        catch {
+            // Move failed: signed output stays where it is and is still reachable.
+            throw Failure.retained(retainedMessage(error, signed.url), signedURL: signed.url)
+        }
         let staged: (stage: URL, app: URL)
         do { staged = try stageSignedApp(ipa: kept, in: FileManager.default.temporaryDirectory) }
         catch { throw Failure.retained(retainedMessage(error, kept), signedURL: kept) }
