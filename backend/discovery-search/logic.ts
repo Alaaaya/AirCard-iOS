@@ -46,13 +46,13 @@ export function toResults(hits: Hit[], bundle: string | null): Result[] {
   const out: Result[] = [];
   const seen = new Set<string>();
   for (const h of hits) {
-    if (!h || typeof h.url !== "string" || !isSafeUrl(h.url) || seen.has(h.url)) continue;
+    if (!h || typeof h.url !== "string" || !isSafeUrl(h.url) || seen.has(h.url) || isAndroidHit(h)) continue;
     seen.add(h.url);
     const u = new URL(h.url);
     const direct = u.pathname.toLowerCase().endsWith(".ipa");
     out.push({
       name: String(h.title ?? u.hostname).slice(0, 120),
-      bundleId: bundle ?? "unknown." + u.hostname,
+      bundleId: "",
       developer: "", version: "",
       downloadURL: direct ? h.url : undefined,
       pageURL: h.url,
@@ -86,5 +86,11 @@ export async function ipBucket(trustedIp: string | null, salt: string): Promise<
 
 export function buildSearchQuery(name: string | null, bundle: string | null): string {
   const base = name ?? bundle ?? "";
-  return (base + " ipa download").slice(0, MAX_QUERY + 20);
+  return (base + " iOS IPA download -android -apk -site:apkpure.com -site:apkmirror.com -site:apkcombo.com").slice(0, MAX_QUERY + 110);
+}
+
+/** Exclude Android-only search results even when the provider ignores query exclusions. */
+export function isAndroidHit(h: Hit): boolean {
+  const text = [h.title, h.url, h.snippet ?? ""].join(" ");
+  return /android|\bapk(?:s|m|x)?\b|apkpure|apkmirror|apkcombo|uptodown|play\.google\.com/i.test(text);
 }
