@@ -184,7 +184,15 @@ struct AppsTab: View {
             }
         }
         .sheet(item: Binding(get: { store.pending }, set: { if $0 == nil { store.cancelPending() } })) { p in
-            InstallChoiceSheet(pending: p, store: store) { location in
+            InstallChoiceSheet(pending: p, store: store, onPersonal: {
+                Task {
+                    do {
+                        try await PersonalAppsLibrary.shared.add(p.originalIPA, signed: false)
+                        store.cancelPending()
+                        vm.selectedTab = .personalHub
+                    } catch { store.error = error.localizedDescription }
+                }
+            }) { location in
                 Task { await store.commitPending(to: location, vm: vm) }
             }
             .presentationDetents([.large])
@@ -673,12 +681,14 @@ struct BusyOverlay: View {
 struct InstallChoiceSheet: View {
     let pending: PendingImport
     @ObservedObject var store: AppsStore
+    var onPersonal: (() -> Void)? = nil
     let onChoose: (AppLocation) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var showEditor = false
     private var current: PendingImport { store.pending ?? pending }
     @State private var showLogin = false
     @State private var afterLogin: AppLocation?
+    @State private var savingPersonal = false
 
     var body: some View {
         ZStack {
@@ -718,6 +728,18 @@ struct InstallChoiceSheet: View {
                         dismissThen(.real)
                     }
 
+                    if let onPersonal {
+                        optionCard(selected: false, icon: "square.stack.3d.up.fill", iconTint: .teal,
+                                   title: tr("Personal library", "المكتبة الخاصة"),
+                                   sub: tr("Save only. No Apple ID or installation.", "حفظ فقط، بدون Apple ID أو تثبيت."),
+                                   trailing: "+", disabled: store.busy != nil || savingPersonal) {
+                            store.error = nil
+                            savingPersonal = true
+                            onPersonal()
+                        }
+                    }
+                    if savingPersonal { ProgressView() }
+
                     VStack(alignment: .leading, spacing: 10) {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: "bell.badge.fill").foregroundStyle(.yellow)
@@ -750,6 +772,11 @@ struct InstallChoiceSheet: View {
         }
         .preferredColorScheme(.dark)
         .environment(\.layoutDirection, .leftToRight)
+        .interactiveDismissDisabled(savingPersonal)
+        .disabled(savingPersonal)
+        .onChange(of: store.error) { _, error in
+            if error != nil { savingPersonal = false }
+        }
         .sheet(isPresented: $showEditor) {
             IPAEditorView(pending: current, store: store)
         }
