@@ -49,7 +49,23 @@ fn process(text: &str) -> Result<serde_json::Value, &'static str> {
     let allowed=profile.plist().get("DeveloperCertificates").and_then(plist::Value::as_array).ok_or("profile")?
         .iter().filter_map(|v|v.as_data().map(Vec::from)).collect::<Vec<_>>();
     let (key,cert)=decode(&data,&r.password,&allowed)?;
-    Ok(serde_json::json!({"ok":true,"key":B64.encode(key),"certificate":B64.encode(cert)}))
+    let x509 = x509_cert::Certificate::from_der(&cert).map_err(|_| "invalid")?;
+    let profile_expiry = profile.plist().get("ExpirationDate").and_then(plist::Value::as_date)
+        .map(std::time::SystemTime::from)
+        .and_then(|d| d.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
+    let cert_expiry = x509.tbs_certificate.validity.not_after.to_unix_duration().as_secs();
+    let expiry = profile_expiry.map(|p| p.min(cert_expiry));
+    let kind = if profile.plist().get("ProvisionsAllDevices").and_then(plist::Value::as_boolean) == Some(true) {
+        "Enterprise"
+    } else if profile.entitlements().get("get-task-allow").and_then(plist::Value::as_boolean) == Some(true) {
+        "Development"
+    } else if profile.plist().get("ProvisionedDevices").and_then(plist::Value::as_array).is_some() {
+        "Ad Hoc"
+    } else { "App Store" };
+    Ok(serde_json::json!({"ok":true,"key":B64.encode(key),"certificate":B64.encode(cert),
+        "name":x509.tbs_certificate.subject.to_string(), "teamID":profile.team_id(),
+        "bundleID":profile.entitlements().get("application-identifier").and_then(plist::Value::as_string),
+        "expiry":expiry, "profileType":kind}))
 }
 /// Local memory-only boundary; response is released with al_string_free.
 /// Safety: request must be a valid NUL-terminated UTF-8 string.

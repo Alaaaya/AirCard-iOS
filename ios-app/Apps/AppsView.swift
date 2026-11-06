@@ -116,6 +116,8 @@ struct AppsTab: View {
     @Environment(\.scenePhase) private var scenePhaseForUpdates
     @State private var segment: AppsSegment = .container
     @State private var showPicker = false
+    @State private var showURLImport = false
+    @State private var showImportOptions = false
     @State private var showLogin = false
     @State private var showSettings = false
     @State private var infoApp: ManagedApp?
@@ -136,7 +138,7 @@ struct AppsTab: View {
                 MirsaHomeScreen(apps: store.containerApps + store.realApps,
                                 onLaunch: { store.launch($0) },
                                 onSettings: { showSettings = true },
-                                onImport: { showPicker = true },
+                                onImport: { showImportOptions = true },
                                 onDownloads: { segment = .downloads },
                                 menu: { app in menu(for: app) })
                 if segment == .downloads {
@@ -178,12 +180,30 @@ struct AppsTab: View {
             if let busy = store.busy { BusyOverlay(text: busy, progress: store.progress, isDownloading: store.isDownloading, hasKnownSize: store.downloadHasKnownSize, onCancel: { store.cancelDownload() }) }
         }
         .preferredColorScheme(.dark)
+        .confirmationDialog(tr("Import IPA", "استيراد IPA"), isPresented: $showImportOptions, titleVisibility: .visible) {
+            Button(tr("From Files", "من الملفات")) { showPicker = true }
+            Button(tr("From link", "من رابط")) { showURLImport = true }
+        }
+        .sheet(isPresented: $showURLImport) {
+            // Same downloader as the personal library; importIPA copies the file into
+            // its own work folder, then the Container/Real App choice sheet follows.
+            PersonalURLImportSheet(disabled: store.busy != nil || store.pending != nil) { url in
+                guard store.busy == nil, store.pending == nil else {
+                    throw SideloadError.message(tr("Finish the current import first.", "خلّص الاستيراد الحالي أولاً."))
+                }
+                store.error = nil
+                await store.importIPA(from: url)
+                if let message = store.error { store.error = nil; throw SideloadError.message(message) }
+            }
+        }
         .sheet(isPresented: $showPicker) {
             DocumentPickerView(allowedContentTypes: [UTType(filenameExtension: "ipa") ?? .data, .zip]) { url in
                 Task { await store.importIPA(from: url) }
             }
         }
-        .sheet(item: Binding(get: { store.pending }, set: { if $0 == nil { store.cancelPending() } })) { p in
+        .sheet(item: Binding(get: { showURLImport || showPicker ? nil : store.pending }, set: {
+            if $0 == nil && !showURLImport && !showPicker { store.cancelPending() }
+        })) { p in
             InstallChoiceSheet(pending: p, store: store) { location in
                 Task { await store.commitPending(to: location, vm: vm) }
             }
@@ -404,7 +424,10 @@ struct AppsTab: View {
     }
 
     private var fab: some View {
-        Button { showPicker = true } label: {
+        Menu {
+            Button { showPicker = true } label: { Label(tr("From Files", "من الملفات"), systemImage: "folder") }
+            Button { showURLImport = true } label: { Label(tr("From link", "من رابط"), systemImage: "link") }
+        } label: {
             Image(systemName: "plus")
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(.white)

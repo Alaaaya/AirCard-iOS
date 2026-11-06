@@ -17,20 +17,33 @@ enum PersonalIdentityVault {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
          kSecAttrAccount as String: "identity"]
     }
-    static func load() throws -> Material? {
+    struct SavedIdentity: Identifiable {
+        let id: String
+        let material: Material
+        let name: String
+        let teamID: String
+        let bundleID: String
+        let expiry: Date?
+        let profileType: String
+    }
+    private struct Entry: Codable { let id: String; let material: Material }
+    private struct Collection: Codable { var entries: [Entry]; var selected: String? }
+    private static func collection() throws -> Collection {
         var q = query
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
         var value: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &value)
-        if status == errSecItemNotFound { return nil }
+        if status == errSecItemNotFound { return Collection(entries: [], selected: nil) }
         guard status == errSecSuccess, let data = value as? Data else {
-            throw SideloadError.message("Unlock your iPhone to access your signing identity.")
+            throw SideloadError.message("افتح قفل الآيفون لتقدر تستخدم شهاداتك.")
         }
-        return try JSONDecoder().decode(Material.self, from: data)
+        if let list = try? JSONDecoder().decode(Collection.self, from: data) { return list }
+        let legacy = try JSONDecoder().decode(Material.self, from: data)
+        return Collection(entries: [Entry(id: "legacy", material: legacy)], selected: "legacy")
     }
-    static func save(_ material: Material) throws {
-        let data = try JSONEncoder().encode(material)
+    private static func store(_ list: Collection) throws {
+        let data = try JSONEncoder().encode(list)
         let changes: [String: Any] = [
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
@@ -42,18 +55,57 @@ enum PersonalIdentityVault {
             q[kSecAttrSynchronizable as String] = false
             status = SecItemAdd(q as CFDictionary, nil)
         }
-        guard status == errSecSuccess else { throw SideloadError.message("Could not save identity securely in Keychain.") }
+        guard status == errSecSuccess else { throw SideloadError.message("ما قدرت احفظ الشهادة بأمان.") }
+    }
+    static func load() throws -> Material? {
+        let list = try collection()
+        return list.entries.first(where: { $0.id == list.selected })?.material ?? list.entries.first?.material
+    }
+    static func selectedID() throws -> String? {
+        let list = try collection()
+        return list.selected ?? list.entries.first?.id
+    }
+    static func select(_ id: String) throws {
+        var list = try collection()
+        guard list.entries.contains(where: { $0.id == id }) else { throw SideloadError.message("الشهادة مو موجودة.") }
+        list.selected = id
+        try store(list)
+    }
+    static func save(_ material: Material) throws {
+        var list = try collection()
+        if let existing = list.entries.first(where: { $0.material.p12 == material.p12 && $0.material.profile == material.profile }) {
+            list.selected = existing.id
+        } else {
+            guard list.entries.count < 30 else { throw SideloadError.message("احذف شهادة قديمة قبل إضافة شهادة جديدة.") }
+            let entry = Entry(id: UUID().uuidString, material: material)
+            list.entries.append(entry); list.selected = entry.id
+        }
+        try store(list)
+    }
+    static func remove(_ id: String) throws {
+        var list = try collection()
+        list.entries.removeAll { $0.id == id }
+        if list.selected == id { list.selected = list.entries.first?.id }
+        try store(list)
     }
     static func remove() throws {
-        let status = SecItemDelete(query as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw SideloadError.message("Could not remove identity from Keychain.")
+        if let id = try selectedID() { try remove(id) }
+    }
+    static func savedIdentities() throws -> [SavedIdentity] {
+        try collection().entries.map { entry in
+            let details = try importResult(entry.material)
+            return SavedIdentity(id: entry.id, material: entry.material,
+                name: details["name"] as? String ?? "شهادة شخصية",
+                teamID: details["teamID"] as? String ?? "",
+                bundleID: details["bundleID"] as? String ?? "",
+                expiry: (details["expiry"] as? Double).map { Date(timeIntervalSince1970: $0) },
+                profileType: details["profileType"] as? String ?? "")
         }
     }
-    static func identity(_ material: Material) throws -> (Data, Data) {
+    private static func importResult(_ material: Material) throws -> [String: Any] {
         let request: [String: Any] = [
             "p12": material.p12.base64EncodedString(),
-            "password": material.password.trimmingCharacters(in: .whitespacesAndNewlines),
+            "password": material.password,
             "profile": material.profile.base64EncodedString()
         ]
         let bytes = try JSONSerialization.data(withJSONObject: request)
@@ -79,12 +131,25 @@ enum PersonalIdentityVault {
             let message = messages[result?["code"] as? String ?? "invalid"] ?? messages["invalid"]!
             throw SideloadError.message(L.isArabic ? message.1 : message.0)
         }
+        _ = key; _ = cert
+        return result!
+    }
+    static func identity(_ material: Material) throws -> (Data, Data) {
+        let result = try importResult(material)
+        guard let keyText = result["key"] as? String, let key = Data(base64Encoded: keyText),
+              let certText = result["certificate"] as? String, let cert = Data(base64Encoded: certText) else {
+            throw SideloadError.message("الشهادة غير صالحة.")
+        }
         return (key, cert)
     }
 }
 
 enum PersonalCertificateSigner {
-    static func sign(ipa: URL, material: PersonalIdentityVault.Material) throws -> URL {
+    struct Result {
+        let url: URL
+        let bundleIdentifierChanged: Bool
+    }
+    static func sign(ipa: URL, material: PersonalIdentityVault.Material, options: PersonalProjectOptions = .init()) throws -> Result {
         let fm = FileManager.default
         let stage = fm.temporaryDirectory.appendingPathComponent("personal-sign-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: stage, withIntermediateDirectories: true,
@@ -93,7 +158,53 @@ enum PersonalCertificateSigner {
         let root = stage.appendingPathComponent("archive", isDirectory: true)
         try IPAEditorService.run("extract", input: ipa, output: root)
         let app = try IPAEditorService.app(in: root)
-        let info = try IPAEditorService.info(in: app)
+        let originalInfo = try IPAEditorService.info(in: app)
+        var info = originalInfo
+        if let name = options.displayName {
+            guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.count <= 100 else {
+                throw SideloadError.message("اكتب اسم تطبيق صالح.")
+            }
+            info["CFBundleDisplayName"] = name; info["CFBundleName"] = name
+        }
+        if let id = options.bundleID {
+            guard IPAEditorService.validBundleID(id) else { throw SideloadError.message("معرّف التطبيق غير صالح.") }
+            info["CFBundleIdentifier"] = id
+        }
+        if let version = options.version {
+            guard !version.isEmpty, version.count <= 64 else { throw SideloadError.message("رقم الإصدار غير صالح.") }
+            info["CFBundleShortVersionString"] = version
+        }
+        if options.fileSharing { info["UIFileSharingEnabled"] = true; info["LSSupportsOpeningDocumentsInPlace"] = true }
+        if options.removeURLSchemes { info.removeValue(forKey: "CFBundleURLTypes") }
+        if let minimum = options.minimumOS, !minimum.isEmpty {
+            guard minimum.range(of: #"^[0-9]{1,2}(\.[0-9]{1,2}){0,2}$"#, options: .regularExpression) != nil else {
+                throw SideloadError.message("اكتب إصدار iOS صالح، مثل 15.0.")
+            }
+            info["MinimumOSVersion"] = minimum
+        }
+        if options.removeWatchApp {
+            let watch = app.appendingPathComponent("Watch", isDirectory: true)
+            if fm.fileExists(atPath: watch.path) { try fm.removeItem(at: watch) }
+        }
+        if options.removeEmbeddedProfile {
+            let embedded = app.appendingPathComponent("embedded.mobileprovision")
+            if fm.fileExists(atPath: embedded.path) { try fm.removeItem(at: embedded) }
+        }
+        try PropertyListSerialization.data(fromPropertyList: info, format: .binary, options: 0)
+            .write(to: app.appendingPathComponent("Info.plist"), options: .atomic)
+        if options.displayName != nil {
+            for language in try fm.contentsOfDirectory(at: app, includingPropertiesForKeys: nil) where language.pathExtension == "lproj" {
+                let strings = language.appendingPathComponent("InfoPlist.strings")
+                guard let size = try? strings.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 * 1024 * 1024,
+                      let data = try? Data(contentsOf: strings),
+                      var localized = (try? PropertyListSerialization.propertyList(from: data, format: nil)) as? [String: Any] else { continue }
+                localized.removeValue(forKey: "CFBundleDisplayName"); localized.removeValue(forKey: "CFBundleName")
+                try PropertyListSerialization.data(fromPropertyList: localized, format: .binary, options: 0).write(to: strings, options: .atomic)
+            }
+        }
+        if !options.libraries.isEmpty {
+            try IPAEditorService.run("inject", input: app, executable: info["CFBundleExecutable"] as? String, libraries: options.libraries)
+        }
         // Reject FairPlay/encrypted code, including embedded libraries, before signing.
         let executable = app.appendingPathComponent(info["CFBundleExecutable"] as! String)
         try IPAEditorService.run("validate", input: executable)
@@ -117,186 +228,184 @@ enum PersonalCertificateSigner {
         // Export artifact contains signed application and public profile only,
         // never P12, password or private key.
         let exports = fm.temporaryDirectory.appendingPathComponent("Mirsa-Signed-\(UUID().uuidString)", isDirectory: true)
+        let filename = options.outputFilename.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !filename.isEmpty, filename.count <= 120, !filename.contains("/"), !filename.contains("\\"),
+              !filename.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              filename != ".", filename != ".." else { throw SideloadError.message("اسم ملف التصدير غير صالح.") }
         try fm.createDirectory(at: exports, withIntermediateDirectories: true,
                                attributes: [.protectionKey: FileProtectionType.complete])
-        let output = exports.appendingPathComponent("Mirsa-Signed.ipa")
+        var retained = false
+        defer { if !retained { try? fm.removeItem(at: exports) } }
+        let output = exports.appendingPathComponent(filename.lowercased().hasSuffix(".ipa") ? filename : filename + ".ipa")
         do { try IPAEditorService.run("pack", input: root, output: output) }
         catch { try? fm.removeItem(at: exports); throw error }
-        return output
+        let signedInfo = try IPAEditorService.info(in: app)
+        retained = true
+        return Result(url: output, bundleIdentifierChanged:
+            (signedInfo["CFBundleIdentifier"] as? String) != (info["CFBundleIdentifier"] as? String))
     }
 }
 
 struct PersonalCertificateView: View {
-    var initialIPA: URL? = nil
+    var onSaved: (() -> Void)? = nil
     @State private var p12: Data?
     @State private var profile: Data?
     @State private var password = ""
+    @State private var showPassword = false
     @State private var p12Name = ""
     @State private var profileName = ""
-    @State private var ipa: URL?
     @State private var picker: ImportKind?
-    @State private var saved = false
-    @State private var busy = false
     @State private var message: String?
-    @State private var output: URL?
-    @State private var sharing = false
-    @State private var confirmRemove = false
+    @State private var saving = false
+    @State private var latest: PersonalIdentityVault.SavedIdentity?
+    @State private var count = 0
+    @State private var phase = 0.0
+    @FocusState private var passwordFocused: Bool
     private enum ImportKind: String, Identifiable { case p12, profile; var id: String { rawValue } }
-    private func text(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
+
+    private var canSave: Bool { p12 != nil && profile != nil && !saving }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Label(text("Sign apps with a certificate", "توقيع التطبيقات بشهادة"), systemImage: "signature")
+        VStack(alignment: .leading, spacing: 16) {
+            Label(personalText("Sign apps with a certificate", "توقيع التطبيقات بشهادة"), systemImage: "signature")
                 .font(.title3.bold())
-            Text(text("Use your own P12 and provisioning profile. Apple ID and Container signing stay unchanged. Everything is signed locally.",
-                      "استخدم شهادة P12 وملف mobileprovision تبعك. حساب Apple ID والحاوية بيضلوا متل ما هنن. التوقيع بيصير على جهازك."))
+            Text(personalText("Use your own P12 and provisioning profile. Apple ID and Container signing stay unchanged. Everything is signed locally.",
+                              "استخدم شهادة P12 وملف mobileprovision تبعك. حساب Apple ID والحاوية بيضلوا متل ما هنن. التوقيع بيصير على جهازك."))
                 .font(.footnote).foregroundStyle(.secondary)
-            if saved {
-                Label(text("Identity saved in Keychain", "الشهادة محفوظة بأمان"), systemImage: "lock.shield")
-                Text(text("Certificate, expiry and profile compatibility are checked when signing.",
-                          "تطابق الشهادة والملف وتاريخ الصلاحية بينفحصوا وقت التوقيع."))
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            if initialIPA == nil {
-                Button { picker = .p12 } label: {
-                    Label(p12Name.isEmpty ? text("Import P12", "استيراد P12") : p12Name, systemImage: "person.badge.key")
+            fileCard(kind: .p12, icon: "person.badge.key.fill", title: personalText("Import P12", "استيراد P12"), name: p12Name, done: p12 != nil)
+            passwordField
+            fileCard(kind: .profile, icon: "doc.badge.gearshape.fill", title: personalText("Import mobileprovision", "استيراد mobileprovision"), name: profileName, done: profile != nil)
+            Button { save() } label: {
+                HStack(spacing: 8) {
+                    if saving { ProgressView() } else { Image(systemName: "lock.shield.fill") }
+                    Text(personalText("Save certificate securely", "حفظ الشهادة بأمان")).fontWeight(.semibold)
                 }
-                if p12 != nil {
-                    SecureField(text("P12 password", "كلمة سر P12"), text: $password)
-                        .textContentType(.password).autocorrectionDisabled().textInputAutocapitalization(.never)
-                        .textFieldStyle(.roundedBorder)
-                }
-                Button { picker = .profile } label: {
-                    Label(profileName.isEmpty ? text("Import mobileprovision", "استيراد mobileprovision") : profileName, systemImage: "doc.badge.gearshape")
-                }
-                if p12 != nil || profile != nil {
-                    Button(text("Save identity securely", "حفظ الشهادة بأمان")) { save() }
-                        .disabled(p12 == nil || profile == nil)
-                }
-            } else {
-                Label(ipa?.lastPathComponent ?? text("Library app", "تطبيق المكتبة"), systemImage: "app")
-                if !saved {
-                    Text(text("Save your certificate in certificate settings first.", "احفظ شهادتك من إعدادات الشهادة بالأول."))
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                Button { sign() } label: {
-                    HStack {
-                        if busy { ProgressView() }
-                        Text(text("Sign and export IPA", "توقيع وتصدير IPA")).fontWeight(.semibold)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 10)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!saved || ipa == nil || busy || p12 != nil || profile != nil)
-                if let output {
-                    Button { sharing = true } label: { Label(text("Export signed IPA", "تصدير IPA الموقّع"), systemImage: "square.and.arrow.up") }
-                    Text(text("Export to Files or a compatible installer. Exporting does not install the app. Your device must be included in the profile; iOS checks revocation and trust at installation.",
-                              "احفظه بالملفات أو افتحه بمثبّت بيدعمه. التصدير لحاله ما بيثبّت التطبيق. لازم جهازك يكون ضمن الملف، وiOS بيتأكد من صلاحية الشهادة وقت التثبيت."))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text(output.lastPathComponent).font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-            Text(text("Currently supports unencrypted apps without extensions, Watch apps or App Clips. A matching development, Ad Hoc or enterprise profile is required.",
-                      "حالياً بيدعم التطبيقات غير المشفّرة وبدون إضافات أو تطبيق ساعة أو App Clips. بدك ملف تطوير أو Ad Hoc أو مؤسسات مطابق للتطبيق."))
+                .frame(maxWidth: .infinity).padding(.vertical, 14)
+                .foregroundStyle(.white)
+                .background(LinearGradient(colors: [Color.green, Color.teal], startPoint: .leading, endPoint: .trailing)
+                    .opacity(canSave ? 1 : 0.3), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }.buttonStyle(.plain).disabled(!canSave)
+            if let latest { savedCard(latest) }
+            Text(personalText("Currently supports unencrypted apps without extensions, Watch apps or App Clips. A matching development, Ad Hoc or enterprise profile is required.",
+                              "حالياً بيدعم التطبيقات غير المشفّرة وبدون إضافات أو تطبيق ساعة أو App Clips. بدك ملف تطوير أو Ad Hoc أو مؤسسات مطابق للتطبيق."))
                 .font(.caption).foregroundStyle(.secondary)
-            if saved && initialIPA == nil {
-                Button(text("Remove saved identity", "حذف الشهادة المحفوظة"), role: .destructive) { confirmRemove = true }
-            }
             if let message { Text(message).font(.footnote).textSelection(.enabled) }
         }
-        .padding(18).appsGlass(cornerRadius: 24)
+        .padding(18).appsGlass(cornerRadius: 28)
         .environment(\.layoutDirection, .leftToRight)
-        .disabled(busy)
+        .disabled(saving)
         .sheet(item: $picker) { kind in
             DocumentPickerView(allowedContentTypes: [UTType(filenameExtension: kind == .profile ? "mobileprovision" : kind.rawValue) ?? .data]) { url in
                 receive(url, kind: kind)
             }
         }
-        .sheet(isPresented: $sharing) {
-            if let output { PersonalSignedShare(url: output) }
-        }
-        .confirmationDialog(text("Remove only the saved personal identity?", "حذف الشهادة الشخصية المحفوظة بس؟"), isPresented: $confirmRemove, titleVisibility: .visible) {
-            Button(text("Remove", "حذف"), role: .destructive) {
-                do { try PersonalIdentityVault.remove(); saved = false; clearOutput() }
-                catch { message = error.localizedDescription }
-            }
-        }
         .task {
-            if let initialIPA, ipa == nil { receiveLibraryIPA(initialIPA) }
-            do { saved = try PersonalIdentityVault.load() != nil }
-            catch { message = error.localizedDescription }
+            reloadSaved()
+            withAnimation(.linear(duration: 6).repeatForever(autoreverses: false)) { phase = 360 }
         }
-        .onDisappear {
-            password = ""; p12 = nil; profile = nil; p12Name = ""; profileName = ""
-            // Do not remove an artifact while the share extension is reading it.
-            if !busy && !sharing { clearOutput(); clearIPA() }
-        }
+        .onDisappear { password = ""; p12 = nil; profile = nil; p12Name = ""; profileName = "" }
     }
 
+    private func border(_ active: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(active
+                ? AnyShapeStyle(AngularGradient(colors: [.green, .teal, .purple, .green], center: .center, angle: .degrees(phase)))
+                : AnyShapeStyle(Color.white.opacity(0.14)), lineWidth: active ? 1.8 : 1)
+    }
+    private func fileCard(kind: ImportKind, icon: String, title: String, name: String, done: Bool) -> some View {
+        Button { picker = kind } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon).font(.title2).foregroundStyle(done ? Color.green : Color.blue).frame(width: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.subheadline.weight(.semibold))
+                    Text(done ? name : personalText("Tap to choose a file", "اضغط لاختيار ملف")).font(.caption)
+                        .foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+                Spacer()
+                Image(systemName: done ? "checkmark.circle.fill" : "plus.circle").foregroundStyle(done ? Color.green : Color.secondary)
+            }
+            .padding(14).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay(border(done))
+        }.buttonStyle(.plain)
+    }
+    private var passwordField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "key.fill").foregroundStyle(.secondary)
+            Group {
+                if showPassword {
+                    TextField("", text: $password, prompt: Text(personalText("P12 password", "كلمة سر P12")).foregroundColor(.secondary))
+                } else {
+                    SecureField("", text: $password, prompt: Text(personalText("P12 password", "كلمة سر P12")).foregroundColor(.secondary))
+                }
+            }
+            .focused($passwordFocused).textContentType(.password)
+            .autocorrectionDisabled().textInputAutocapitalization(.never)
+            Button { showPassword.toggle() } label: {
+                Image(systemName: showPassword ? "eye.slash.fill" : "eye.fill").foregroundStyle(.secondary)
+            }.buttonStyle(.plain)
+        }
+        .padding(14).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(border(passwordFocused))
+    }
+    private func savedCard(_ item: PersonalIdentityVault.SavedIdentity) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(personalText("Selected certificate", "الشهادة المحددة") + (count > 1 ? " (\(count))" : ""), systemImage: "lock.shield.fill")
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.green)
+            Text(item.name).font(.headline).lineLimit(2)
+            Text("Team ID: " + item.teamID).font(.caption).foregroundStyle(.secondary)
+            Text(item.bundleID).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            if !item.profileType.isEmpty { Text(item.profileType).font(.caption2).foregroundStyle(.secondary) }
+            if let e = item.expiry {
+                Text(personalText("Local expiry date: ", "تاريخ الانتهاء المحلي: ") + e.formatted(date: .abbreviated, time: .omitted))
+                    .font(.caption2).foregroundStyle(.secondary)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
+            .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+    private func reloadSaved() {
+        do {
+            let all = try PersonalIdentityVault.savedIdentities()
+            let id = try PersonalIdentityVault.selectedID()
+            count = all.count
+            latest = all.first { $0.id == id } ?? all.first
+        } catch { message = error.localizedDescription }
+    }
     private func receive(_ url: URL, kind: ImportKind) {
         let access = url.startAccessingSecurityScopedResource()
         defer { if access { url.stopAccessingSecurityScopedResource() } }
         do {
             let size = try url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
             let limit = kind == .profile ? 256 * 1024 : 1024 * 1024
-            guard size.isRegularFile == true, let count = size.fileSize, count > 0, count <= limit else {
-                throw SideloadError.message("File is empty, not a regular file, or exceeds the size limit.")
+            guard size.isRegularFile == true, let bytes = size.fileSize, bytes > 0, bytes <= limit else {
+                throw SideloadError.message(personalText("File is empty, not a regular file, or too large.", "الملف فاضي أو مو عادي أو كبير كتير."))
             }
-            clearOutput(); message = nil
+            message = nil
             switch kind {
             case .p12: p12 = try Data(contentsOf: url); p12Name = url.lastPathComponent; password = ""
             case .profile: profile = try Data(contentsOf: url); profileName = url.lastPathComponent
             }
         } catch { message = error.localizedDescription }
     }
-    // Only called with a selected personal-library item, never a file picker.
-    private func receiveLibraryIPA(_ url: URL) {
-        do {
-            clearIPA()
-            let folder = FileManager.default.temporaryDirectory.appendingPathComponent("personal-input-\(UUID().uuidString)")
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true,
-                attributes: [.protectionKey: FileProtectionType.complete])
-            let dest = folder.appendingPathComponent("Input.ipa")
-            do { try FileManager.default.copyItem(at: url, to: dest); ipa = dest }
-            catch { try? FileManager.default.removeItem(at: folder); throw error }
-        } catch { message = error.localizedDescription }
-    }
     private func save() {
         guard let p12, let profile else { return }
-        do {
-            let material = PersonalIdentityVault.Material(p12: p12, password: password.trimmingCharacters(in: .whitespacesAndNewlines), profile: profile)
-            _ = try PersonalIdentityVault.identity(material)
-            try PersonalIdentityVault.save(material)
-            self.p12 = nil; self.profile = nil; password = ""; p12Name = ""; profileName = ""
-            saved = true; message = text("Saved. Profile compatibility will be checked before signing.", "انحفظت. تطابق الملف بينفحص قبل التوقيع.")
-        } catch { message = error.localizedDescription }
-    }
-    private func sign() {
-        guard let ipa else { return }
-        busy = true; message = nil; clearOutput()
+        saving = true; message = nil
+        let material = PersonalIdentityVault.Material(p12: p12, password: password, profile: profile)
         Task {
             do {
-                guard let material = try PersonalIdentityVault.load() else { throw SideloadError.message("Import a personal signing identity first.") }
-                let signed = try await Task.detached(priority: .userInitiated) {
-                    try PersonalCertificateSigner.sign(ipa: ipa, material: material)
+                try await Task.detached(priority: .userInitiated) {
+                    _ = try PersonalIdentityVault.identity(material)
+                    try PersonalIdentityVault.save(material)
                 }.value
-                output = signed
-                do { try await PersonalAppsLibrary.shared.add(signed, signed: true) }
-                catch { message = text("Signed, but saving to the personal library failed. Export remains available.", "تم التوقيع بس الحفظ بالمكتبة فشل. التصدير لسا متاح."); busy = false; return }
-                message = text("Signed locally. Ready to export.", "تم التوقيع على جهازك. جاهز للتصدير.")
+                self.p12 = nil; self.profile = nil; password = ""; p12Name = ""; profileName = ""
+                reloadSaved()
+                message = personalText("Saved. Profile compatibility is checked when signing.", "انحفظت. تطابق الملف بينفحص وقت التوقيع.")
+                onSaved?()
             } catch { message = error.localizedDescription }
-            busy = false
+            saving = false
         }
     }
-    private func clearOutput() {
-        if let output { try? FileManager.default.removeItem(at: output.deletingLastPathComponent()) }
-        output = nil
-    }
-    private func clearIPA() {
-        if let ipa { try? FileManager.default.removeItem(at: ipa.deletingLastPathComponent()) }
-        ipa = nil
-    }
 }
-private struct PersonalSignedShare: UIViewControllerRepresentable {
+struct PersonalSignedShare: UIViewControllerRepresentable {
     let url: URL
     func makeUIViewController(context: Context) -> UIActivityViewController {
         UIActivityViewController(activityItems: [url], applicationActivities: nil)

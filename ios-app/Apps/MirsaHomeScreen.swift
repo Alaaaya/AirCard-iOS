@@ -11,7 +11,47 @@ struct MirsaHomeScreen<Menu: View>: View {
     @ViewBuilder let menu: (ManagedApp) -> Menu
     @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
     @AppStorage("mirsa.home.dockIDs") private var dockIDs = "[]"
+    @AppStorage("mirsa.home.orderIDs") private var orderIDs = "[]"
     @State private var page = 0
+    @State private var editing = false
+    @State private var jiggle = false
+    @State private var edgeTimer: Task<Void, Never>?
+
+    private var order: [String] {
+        guard let d = orderIDs.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: d)) ?? []
+    }
+    private func saveOrder(_ ids: [String]) {
+        if let d = try? JSONEncoder().encode(ids), let v = String(data: d, encoding: .utf8) { orderIDs = v }
+    }
+    private func savePinned(_ ids: [String]) {
+        if let d = try? JSONEncoder().encode(ids), let v = String(data: d, encoding: .utf8) {
+            withAnimation(.easeInOut(duration: 0.2)) { dockIDs = v }
+        }
+    }
+    /// Move a dragged app before target (nil = end of grid). Unpins it if it was in the dock.
+    private func move(_ id: String, before target: String?) {
+        guard id != target, apps.contains(where: { $0.id == id }) else { return }
+        if pinnedIDs.contains(id) { savePinned(pinnedIDs.filter { $0 != id }) }
+        var ids = gridApps.map(\.id).filter { $0 != id }
+        let at = target.flatMap { ids.firstIndex(of: $0) } ?? ids.count
+        ids.insert(id, at: at)
+        withAnimation(.spring(duration: 0.3)) { saveOrder(ids) }
+    }
+    private func pinByDrop(_ id: String) {
+        guard apps.contains(where: { $0.id == id }) else { return }
+        var ids = pinnedIDs.filter { pinnedID in pinnedID != id && apps.contains { $0.id == pinnedID } }
+        guard ids.count < 4 else { return }
+        ids.append(id); savePinned(ids)
+    }
+    private func edge(_ delta: Int, count: Int, targeted: Bool) {
+        edgeTimer?.cancel()
+        guard targeted else { return }
+        edgeTimer = Task {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            if !Task.isCancelled { await MainActor.run { withAnimation { page = max(0, min(count - 1, page + delta)) } } }
+        }
+    }
 
     private var pinnedIDs: [String] {
         guard let data = dockIDs.data(using: .utf8) else { return [] }
@@ -20,7 +60,14 @@ struct MirsaHomeScreen<Menu: View>: View {
     private var dockApps: [ManagedApp] {
         pinnedIDs.compactMap { id in apps.first { $0.id == id } }.prefix(4).map { $0 }
     }
-    private var gridApps: [ManagedApp] { apps.filter { !pinnedIDs.contains($0.id) } }
+    private var gridApps: [ManagedApp] {
+        let rest = apps.filter { !pinnedIDs.contains($0.id) }
+        let o = order
+        return rest.sorted { a, b in
+            let i = o.firstIndex(of: a.id) ?? Int.max, j = o.firstIndex(of: b.id) ?? Int.max
+            return i < j
+        }
+    }
     private var colors: [Color] {
         switch wallpaper {
         case "sunset": return [Color(red: 0.65, green: 0.26, blue: 0.20), Color(red: 0.27, green: 0.12, blue: 0.26), .black]
@@ -38,6 +85,12 @@ struct MirsaHomeScreen<Menu: View>: View {
                 HStack {
                     Text("Mirsa").font(.title3.weight(.semibold))
                     Spacer()
+                    if editing {
+                        Button { withAnimation { editing = false } } label: {
+                            Text(tr("Done", "تم")).fontWeight(.semibold).padding(.horizontal, 16).frame(height: 36)
+                                .background(.white.opacity(0.2), in: Capsule())
+                        }
+                    }
                     Button(action: onImport) { Image(systemName: "plus").frame(width: 44, height: 44) }
                         .accessibilityLabel(L.t("empty.import"))
                     Button(action: onSettings) { Image(systemName: "gearshape").frame(width: 44, height: 44) }
@@ -66,6 +119,17 @@ struct MirsaHomeScreen<Menu: View>: View {
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
+                .overlay {
+                    if editing {
+                        HStack {
+                            Color.clear.frame(width: 28).contentShape(Rectangle())
+                                .dropDestination(for: String.self) { _, _ in false } isTargeted: { edge(-1, count: count, targeted: $0) }
+                            Spacer()
+                            Color.clear.frame(width: 28).contentShape(Rectangle())
+                                .dropDestination(for: String.self) { _, _ in false } isTargeted: { edge(1, count: count, targeted: $0) }
+                        }
+                    }
+                }
                 HStack(spacing: 8) {
                     ForEach(0..<count, id: \.self) { index in
                         Button { withAnimation { page = index } } label: {
@@ -94,6 +158,10 @@ struct MirsaHomeScreen<Menu: View>: View {
                 .appsGlass(cornerRadius: 30)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 12)
+                .dropDestination(for: String.self) { items, _ in
+                    guard editing, let id = items.first else { return false }
+                    pinByDrop(id); return true
+                }
                 .onChange(of: count) { _, newValue in page = min(page, newValue - 1) }
             }
             .background {
@@ -105,12 +173,13 @@ struct MirsaHomeScreen<Menu: View>: View {
                     .ignoresSafeArea()
             }
         }
+        .onDisappear { edgeTimer?.cancel(); edgeTimer = nil }
         .foregroundStyle(.white)
         .environment(\.layoutDirection, .leftToRight)
     }
 
     private func tile(_ app: ManagedApp, compact: Bool) -> some View {
-        Button { onLaunch(app) } label: {
+        Button { if !editing { onLaunch(app) } } label: {
             VStack(spacing: 8) {
                 Group {
                     if let icon = UIImage(contentsOfFile: AppsStore.iconURL(app.id).path) {
@@ -136,12 +205,27 @@ struct MirsaHomeScreen<Menu: View>: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(app.name)
+        .rotationEffect(.degrees(editing ? (jiggle ? 1.6 : -1.6) : 0))
+        .animation(editing ? .easeInOut(duration: 0.12).repeatForever(autoreverses: true) : .default, value: jiggle)
+        .modifier(EditDrag(enabled: editing, id: app.id, compact: compact) { dragged in
+            move(dragged, before: compact ? nil : app.id)
+        })
+        .onLongPressGesture(minimumDuration: 0.5) {
+            guard !editing else { return }
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            withAnimation { editing = true }
+            jiggle = false
+            DispatchQueue.main.async { jiggle = true }
+        }
         .contextMenu {
             Button { pin(app) } label: {
                 Label(pinnedIDs.contains(app.id) ? tr("Remove from dock", "إزالة من الدوك") : tr("Pin to dock", "تثبيت بالدوك"),
                       systemImage: pinnedIDs.contains(app.id) ? "pin.slash" : "pin")
             }
             .disabled(!pinnedIDs.contains(app.id) && dockApps.count >= 4)
+            Button { withAnimation { editing = true }; jiggle = false; DispatchQueue.main.async { jiggle = true } } label: {
+                Label(tr("Edit home screen", "تعديل الشاشة الرئيسية"), systemImage: "square.grid.3x3")
+            }
             Divider()
             menu(app)
         }
@@ -154,5 +238,23 @@ struct MirsaHomeScreen<Menu: View>: View {
         if let data = try? JSONEncoder().encode(ids), let value = String(data: data, encoding: .utf8) {
             withAnimation(.easeInOut(duration: 0.2)) { dockIDs = value }
         }
+    }
+}
+
+
+private struct EditDrag: ViewModifier {
+    let enabled: Bool
+    let id: String
+    let compact: Bool
+    let onDropOnto: (String) -> Void
+    func body(content: Content) -> some View {
+        if enabled {
+            content
+                .draggable(id)
+                .dropDestination(for: String.self) { items, _ in
+                    guard !compact, let d = items.first else { return false }
+                    onDropOnto(d); return true
+                }
+        } else { content }
     }
 }
