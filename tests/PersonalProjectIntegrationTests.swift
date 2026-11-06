@@ -85,6 +85,31 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         try await snapshot(HiddenAppsView(store: HiddenAppsStore.shared) { PersonalHiddenGrid(apps: library.apps, pendingHide: .constant(nil)) }, name: "Arabic-hidden-apps-PIN-UI")
     }
 
+    /// SIMULATOR FIXTURE: seeded real MirsaOperationProgress state rendered by the real AppTile/MirsaHomeScreen.
+    /// Not a network download and not a device run.
+    func testSimulatorFixtureMainTileRing() async throws {
+        let app = ManagedApp(id: "com.example.ringfixture", name: "Ring Fixture", version: "1.0", sizeBytes: 1,
+                             location: .container, installedBundleID: nil, expires: nil, signedSerial: nil,
+                             wantsNotifications: false, hasExtensions: false, addedAt: Date())
+        let progress = MirsaOperationProgress.shared
+        let hadHome = UserDefaults.standard.object(forKey: "mirsa.home.dockIDs")
+        defer { if let hadHome { UserDefaults.standard.set(hadHome, forKey: "mirsa.home.dockIDs") } else { UserDefaults.standard.removeObject(forKey: "mirsa.home.dockIDs") } }
+        let op = progress.begin(appID: app.id, phase: .downloading, cancel: {})
+        defer { progress.finish(op) }
+        XCTAssertEqual(progress.entry(for: app.id)?.canCancel, true)
+        XCTAssertNil(progress.entry(for: app.id)?.fraction)
+        try await snapshot(AppTile(app: app), name: "SIMULATOR-FIXTURE-main-AppTile-indeterminate-cancel")
+        progress.update(op, phase: .downloading, fraction: 0.5)
+        XCTAssertEqual(progress.entry(for: app.id)?.fraction, 0.5)
+        XCTAssertEqual(progress.entry(for: app.id)?.canCancel, true)
+        try await snapshot(AppTile(app: app), name: "SIMULATOR-FIXTURE-main-AppTile-50-percent-cancel")
+        try await snapshot(MirsaHomeScreen(apps: [app], allAppIDs: [app.id], onLaunch: { _ in }, onSettings: {},
+                                           onImport: {}, onDownloads: {}, menu: { _ in EmptyView() }),
+                           name: "SIMULATOR-FIXTURE-main-home-50-percent")
+        progress.cancel(op)
+        XCTAssertNil(progress.entry(for: app.id))
+    }
+
     private func snapshot<V: View>(_ view: V, name: String) async throws {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let original = scene.windows.first(where: \.isKeyWindow)
