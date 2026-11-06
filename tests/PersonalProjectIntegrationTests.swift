@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import Darwin
 @testable import Mirsa
 
 private final class SnapshotSecrets: HiddenSecretStore {
@@ -198,6 +199,36 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             forbiddenText: ["FORBIDDEN-REFERENCE", "x.com", "References", "مراجع", "تنزيل"])
     }
 
+    /// Hosted unit tests do not start XCTest's out-of-process accessibility client.
+    /// SwiftUI therefore leaves its virtual labels unpopulated even when pixels are visible.
+    /// Enable the simulator automation client before hosting, then restore its original state.
+    /// This is test-only runtime setup, not a mock of labels or the production view tree.
+    /// Same mechanism used by Cash App AccessibilitySnapshot's ASAccessibilityEnabler:
+    /// https://github.com/cashapp/AccessibilitySnapshot/blob/bc9d037cf8c0e0bf2d7428120f481c3359feaf2f/Sources/AccessibilitySnapshot/Parser/ObjC/ASAccessibilityEnabler.m
+    private func enableSnapshotAccessibility() throws -> () -> Void {
+        #if targetEnvironment(simulator)
+        let path = "/usr/lib/libAccessibility.dylib"
+        let simulatorPath = ProcessInfo.processInfo.environment["IPHONE_SIMULATOR_ROOT"].map { $0 + path }
+        let handle = try XCTUnwrap(simulatorPath.flatMap { dlopen($0, RTLD_LOCAL | RTLD_NOW) }
+            ?? dlopen(path, RTLD_LOCAL | RTLD_NOW), "Simulator accessibility runtime must load")
+        guard let getter = dlsym(handle, "_AXSAutomationEnabled"),
+              let setter = dlsym(handle, "_AXSSetAutomationEnabled") else {
+            dlclose(handle)
+            XCTFail("Simulator accessibility automation symbols must exist")
+            throw NSError(domain: "SnapshotAccessibility", code: 1)
+        }
+        let getEnabled = unsafeBitCast(getter, to: (@convention(c) () -> Int32).self)
+        let setEnabled = unsafeBitCast(setter, to: (@convention(c) (Int32) -> Void).self)
+        let original = getEnabled()
+        setEnabled(1)
+        XCTAssertNotEqual(getEnabled(), 0, "Accessibility automation must really be enabled")
+        return { setEnabled(original); dlclose(handle) }
+        #else
+        XCTFail("Hosted accessibility snapshots require the simulator test runtime")
+        throw NSError(domain: "SnapshotAccessibility", code: 2)
+        #endif
+    }
+
     /// SwiftUI exposes virtual accessibility containers, not UILabel subviews.
     /// Walk the public container API as well as UIKit children; never accept an empty tree.
     private func renderedAccessibilityText(_ view: UIView) -> String {
@@ -245,6 +276,9 @@ final class PersonalProjectIntegrationTests: XCTestCase {
     }
 
     private func snapshot<V: View>(_ view: V, name: String, height: CGFloat = 932, scrollToBottom: Bool = false, requiredText: [String] = [], forbiddenText: [String] = []) async throws {
+        let restoreAccessibility = !requiredText.isEmpty || !forbiddenText.isEmpty
+            ? try enableSnapshotAccessibility() : {}
+        defer { restoreAccessibility() }
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         let original = scene.windows.first(where: \.isKeyWindow)
         let window = UIWindow(windowScene: scene)
