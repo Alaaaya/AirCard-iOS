@@ -53,8 +53,6 @@ enum PersonalIdentityVault {
         let expiry: Date?
         let profileType: String
         let verification: PersonalProfileVerification
-        var installed = false
-        var installError: String? = nil
     }
     private struct Entry: Codable { let id: String; let material: Material }
     private struct Collection: Codable { var entries: [Entry]; var selected: String? }
@@ -202,6 +200,8 @@ enum PersonalCertificateSigner {
         let url: URL
         let bundleIdentifierChanged: Bool
         let verification: PersonalProfileVerification
+        var installed = false
+        var installError: String? = nil
     }
     /// Extract and apply every non-signing edit. Shared by signed and configuration-only export.
     private static func prepare(ipa: URL, stage: URL, options: PersonalProjectOptions) throws -> (root: URL, app: URL, info: [String: Any]) {

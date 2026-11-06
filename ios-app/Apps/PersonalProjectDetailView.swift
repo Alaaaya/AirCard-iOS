@@ -180,7 +180,7 @@ struct PersonalProjectDetailView: View {
                         }
                     }
                     Spacer()
-                    if let url = try? tweaks.urls(for: [id]).first { ShareLink(item: url) { Image(systemName: "square.and.arrow.up") } }
+                    if let url = try? tweaks.urls(for: Set([id])).first { ShareLink(item: url) { Image(systemName: "square.and.arrow.up") } }
                     Button { move(id, -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0)
                     Button { move(id, 1) } label: { Image(systemName: "arrow.down") }.disabled(index == ids.count - 1)
                 }.buttonStyle(.plain).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
