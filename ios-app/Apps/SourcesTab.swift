@@ -35,6 +35,48 @@ final class SourcesStore: ObservableObject {
     @Published var apps: [String: [RepoApp]] = [:]   // by source url
     @Published var loading: Set<String> = []
     @Published var error: String?
+    @Published var updatingAll = false
+    @Published var hiddenURLs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "mirsa.sources.hidden") ?? []) {
+        didSet { UserDefaults.standard.set(Array(hiddenURLs), forKey: "mirsa.sources.hidden") }
+    }
+
+    var visibleSources: [RepoSource] { sources.filter { !hiddenURLs.contains($0.url) } }
+    var hiddenSources: [RepoSource] { sources.filter { hiddenURLs.contains($0.url) } }
+
+    func moveVisible(from offsets: IndexSet, to destination: Int) {
+        var reordered = visibleSources
+        reordered.move(fromOffsets: offsets, toOffset: destination)
+        var iterator = reordered.makeIterator()
+        sources = sources.map { hiddenURLs.contains($0.url) ? $0 : iterator.next()! }
+    }
+
+    /// One candidate per installed app, visible source order breaks equal-version ties.
+    func availableUpdates() -> [(RepoApp, AppLocation)] {
+        AppsStore.shared.apps.compactMap { installed in
+            let candidates = visibleSources.flatMap { apps[$0.url] ?? [] }.filter {
+                $0.bundleID == installed.id && !$0.version.isEmpty &&
+                $0.version.compare(installed.version, options: .numeric) == .orderedDescending
+            }
+            guard let newest = candidates.max(by: {
+                $0.version.compare($1.version, options: .numeric) == .orderedAscending
+            }) else { return nil }
+            return (newest, installed.location)
+        }
+    }
+
+    func updateAll() async {
+        guard !updatingAll, AppsStore.shared.busy == nil else { return }
+        updatingAll = true
+        defer { updatingAll = false }
+        await refreshAll()
+        let queue = availableUpdates()
+        for (app, location) in queue {
+            guard !Task.isCancelled else { break }
+            AppViewModel.shared?.selectedTab = .apps
+            if !(await AppsStore.shared.installFromURL(app.downloadURL, location: location)) { break }
+        }
+    }
+
 
     /// Sources that ship with Mirsa: present on first launch (added once, so a
     /// user who deletes one keeps it deleted).
@@ -86,7 +128,7 @@ final class SourcesStore: ObservableObject {
 
     func refreshAll() async {
         await withTaskGroup(of: Void.self) { g in
-            for s in sources { g.addTask { _ = await self.refresh(s.url) } }
+            for s in visibleSources { g.addTask { _ = await self.refresh(s.url) } }
         }
     }
 
@@ -208,6 +250,7 @@ extension Color {
 
 struct SourcesTab: View {
     @StateObject private var store = SourcesStore.shared
+    @ObservedObject private var installedApps = AppsStore.shared
     @State private var adding = false
     @State private var input = ""
 
@@ -220,12 +263,54 @@ struct SourcesTab: View {
                         .foregroundStyle(.secondary)
                         .listRowBackground(Color.clear)
                 }
-                ForEach(store.sources) { s in
+                if !store.availableUpdates().isEmpty || store.updatingAll {
+                    Button {
+                        Task { await store.updateAll() }
+                    } label: {
+                        Label(store.updatingAll ? tr("Updating apps…", "عم يحدّث التطبيقات…") : tr("Update All", "تحديث الكل"),
+                              systemImage: "arrow.down.circle")
+                    }
+                    .disabled(store.updatingAll || AppsStore.shared.busy != nil)
+                    .listRowBackground(Color.clear)
+                }
+                ForEach(store.visibleSources) { s in
                     NavigationLink { SourceDetailView(source: s) } label: { SourceRow(source: s, loading: store.loading.contains(s.url)) }
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
+                        .swipeActions(edge: .leading) {
+                            Button { store.hiddenURLs.insert(s.url) } label: {
+                                Label(tr("Hide", "إخفاء"), systemImage: "eye.slash")
+                            }.tint(.orange)
+                        }
+                        .contextMenu {
+                            Button { store.hiddenURLs.insert(s.url) } label: {
+                                Label(tr("Hide source", "إخفاء السورس"), systemImage: "eye.slash")
+                            }
+                        }
                 }
-                .onDelete { store.sources.remove(atOffsets: $0) }
+                .onMove { store.moveVisible(from: $0, to: $1) }
+                .onDelete { offsets in
+                    let urls = Set(offsets.map { store.visibleSources[$0].url })
+                    store.sources.removeAll { urls.contains($0.url) }
+                }
+                if !store.hiddenSources.isEmpty {
+                    Section(tr("Hidden Sources", "السورسات المخفية")) {
+                        ForEach(store.hiddenSources) { source in
+                            HStack {
+                                Text(source.name)
+                                Spacer()
+                                Button {
+                                    store.hiddenURLs.remove(source.url)
+                                    Task { await store.refresh(source.url) }
+                                } label: {
+                                    Label(tr("Unhide", "إظهار"), systemImage: "eye")
+                                }
+                                .buttonStyle(.borderless)
+                            }
+                            .listRowBackground(Color.clear)
+                        }
+                    }
+                }
             }
             .listStyle(.plain)
             .refreshable { await store.refreshAll() }
