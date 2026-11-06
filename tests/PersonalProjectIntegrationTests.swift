@@ -268,7 +268,15 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             XCTAssertEqual(scroll.contentOffset.y, y, accuracy: 1, "Scroll view must really be at the bottom")
         }
         if !requiredText.isEmpty || !forbiddenText.isEmpty {
-            let text = renderedAccessibilityText(host.view)
+            // SwiftUI exposes its accessibility tree lazily; poll (bounded) until required text appears.
+            var text = renderedAccessibilityText(host.view)
+            var tries = 0
+            while tries < 30, !requiredText.allSatisfy({ text.contains($0) }) {
+                try await Task.sleep(nanoseconds: 200_000_000)
+                window.layoutIfNeeded(); host.view.layoutIfNeeded()
+                text = renderedAccessibilityText(host.view)
+                tries += 1
+            }
             XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
             for expected in requiredText { XCTAssertTrue(text.contains(expected), "Missing rendered text: \(expected); actual: \(text)") }
             for forbidden in forbiddenText { XCTAssertFalse(text.contains(forbidden), "Forbidden rendered text: \(forbidden)") }
