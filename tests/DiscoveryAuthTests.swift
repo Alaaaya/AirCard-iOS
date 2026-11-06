@@ -99,9 +99,12 @@ final class DiscoveryAuthTests: XCTestCase {
     func testBackendRetriesOnceAfter401WithForcedRefresh() async {
         let cfg = WebBackendConfig(projectURL: project, publishableKey: "pub")
         let a = StubAuth(forced: .init(["t1", "t2"]))
-        let g = FakeGet([(401, ""), (200, #"{"results":[{"name":"P","bundleId":"u.x.com","pageURL":"https://x.com/p"}]}"#)])
+        let g = FakeGet([(401, ""), (200, #"{"results":[{"name":"P","bundleId":"u.x.com","downloadURL":"https://example.com/p.ipa"}]}"#)])
         let r = await WebBackendProvider.search(cfg, name: "x", bundleID: nil, auth: a, http: g)
         XCTAssertEqual(g.seen, ["Bearer t1", "Bearer t2"]); XCTAssertEqual(a.forced.forces, [false, true])
+        // Auth retry uses an allowed IPA-shaped fixture, not a blocked social page.
+        XCTAssertEqual(r.candidates.count, 1)
+        XCTAssertEqual(r.candidates.first?.downloadURL?.absoluteString, "https://example.com/p.ipa")
         if case .ok(let n) = r.report.status { XCTAssertEqual(n, 1) } else { XCTFail() }
     }
 
