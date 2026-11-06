@@ -148,12 +148,12 @@ struct HiddenAppsGrid: View {
     var body: some View {
         let items = hidden.hiddenItems(apps, ns: .main, id: { $0.id })
         List {
-            if items.isEmpty { Text("No hidden apps").foregroundStyle(.secondary) }
+            if items.isEmpty { Text(personalText("No hidden apps", "ما في تطبيقات مخفية")).foregroundStyle(.secondary) }
             ForEach(items) { app in
                 HStack {
                     Text(app.name).foregroundStyle(.white)
                     Spacer()
-                    Button("Unhide") { _ = hidden.unhide(HiddenAppID(.main, app.id)) }
+                    Button(personalText("Unhide", "إظهار")) { _ = hidden.unhide(HiddenAppID(.main, app.id)) }
                 }
             }
         }

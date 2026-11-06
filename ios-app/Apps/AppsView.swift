@@ -140,7 +140,7 @@ struct AppsTab: View {
 
             if homeLayout {
                 MirsaHomeScreen(apps: hiddenStore.visible(store.containerApps + store.realApps, ns: .main, id: { $0.id }),
-                                onLaunch: { store.launch($0) },
+                                onLaunch: { launchIfIdle($0) },
                                 onSettings: { showSettings = true },
                                 onImport: { showImportOptions = true },
                                 onDownloads: { segment = .downloads },
@@ -371,8 +371,14 @@ struct AppsTab: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Global overlay steps aside only when the cancellable tile is actually visible (list home, current segment).
     private var operationOnTile: Bool {
-        progressState.entries.values.contains { $0.appID != nil && $0.phase == .downloading }
+        guard !homeLayout, segment != .downloads else { return false }
+        let ids = Set(currentApps.map(\.id))
+        return progressState.entries.values.contains { $0.canCancel && $0.appID.map(ids.contains) == true }
+    }
+    private func launchIfIdle(_ app: ManagedApp) {
+        if progressState.entry(for: app.id) == nil { store.launch(app) }
     }
     private var currentApps: [ManagedApp] {
         hiddenStore.visible(segment == .container ? store.containerApps : store.realApps, ns: .main, id: { $0.id })
@@ -406,7 +412,7 @@ struct AppsTab: View {
             LazyVGrid(columns: columns, spacing: 22) {
                 ForEach(currentApps) { app in
                     AppTile(app: app)
-                        .onTapGesture { store.launch(app) }
+                        .onTapGesture { launchIfIdle(app) }
                         .contextMenu { menu(for: app) }
                 }
             }
@@ -434,7 +440,10 @@ struct AppsTab: View {
         }
         Button { infoApp = app } label: { Label(L.t("menu.info"), systemImage: "info.circle") }
         Button {
-            if !hiddenStore.hide(HiddenAppID(.main, app.id)) { pendingHideID = app.id; showHidden = true }
+            if !hiddenStore.hide(HiddenAppID(.main, app.id)) {
+                if hiddenStore.health == .faulted { shortcutError = personalText("Hidden apps are unavailable right now. Nothing was hidden.", "التطبيقات المخفية مو متاحة هلأ. ما انخفى شي.") }
+                else { pendingHideID = app.id; showHidden = true }
+            }
         } label: { Label(tr("Hide", "إخفاء"), systemImage: "eye.slash") }
         Divider()
         Button(role: .destructive) { Task { await store.delete(app, vm: vm) } } label: {
@@ -634,8 +643,7 @@ struct AppTile: View {
                 .frame(maxWidth: liquid ? 82 : 96)
         }
         .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(app.name)
+        .accessibilityElement(children: .contain)
     }
 
     @ViewBuilder
@@ -652,11 +660,26 @@ struct AppTile: View {
                     Button { progress.cancel(e.id) } label: {
                         Image(systemName: "xmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
                             .frame(width: 44, height: 44).contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityLabel(tr("Cancel", "إلغاء"))
+                    }.buttonStyle(.plain).accessibilityLabel(tr("Cancel download", "إلغاء التنزيل")).accessibilityAddTraits(.isButton)
                 }
             }
             .environment(\.layoutDirection, .leftToRight)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(progressLabel(e))
         }
+    }
+
+    private func progressLabel(_ e: MirsaOperationProgress.Entry) -> String {
+        let phase: String
+        switch e.phase {
+        case .downloading: phase = tr("Downloading", "جاري التنزيل")
+        case .preparing: phase = tr("Preparing", "جاري التحضير")
+        case .signing: phase = tr("Signing", "جاري التوقيع")
+        case .installing: phase = tr("Installing", "جاري التثبيت")
+        case .updating: phase = tr("Updating", "جاري التحديث")
+        }
+        let pct = e.fraction.map { " \(Int($0 * 100))%" } ?? ""
+        return app.name + ", " + phase + pct + (e.canCancel ? "" : ", " + tr("cannot be cancelled", "ما بيتلغى"))
     }
 
     @ViewBuilder

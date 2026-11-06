@@ -226,13 +226,40 @@ struct PersonalAppsHub: View {
     @AppStorage("mirsa.personal.projects.sort") private var sort = "newest"
     @State private var drafts: [UUID: PersonalProjectDraft] = [:]
     @StateObject private var tweaks = IPATweakLibrary.shared
+    @ObservedObject private var hiddenStore = HiddenAppsStore.shared
+    @State private var showHidden = false
+    @State private var pendingHide: UUID?
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("mirsa.personal.projects.grid") private var gridMode = false
 
     private var sortedApps: [PersonalLibraryApp] {
+        let base = hiddenStore.visible(library.apps, ns: .personal, id: { $0.id.uuidString })
         switch sort {
-        case "name": return library.apps.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        case "oldest": return library.apps.sorted { $0.date < $1.date }
-        default: return library.apps.sorted { $0.date > $1.date }
+        case "name": return base.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        case "oldest": return base.sorted { $0.date < $1.date }
+        default: return base.sorted { $0.date > $1.date }
         }
+    }
+    private func hide(_ app: PersonalLibraryApp) {
+        if hiddenStore.hide(HiddenAppID(.personal, app.id.uuidString)) { return }
+        if hiddenStore.health == .faulted {
+            message = personalText("Hidden apps are unavailable right now. Nothing was hidden.", "التطبيقات المخفية مو متاحة هلأ. ما انخفى شي.")
+        } else { pendingHide = app.id; showHidden = true }
+    }
+    @ViewBuilder
+    private func appMenu(_ app: PersonalLibraryApp) -> some View {
+        Button { detail = app } label: { Label(personalText("Project details", "تفاصيل المشروع"), systemImage: "slider.horizontal.3") }
+        Button { sharing = app } label: { Label(personalText("Export IPA", "تصدير IPA"), systemImage: "square.and.arrow.up") }
+        Button { hide(app) } label: { Label(personalText("Hide", "إخفاء"), systemImage: "eye.slash") }
+        Button(role: .destructive) { deleting = app } label: { Label(personalText("Delete", "حذف"), systemImage: "trash") }
+    }
+    private func compactTile(_ app: PersonalLibraryApp) -> some View {
+        Button { detail = app } label: {
+            VStack(spacing: 8) {
+                PersonalAppIcon(app: app, library: library)
+                Text(app.name).font(.caption.weight(.semibold)).lineLimit(1)
+            }.frame(maxWidth: .infinity).padding(.vertical, 12).appsGlass(cornerRadius: 20)
+        }.buttonStyle(.plain)
     }
     private func reloadDrafts() {
         drafts = Dictionary(uniqueKeysWithValues: library.apps.compactMap { app in
@@ -307,6 +334,9 @@ struct PersonalAppsHub: View {
                         Spacer()
                         Text(personalText("Projects", "المشاريع")).font(.title2.bold())
                         Spacer()
+                        Button { gridMode.toggle() } label: {
+                            Image(systemName: gridMode ? "list.bullet" : "square.grid.2x2").font(.title3).frame(width: 42, height: 42).appsGlass(cornerRadius: 21)
+                        }.accessibilityLabel(personalText("Toggle list and grid", "تبديل القائمة والشبكة"))
                         Menu {
                             Picker(personalText("Sort projects", "ترتيب المشاريع"), selection: $sort) {
                                 Text(personalText("Newest first", "الأحدث أولاً")).tag("newest")
@@ -335,13 +365,15 @@ struct PersonalAppsHub: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }.frame(maxWidth: .infinity).padding(24).appsGlass()
                     }
+                    if gridMode {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 14), count: 3), spacing: 18) {
+                            ForEach(sortedApps) { app in compactTile(app).contextMenu { appMenu(app) } }
+                        }
+                    } else {
                     ForEach(sortedApps) { app in
                         projectCard(app)
-                        .contextMenu {
-                            Button { detail = app } label: { Label(personalText("Project details", "تفاصيل المشروع"), systemImage: "slider.horizontal.3") }
-                            Button { sharing = app } label: { Label(personalText("Export IPA", "تصدير IPA"), systemImage: "square.and.arrow.up") }
-                            Button(role: .destructive) { deleting = app } label: { Label(personalText("Delete", "حذف"), systemImage: "trash") }
-                        }
+                        .contextMenu { appMenu(app) }
+                    }
                     }
                     if let error = library.loadError ?? message {
                         Text(error).font(.footnote).foregroundStyle(.secondary)
@@ -352,13 +384,23 @@ struct PersonalAppsHub: View {
         .preferredColorScheme(.dark)
         .environment(\.layoutDirection, .leftToRight)
         .task { reloadDrafts() }
-        .onChange(of: library.apps) { _ in reloadDrafts() }
+        .onChange(of: library.apps) { _ in
+            reloadDrafts()
+            if library.loadError == nil { hiddenStore.prune(.personal, existing: Set(library.apps.map { $0.id.uuidString })) }
+        }
+        .onChange(of: scenePhase) { p in if p != .active { hiddenStore.lock() } }
+        .sheet(isPresented: $showHidden) {
+            HiddenAppsView(store: hiddenStore) {
+                PersonalHiddenGrid(apps: library.apps, pendingHide: $pendingHide)
+            }
+        }
         .sheet(isPresented: $importing) {
             DocumentPickerView(allowedContentTypes: [UTType(filenameExtension: "ipa") ?? .data]) { url in
                 busy = true; message = nil
                 Task {
-                    do { try await library.add(url, signed: false) }
-                    catch { message = error.localizedDescription }
+                    let op = UUID()
+                    do { try await library.add(url, signed: false); MirsaCompletionFeedback.shared.finish(operationID: op, outcome: .success) }
+                    catch { MirsaCompletionFeedback.shared.finish(operationID: op, outcome: MirsaCompletionFeedback.outcome(for: error)); message = error.localizedDescription }
                     busy = false
                 }
             }
@@ -392,4 +434,25 @@ private struct PersonalLibraryShare: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: [url], applicationActivities: nil)
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+struct PersonalHiddenGrid: View {
+    let apps: [PersonalLibraryApp]
+    @Binding var pendingHide: UUID?
+    @ObservedObject private var hidden = HiddenAppsStore.shared
+    var body: some View {
+        let items = hidden.hiddenItems(apps, ns: .personal, id: { $0.id.uuidString })
+        List {
+            if items.isEmpty { Text(personalText("No hidden projects", "ما في مشاريع مخفية")).foregroundStyle(.secondary) }
+            ForEach(items) { app in
+                HStack {
+                    Text(app.name).foregroundStyle(.white)
+                    Spacer()
+                    Button(personalText("Unhide", "إظهار")) { _ = hidden.unhide(HiddenAppID(.personal, app.id.uuidString)) }
+                }
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .onAppear { if let id = pendingHide { pendingHide = nil; _ = hidden.hide(HiddenAppID(.personal, id.uuidString)) } }
+    }
 }
