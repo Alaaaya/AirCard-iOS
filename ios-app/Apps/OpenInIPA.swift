@@ -11,6 +11,9 @@ enum OpenInIPA {
         }
         let scoped = source.startAccessingSecurityScopedResource()
         defer { if scoped { source.stopAccessingSecurityScopedResource() } }
+        guard try source.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else {
+            throw CocoaError(.fileReadNoPermission)
+        }
         let fm = FileManager.default
         let directory = fm.temporaryDirectory.appendingPathComponent("mirsa-open-in-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: directory, withIntermediateDirectories: false,
