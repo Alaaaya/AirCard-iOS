@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
   const tk = Deno.env.get("TAVILY_API_KEY"), bk = Deno.env.get("BRAVE_API_KEY");
   if (!tk && !bk) return json({ error: "provider_not_configured" }, 503);
   // Reserve ONE credit atomically BEFORE the provider call. Never refunded (a timeout may still have been billed).
-  const ip = await ipBucket(req.headers.get("cf-connecting-ip"), salt);
+  const ip = await ipBucket(req.headers.get("cf-ray") ? req.headers.get("cf-connecting-ip") : null, salt);
   const { error: le } = await admin.rpc("discovery_take", { p_user: u.user.id, p_ip: ip });
   if (le) return limitFromError(le.message) ? json({ error: "rate_limited" }, 429) : json({ error: "limiter_failed" }, 503);
   try {

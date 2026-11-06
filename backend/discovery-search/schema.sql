@@ -17,8 +17,7 @@ declare
     ['user-day:'  || p_user::text, 'day',   '60'],
     ['ip-hour:'   || p_ip,         'hour',  '60'],
     ['global-min',                 'minute','10'],
-    ['global-day',                 'day',   '60'],
-    ['global-month',               'month', '900']
+    ['global-day',                 'day',   '60']
   ];
   i int; ws timestamptz; cnt int;
 begin
@@ -31,6 +30,9 @@ begin
       raise exception 'limit:%', split_part(specs[i][1], ':', 1);
     end if;
   end loop;
+  -- rolling 31-day cap (900 < 1000 free credits), independent of any calendar or billing boundary
+  select coalesce(sum(n),0) into cnt from discovery_usage where bucket = 'global-day' and window_start > now() - interval '31 days';
+  if cnt > 900 then raise exception 'limit:global-31d'; end if;
   delete from discovery_usage where window_start < now() - interval '40 days' and random() < 0.01;
 end $$;
 revoke all on function public.discovery_take(uuid, text) from public, anon, authenticated;
