@@ -14,6 +14,7 @@ struct RepoApp: Identifiable, Hashable {
     let downloadURL: URL
     let size: Int64?
     let date: String?
+    var screenshots: [URL] = []
 }
 
 struct RepoSource: Codable, Identifiable, Hashable {
@@ -230,7 +231,8 @@ final class SourcesStore: ObservableObject {
                 iconURL: url(a["iconURL"]) ?? url(a["icon"]) ?? url(a["iconUrl"]) ?? url(a["image"]) ?? url(a["icon_url"]),
                 downloadURL: dl,
                 size: int(latest?["size"]) ?? int(a["size"]) ?? int(a["fileSize"]),
-                date: (latest.flatMap { str($0, "date") }) ?? str(a, "versionDate", "date", "updated")
+                date: (latest.flatMap { str($0, "date") }) ?? str(a, "versionDate", "date", "updated"),
+                screenshots: ScreenshotPolicy.sourceScreenshots(a, latest: latest, base: base)
             )
             return app
         }.filter { seen.insert($0.id).inserted }
@@ -472,6 +474,7 @@ private struct RepoAppInfo: View {
                         if let s = app.size { Label(ByteCountFormatter.string(fromByteCount: s, countStyle: .file), systemImage: "internaldrive") }
                     }
                     .font(.caption).foregroundStyle(.secondary)
+                    AppScreenshotGallery(app: app)
                     Text(app.description).font(.body)
                 }
                 .padding()
