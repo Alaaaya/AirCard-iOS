@@ -1,80 +1,104 @@
 <div align="center">
-  <img src="ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon.png" width="112" height="112" alt="Mirsa logo" />
+  <br />
+  <img src="assets/mirsa-icon.png" width="120" height="120" alt="Mirsa app icon" />
   <h1>Mirsa · مرسى</h1>
-  <p>غيّر تفاصيل آيفونك، على ذوقك.<br />Make your iPhone feel like yours.</p>
-  <p>
-    <img src="https://img.shields.io/badge/MADE_FOR-iPhone-141B2D?style=for-the-badge" alt="Made for iPhone" />
-    <img src="https://img.shields.io/badge/BUILT_WITH-Swift_%2B_Rust-365F69?style=for-the-badge" alt="Built with Swift and Rust" />
-    <a href="LICENSE"><img src="https://img.shields.io/badge/LICENSE-MIT-B9A47A?style=for-the-badge" alt="MIT license" /></a>
-  </p>
-  <p>Wallet artwork, passcode themes and custom lock-screen wallpapers.<br />Applied on your device, without a jailbreak, on compatible iOS versions.</p>
-  <p><a href="#get-mirsa">Get Mirsa</a> · <a href="#your-toolbox">Your toolbox</a> · <a href="#before-you-start">Before you start</a> · <a href="https://x.com/rasmtk30">Follow @rasmtk30</a></p>
+  <p><strong>غيّر تفاصيل آيفونك، على ذوقك.</strong><br />Make your iPhone feel like yours.</p>
+  <p>Wallet artwork, passcode themes and lock-screen wallpapers.<br />On your device. No jailbreak required on supported iOS versions.</p>
+  <p><code>iPhone</code> &nbsp; <code>Swift + Rust</code> &nbsp; <a href="LICENSE">MIT License</a></p>
+  <br />
+  <p><a href="#install">Install</a> &nbsp; · &nbsp; <a href="#customize">Customize</a> &nbsp; · &nbsp; <a href="#compatibility">Compatibility</a> &nbsp; · &nbsp; <a href="#build">Build</a></p>
 </div>
 
 ---
 
-<h2 id="get-mirsa">Get Mirsa</h2>
+## Install
 
-Add the Mirsa source to a compatible source-based installer. Copy this address into its source settings, then select Mirsa Setup.
+**Start with Mirsa Setup.** Add the Mirsa source to your installer's source settings, then select **Mirsa Setup** from the catalog.
 
 ```text
 https://github.com/Alaaaya/Mirsa/releases/download/setup/source.json
 ```
 
-The source is an app catalog, not an installation profile. Installing an IPA still requires a signing or sideloading method appropriate for your device.
+<details>
+<summary><strong>Need a direct source link?</strong></summary>
 
-<h2 id="your-toolbox">Your toolbox</h2>
+If your installer has trouble with release-download redirects, use this alternative.
 
-<table>
-  <tr>
-    <td width="33%" valign="top">
-      <sub>01 / WALLET</sub>
-      <h3>New artwork. Same cards.</h3>
-      <p>Choose custom card backgrounds, detect your cards and apply artwork individually or in a batch. Changes affect appearance, not the card itself.</p>
-    </td>
-    <td width="33%" valign="top">
-      <sub>02 / PASSCODE</sub>
-      <h3>A dialer of your own.</h3>
-      <p>Frame an image across the keypad or create separate button cutouts. Preview the result, adjust its position and share themes as <code>.passthm</code> files.</p>
-    </td>
-    <td width="33%" valign="top">
-      <sub>03 / WALLPAPERS</sub>
-      <h3>Beyond a still image.</h3>
-      <p>Import <code>.tendies</code> archives from Files and apply their PosterBoard assets. A respring refreshes the lock screen after installation.</p>
-    </td>
-  </tr>
-</table>
+```text
+https://raw.githubusercontent.com/Alaaaya/Mirsa/main/source.json
+```
 
-<h2 id="before-you-start">Before you start</h2>
+Both addresses serve the Mirsa catalog.
 
-Mirsa needs a pairing record and an active local loopback tunnel, such as LocalDevVPN or a suitable WireGuard configuration. The tunnel lets the app reach services on your own phone.
+</details>
 
-<table>
-  <tr><th align="left">Device software</th><th align="left">Pairing route</th></tr>
-  <tr><td>iOS 18 through 26</td><td>Import an existing pairing record.</td></tr>
-  <tr><td>iOS 27.0 through 27.2 beta 2</td><td>Import a record or use on-device pairing where available.</td></tr>
-  <tr><td>iOS 27.2 beta 3 and later</td><td>The underlying file-injection method is patched. Not supported.</td></tr>
-</table>
+The source is an app catalog, not an installation profile. You still need a signing or sideloading method appropriate for your device to install an IPA.
 
-These are the project's stated compatibility limits; individual features can behave differently between releases. Back up your device before changing system caches, and check compatibility before updating iOS.
+## Customize
+
+| In Mirsa | What you can change |
+| :--- | :--- |
+| **Wallet artwork** | Choose card backgrounds, detect your cards and apply artwork individually or in a batch. Only the appearance changes, not the card itself. |
+| **Passcode themes** | Frame an image across the keypad or create separate button cutouts. Preview and reposition your design, then share it as a `.passthm` theme. |
+| **Lock-screen wallpapers** | Import `.tendies` archives from Files and apply their PosterBoard assets. Respring after installation to refresh the lock screen. |
+
+## Compatibility
+
+Check your iOS version **before installing or updating**. Support depends on the underlying file-injection method, and individual features may behave differently between releases.
+
+| iOS version | Pairing and support |
+| :--- | :--- |
+| **18 through 26** | Import an existing pairing record. |
+| **27.0 through 27.2 beta 2** | Import a record, or use on-device pairing where available. |
+| **27.2 beta 3 and later** | **Not supported.** The underlying method is patched. |
+
+These are the project's stated compatibility limits. Back up your device before changing system caches.
+
+## Connect your iPhone
+
+Mirsa needs two things before it can apply changes.
+
+| Requirement | Purpose |
+| :--- | :--- |
+| **Pairing record** | Authorizes access to your iPhone's device services. Keep it private. |
+| **Local loopback tunnel** | Lets Mirsa reach services on your own phone. Use LocalDevVPN or a suitable WireGuard configuration. |
 
 <details>
-<summary><strong>Connect your iPhone</strong></summary>
+<summary><strong>Import a pairing record</strong></summary>
 
-Open Mirsa's Pairing tab and import a pairing record from Files. Supported extensions include `.mobiledevicepairing`, `.plist` and `.mobilepair`.
+Open Mirsa's **Pairing** tab and import your record from Files.
 
-If you already use SideStore, look for `ALTPairingFile.mobiledevicepairing` in its Files folder. Other pairing tools can export a record for you to transfer to the phone.
+Supported formats are `.mobiledevicepairing`, `.plist` and `.mobilepair`.
 
-On compatible iOS 27 releases, you can instead choose **Pair This iPhone**. Keep the displayed PIN handy, follow the Developer Mode pairing prompt in Settings, then return to Mirsa.
+If you use SideStore, look for `ALTPairingFile.mobiledevicepairing` in its Files folder. Otherwise, export a record using a pairing tool and transfer it to your iPhone.
 
-Keep pairing records private. They authorize access to device services.
+Keep the local tunnel active while using features that require device-service access.
 
 </details>
 
 <details>
-<summary><strong>Build a local copy</strong></summary>
+<summary><strong>Pair directly on a supported iPhone</strong></summary>
 
-Use a Mac with Xcode and the iOS SDK required by the checked-out source. Install XcodeGen if regenerating the project; install Rust if rebuilding the native core.
+On compatible iOS 27 releases, choose **Pair This iPhone** in Mirsa.
+
+Keep the displayed PIN handy, follow the Developer Mode pairing prompt in Settings, then return to Mirsa to finish.
+
+On-device pairing is not available on every supported iOS version. Import an existing record if the option is unavailable.
+
+</details>
+
+## Build
+
+Build locally on a **Mac with Xcode** and the iOS SDK required by the checked-out source.
+
+| Tool | When you need it |
+| :--- | :--- |
+| **Xcode + iOS SDK** | Building the iOS app. |
+| **XcodeGen** | Regenerating the Xcode project. |
+| **Rust** | Rebuilding the native core. |
+
+<details>
+<summary><strong>Clone and build the unsigned IPA</strong></summary>
 
 ```sh
 git clone https://github.com/Alaaaya/Mirsa-iOS.git
@@ -84,14 +108,28 @@ cd Mirsa-iOS
 
 The unsigned IPA is placed in `build/`. Sign it using your own installation setup.
 
-To rebuild the Rust framework before building the app, run `./build-ios.sh`. App code lives in `ios-app/`; native code lives in `rust-core/`.
+To rebuild the Rust framework first, run `./build-ios.sh` before `./build-ipa.sh`.
 
 </details>
+
+| Source | Location |
+| :--- | :--- |
+| iOS application | [`ios-app/`](ios-app/) |
+| Native core | [`rust-core/`](rust-core/) |
+| App build script | [`build-ipa.sh`](build-ipa.sh) |
+| Native build script | [`build-ios.sh`](build-ios.sh) |
+
+## Credits & license
+
+Mirsa is based on [AirCard-iOS by mak5er](https://github.com/mak5er/AirCard-iOS), with contributions and research from merybist, Johnny Franks / AirLift, and the NeoSpring authors skadz108, rooootdev and neonmodder123.
+
+Original copyright notices and component licenses remain in their respective files. Distributed under the [MIT License](LICENSE).
 
 ---
 
 <div align="center">
-  <p><strong>Mirsa · مرسى</strong><br /><a href="https://x.com/rasmtk30">@rasmtk30 on X</a></p>
+  <p><strong>Mirsa · مرسى</strong></p>
+  <p><a href="https://x.com/rasmtk30">Follow @rasmtk30 on X</a></p>
+  <sub>Personalize your iPhone. Keep it yours.</sub>
+  <br /><br />
 </div>
-
-<sub>Based on <a href="https://github.com/mak5er/AirCard-iOS">AirCard-iOS by mak5er</a>, with contributions and research from merybist, Johnny Franks / AirLift, and the NeoSpring authors skadz108, rooootdev and neonmodder123. Original copyright and component licenses remain in their respective files. Distributed under the <a href="LICENSE">MIT License</a>.</sub>
