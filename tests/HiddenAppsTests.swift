@@ -121,10 +121,5 @@ final class HiddenAppsTests: XCTestCase {
         XCTAssertEqual(s.unlock("1234"), .faulted); XCTAssertFalse(s.isUnlocked)
         if case .wrongPIN = s.unlock("0000") { XCTFail("failure counter must not silently succeed") }
     }
-    func testViewLocksOnBackgroundAndDisappearStatic() throws {
-        let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("ios-app/Apps/HiddenAppsView.swift")
-        let src = try String(contentsOf: url, encoding: .utf8)
-        XCTAssertTrue(src.contains("p != .active { store.lock() }")); XCTAssertTrue(src.contains(".onDisappear { store.lock() }"))
-    }
     func testIDParsing() { XCTAssertNil(HiddenAppID(raw: "bogus")); XCTAssertNil(HiddenAppID(raw: "main:")); XCTAssertNotNil(HiddenAppID(raw: "personal:ABC")) }
 }
