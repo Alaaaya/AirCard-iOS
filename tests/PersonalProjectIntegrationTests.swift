@@ -26,6 +26,8 @@ final class PersonalProjectIntegrationTests: XCTestCase {
     func testRealSwiftUIArabicSnapshotsAndIPAIcon() async throws {
         let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "PersonalUIFixture", withExtension: "zip"))
         let library = PersonalAppsLibrary.shared
+        let restoreDefaults = preserveDefaults(Self.layoutKeys + ["mirsa.personal.projects.grid"])
+        defer { restoreDefaults() }
         let before = Set(library.apps.map(\.id))
         try await library.add(fixture, signed: false)
         let app = try XCTUnwrap(library.apps.first { !before.contains($0.id) })
@@ -44,7 +46,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         let tweaks = IPATweakLibrary.shared
         let defaults = UserDefaults.standard
         let gridKey = "mirsa.personal.projects.grid"
-        let oldGrid = defaults.object(forKey: gridKey)
+        let restoreDefaults = preserveDefaults(Self.layoutKeys + [gridKey])
         let beforeApps = Set(library.apps.map(\.id)), beforeTweaks = Set(tweaks.items.map(\.id))
         // Harmless synthetic bytes named like a dylib; imported as data, never loaded or executed.
         let dylib = FileManager.default.temporaryDirectory.appendingPathComponent("testdylib-\(UUID().uuidString).dylib")
@@ -53,7 +55,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             try? FileManager.default.removeItem(at: dylib)
             for t in tweaks.items where !beforeTweaks.contains(t.id) { try? tweaks.delete(t) }
             for a in library.apps where !beforeApps.contains(a.id) { try? library.delete(a) }
-            if let oldGrid { defaults.set(oldGrid, forKey: gridKey) } else { defaults.removeObject(forKey: gridKey) }
+            restoreDefaults()
         }
         try await library.add(fixture, signed: false)
         let app = try XCTUnwrap(library.apps.first { !beforeApps.contains($0.id) })
@@ -91,9 +93,9 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         let app = ManagedApp(id: "com.example.ringfixture", name: "Ring Fixture", version: "1.0", sizeBytes: 1,
                              location: .container, installedBundleID: nil, expires: nil, signedSerial: nil,
                              wantsNotifications: false, hasExtensions: false, addedAt: Date())
+        let restoreDefaults = preserveDefaults(Self.layoutKeys)
+        defer { restoreDefaults() }
         let progress = MirsaOperationProgress.shared
-        let hadHome = UserDefaults.standard.object(forKey: "mirsa.home.dockIDs")
-        defer { if let hadHome { UserDefaults.standard.set(hadHome, forKey: "mirsa.home.dockIDs") } else { UserDefaults.standard.removeObject(forKey: "mirsa.home.dockIDs") } }
         let op = progress.begin(appID: app.id, phase: .downloading, cancel: {})
         defer { progress.finish(op) }
         XCTAssertEqual(progress.entry(for: app.id)?.canCancel, true)
@@ -108,6 +110,15 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                            name: "SIMULATOR-FIXTURE-main-home-50-percent")
         progress.cancel(op)
         XCTAssertNil(progress.entry(for: app.id))
+    }
+
+    private static let layoutKeys = ["mirsa.home.layout.v1.main", "mirsa.home.layout.v1.personal", "mirsa.home.orderIDs",
+                                     "mirsa.home.dockIDs", "mirsa.home.wallpaper"]
+    /// Snapshots each key now; the returned closure restores the value or removes the key if it was absent.
+    private func preserveDefaults(_ keys: [String]) -> () -> Void {
+        let defaults = UserDefaults.standard
+        let saved = keys.map { ($0, defaults.object(forKey: $0)) }
+        return { for (key, value) in saved { if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) } } }
     }
 
     private func snapshot<V: View>(_ view: V, name: String) async throws {
