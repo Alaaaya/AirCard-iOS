@@ -64,15 +64,17 @@ The source is an app catalog, not an installation profile. You still need a sign
 
 ## Compatibility
 
-Check your iOS version **before installing or updating**. Support depends on the underlying file-injection method, and individual features may behave differently between releases.
+Support depends on the feature, not just the iOS version. The file-transfer patch affects **customization tools only**, not app installing or the container.
 
-| iOS version | Pairing and support |
+الدعم بيختلف حسب الميزة. إصلاح طريقة نقل الملفات بيأثر على **أدوات التخصيص فقط**، مو على تثبيت التطبيقات أو الحاوية.
+
+| Feature · الميزة | Compatibility · التوافق |
 | :--- | :--- |
-| **18 through 26** | Import an existing pairing record. |
-| **27.0 through 27.2 beta 2** | Import a record, or use on-device pairing where available. |
-| **27.2 beta 3 and later** | **Not supported.** The underlying method is patched. |
+| **App installing & container**<br />**تثبيت التطبيقات والحاوية** | App installing/sideloading, sources, the container and downloads keep working on newer iOS versions with **pairing + LocalDevVPN**. The customization cutoff below does not apply to them.<br />تثبيت التطبيقات والسورسات والحاوية والتنزيلات بتضل شغالة على إصدارات iOS الأحدث مع **الاقتران + LocalDevVPN**. حدّ التخصيص المذكور بالأسفل ما بيشملها. |
+| **Customization tools**<br />**أدوات التخصيص** | Wallpapers, Wallet artwork and passcode themes rely on the file-transfer method Apple patched. **iOS 18–26:** import an existing pairing record. **iOS 27.0–27.2 beta 2:** import a record, or use on-device pairing where available. **iOS 27.2 beta 3 and later: not supported for these tools.**<br />الخلفيات وتصاميم Wallet وثيمات رمز القفل بتعتمد على طريقة نقل الملفات اللي سكّرتها Apple. **iOS 18–26:** استيراد ملف اقتران موجود. **iOS 27.0–27.2 beta 2:** استيراد ملف، أو الاقتران من الجهاز إذا كان متاح. **iOS 27.2 beta 3 والأحدث: أدوات التخصيص هاي غير مدعومة.** |
 
-These are the project's stated compatibility limits. Back up your device before changing system caches.
+Individual features may behave differently between releases. Back up your device before changing system caches.<br />
+بعض الميزات ممكن تختلف بين الإصدارات. اعمل نسخة احتياطية قبل تعديل كاش النظام.
 
 ## Connect your iPhone
 
