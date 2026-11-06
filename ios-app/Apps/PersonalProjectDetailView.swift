@@ -177,7 +177,11 @@ struct PersonalProjectDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(personalText("Signing certificate", "شهادة التوقيع"), systemImage: "key.fill").font(.subheadline.weight(.semibold))
             if let selected {
-                Text(selected.name).font(.headline).foregroundStyle(.green)
+                Text(selected.name).font(.headline).foregroundStyle(selected.verification.isVerified ? Color.green : Color.orange)
+                if !selected.verification.isVerified {
+                    Label(selected.verification.warningText, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
                 Text("Team ID: " + selected.teamID).font(.caption).foregroundStyle(.secondary)
                 if let expiry = selected.expiry {
                     Text(personalText("Local expiry date: ", "تاريخ الانتهاء المحلي: ") + expiry.formatted(date: .abbreviated, time: .omitted))
@@ -246,6 +250,9 @@ struct PersonalProjectDetailView: View {
                 message = personalText("Signed locally. Exporting does not install the app.", "تم التوقيع على جهازك. التصدير ما بيثبّت التطبيق.")
                 if result.bundleIdentifierChanged {
                     message = (message ?? "") + "\n" + "تم تغيير المعرّف ليطابق البروفايل"
+                }
+                if !result.verification.isVerified {
+                    message = (message ?? "") + "\n" + result.verification.warningText
                 }
                 sharing = true
                 MirsaOperationProgress.shared.finish(operation)

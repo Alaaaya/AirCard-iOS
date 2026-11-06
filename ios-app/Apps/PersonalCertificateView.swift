@@ -9,10 +9,37 @@ private func personalEditorRun(_ request: UnsafePointer<CChar>) -> UnsafeMutable
 @_silgen_name("al_personal_p12_import")
 private func personalP12Import(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
 
+struct PersonalProfileVerification: Codable, Equatable {
+    struct Warning: Codable, Equatable {
+        let code: String
+        let message: String
+        let profile_index: Int?
+    }
+    let profile_verification: String
+    let warnings: [Warning]
+    var isVerified: Bool { profile_verification == "verified" && warnings.isEmpty }
+    static let unknown = PersonalProfileVerification(profile_verification: "unverified", warnings: [
+        Warning(code: "profile_cms_unverified", message: "ما قدرنا نتحقق من توقيع Apple على البروفايل. فيك تكمّل، بس هاد مو تأكيد لصلاحيته. iOS بيفحصه كمان وقت التثبيت.", profile_index: nil)
+    ])
+    static func parse(_ result: [String: Any]) -> Self {
+        guard let status = result["profile_verification"] as? String,
+              ["verified", "unverified"].contains(status),
+              let values = result["warnings"] as? [[String: Any]] else { return .unknown }
+        let warnings = values.compactMap { value -> Warning? in
+            guard let code = value["code"] as? String, let message = value["message"] as? String, !message.isEmpty else { return nil }
+            return Warning(code: code, message: message, profile_index: value["profile_index"] as? Int)
+        }
+        guard warnings.count == values.count else { return .unknown }
+        if status != "verified" && warnings.isEmpty { return .unknown }
+        return Self(profile_verification: status, warnings: warnings)
+    }
+    var warningText: String { warnings.map(\.message).joined(separator: "\n") }
+}
+
 // Separate from Apple ID storage and its handover/export/wipe operations.
 enum PersonalIdentityVault {
     private static let service = "com.alaa.mirsa.personal-signing"
-    struct Material: Codable { let p12: Data; let password: String; let profile: Data }
+    struct Material: Codable { let p12: Data; let password: String; let profile: Data; var verification: PersonalProfileVerification? = nil }
     private static var query: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
          kSecAttrAccount as String: "identity"]
@@ -25,6 +52,7 @@ enum PersonalIdentityVault {
         let bundleID: String
         let expiry: Date?
         let profileType: String
+        let verification: PersonalProfileVerification
     }
     private struct Entry: Codable { let id: String; let material: Material }
     private struct Collection: Codable { var entries: [Entry]; var selected: String? }
@@ -72,8 +100,12 @@ enum PersonalIdentityVault {
         try store(list)
     }
     static func save(_ material: Material) throws {
+        var material = material
+        material.verification = PersonalProfileVerification.parse(try importResult(material))
         var list = try collection()
         if let existing = list.entries.first(where: { $0.material.p12 == material.p12 && $0.material.profile == material.profile }) {
+            list.entries.removeAll { $0.id == existing.id }
+            list.entries.append(Entry(id: existing.id, material: material))
             list.selected = existing.id
         } else {
             guard list.entries.count < 30 else { throw SideloadError.message("احذف شهادة قديمة قبل إضافة شهادة جديدة.") }
@@ -99,7 +131,8 @@ enum PersonalIdentityVault {
                 teamID: details["teamID"] as? String ?? "",
                 bundleID: details["bundleID"] as? String ?? "",
                 expiry: (details["expiry"] as? Double).map { Date(timeIntervalSince1970: $0) },
-                profileType: details["profileType"] as? String ?? "")
+                profileType: details["profileType"] as? String ?? "",
+                verification: PersonalProfileVerification.parse(details))
         }
     }
     private static func importResult(_ material: Material) throws -> [String: Any] {
@@ -148,6 +181,7 @@ enum PersonalCertificateSigner {
     struct Result {
         let url: URL
         let bundleIdentifierChanged: Bool
+        let verification: PersonalProfileVerification
     }
     static func sign(ipa: URL, material: PersonalIdentityVault.Material, options: PersonalProjectOptions = .init()) throws -> Result {
         let fm = FileManager.default
@@ -242,7 +276,8 @@ enum PersonalCertificateSigner {
         let signedInfo = try IPAEditorService.info(in: app)
         retained = true
         return Result(url: output, bundleIdentifierChanged:
-            (signedInfo["CFBundleIdentifier"] as? String) != (info["CFBundleIdentifier"] as? String))
+            (signedInfo["CFBundleIdentifier"] as? String) != (info["CFBundleIdentifier"] as? String),
+            verification: PersonalProfileVerification.parse(result ?? [:]))
     }
 }
 
@@ -353,8 +388,12 @@ struct PersonalCertificateView: View {
     private func savedCard(_ item: PersonalIdentityVault.SavedIdentity) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(personalText("Selected certificate", "الشهادة المحددة") + (count > 1 ? " (\(count))" : ""), systemImage: "lock.shield.fill")
-                .font(.subheadline.weight(.semibold)).foregroundStyle(.green)
+                .font(.subheadline.weight(.semibold)).foregroundStyle(item.verification.isVerified ? Color.green : Color.orange)
             Text(item.name).font(.headline).lineLimit(2)
+            if !item.verification.isVerified {
+                Label(item.verification.warningText, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
             Text("Team ID: " + item.teamID).font(.caption).foregroundStyle(.secondary)
             Text(item.bundleID).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             if !item.profileType.isEmpty { Text(item.profileType).font(.caption2).foregroundStyle(.secondary) }
@@ -363,7 +402,7 @@ struct PersonalCertificateView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             }
         }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
-            .background(Color.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background((item.verification.isVerified ? Color.green : Color.orange).opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
     private func reloadSaved() {
         do {
