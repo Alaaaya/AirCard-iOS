@@ -8,6 +8,19 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - name: Test actual CryptoKit handoff
+        run: |
+          mkdir -p hk/Sources/WindowsHandoffKit hk/Tests/WindowsHandoffKitTests
+          cp ios-app/Apps/WindowsHandoffCrypto.swift hk/Sources/WindowsHandoffKit/
+          cp tests/WindowsHandoffTests.swift hk/Tests/WindowsHandoffKitTests/
+          cat > hk/Package.swift <<'EOF'
+          // swift-tools-version:5.9
+          import PackageDescription
+          let package = Package(name: "WindowsHandoffKit", platforms: [.macOS(.v13)],
+            products: [.library(name: "WindowsHandoffKit", targets: ["WindowsHandoffKit"])],
+            targets: [.target(name: "WindowsHandoffKit"), .testTarget(name: "WindowsHandoffKitTests", dependencies: ["WindowsHandoffKit"])])
+          EOF
+          cd hk && swift test
       - name: Select Xcode
         run: |
           XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
