@@ -5,6 +5,8 @@ use x509_cert::der::Decode;
 use std::{path::{Path, PathBuf}, collections::BTreeMap, time::{SystemTime, UNIX_EPOCH}};
 #[path = "personal_nested.rs"]
 mod nested;
+#[path = "incoming_ipa.rs"]
+pub(crate) mod incoming_ipa;
 #[path = "personal_cms.rs"]
 mod cms_verify;
 fn err(e: impl std::fmt::Display) -> String { e.to_string() }

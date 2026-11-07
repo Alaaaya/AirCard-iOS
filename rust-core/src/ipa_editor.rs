@@ -953,6 +953,8 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
         "extract" => extract_zip(Path::new(&r.input), Path::new(&r.output)),
         "pack" => pack(Path::new(&r.input), Path::new(&r.output)),
         "deb" => extract_deb(Path::new(&r.input), Path::new(&r.output)),
+        "incoming_profile" => crate::personal_sign::incoming_ipa::inspect_profile(Path::new(&r.input),Path::new(&r.output)),
+        "incoming_preview" => crate::personal_sign::incoming_ipa::inspect(Path::new(&r.input),Path::new(&r.output)),
         "dependencies" => {
             let list = dependencies(Path::new(&r.input))?;
             let json = serde_json::to_vec(&list).map_err(err)?;
@@ -1014,6 +1016,22 @@ unsafe fn editor_run_with_progress(request: *const c_char, sink: Option<crate::s
 mod tests {
     use super::*;
 
+    #[test]
+    fn incoming_real_ipa_fixture_preview_is_read_only() {
+        let root = std::env::temp_dir().join(format!("incoming-ipa-test-{}",std::process::id()));
+        let _=fs::remove_dir_all(&root);fs::create_dir_all(&root).unwrap();
+        let ipa=root.join("Fixture.ipa");
+        let fixture=include_bytes!("../tests/fixtures/incoming/SignedFixture.ipa");
+        fs::write(&ipa,fixture).unwrap();
+        let out=root.join("extracted");extract_zip(&ipa,&out).unwrap();
+        let json=root.join("preview.json");
+        crate::personal_sign::incoming_ipa::inspect(&out.join("Payload/Fixture.app"),&json).unwrap();
+        let data:serde_json::Value=serde_json::from_slice(&fs::read(json).unwrap()).unwrap();
+        assert_eq!(data["signaturePresent"],true);
+        assert!(data["embeddedProfile"]["entitlements"].is_array());
+        assert_eq!(fs::read(ipa).unwrap(),fixture);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn dependencies_lists_dylib_loads_and_rejects_malformed() {
         let c1 = dylib_command(0xc, "@rpath/Foo.framework/Foo", None).unwrap();
