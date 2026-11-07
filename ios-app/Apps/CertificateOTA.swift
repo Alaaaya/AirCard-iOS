@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import Security
 
 enum MirsaInstallMode {
     static let key = "mirsa.install.mode"
@@ -14,6 +15,7 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
         guard let identity = PersonalIdentityVault.savedIdentities().first else {
             throw SideloadError.message(personalText("Import your certificate first.", "استورد شهادتك بالأول."))
         }
+        let device = try OwnCertificateDevice.require()
         let fm = FileManager.default
         let stage = fm.temporaryDirectory.appendingPathComponent("ota-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: stage.appendingPathComponent("Payload"), withIntermediateDirectories: true)
@@ -23,11 +25,11 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
         let input = stage.appendingPathComponent("input.ipa")
         try await Task.detached { try IPAEditorService.run("pack", input: stage, output: input) }.value
         let material = identity.material
-        let pairing = PairingController.pairingFilePath()
+
         var options = PersonalProjectOptions()
         options.strictProfile = true // Self-install requires a profile that actually covers this identity.
         let signed = try await Task.detached {
-            try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairing, options: options)
+            try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: "", options: options, cachedUDID: device)
         }.value
         defer { try? fm.removeItem(at: signed.url.deletingLastPathComponent()) }
         let info = try IPAEditorService.info(in: app)
@@ -66,5 +68,65 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
             throw SideloadError.message(personalText("iOS could not open OTA installation.", "iOS ما قدر يفتح تثبيت OTA."))
         }
         // Opening the installer is not evidence of successful device installation.
+    }
+}
+
+enum OwnCertificateDevice {
+    static let message = "إعداد الجهاز مطلوب مرة واحدة. فعّل VPN والاقتران واضغط قراءة الجهاز هون، وبعد نجاح القراءة طفي VPN وثبّت بشهادتك."
+    static var query: [String: Any] {
+        [kSecClass as String:kSecClassGenericPassword, kSecAttrService as String:"mirsa.owncert.realdevice.v1", kSecAttrAccount as String:"device", kSecAttrSynchronizable as String:false]
+    }
+    static func clear() { SecItemDelete(query as CFDictionary) }
+    static func require() throws -> String {
+        var q=query; q[kSecReturnData as String]=true
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary,&item)==errSecSuccess, let data=item as? Data,
+              let value=try? JSONDecoder().decode([String:String].self,from:data),
+              value["binding"] == UIDevice.current.identifierForVendor?.uuidString,
+              let id=value["udid"], !id.isEmpty else {
+            clear(); throw SideloadError.message(message)
+        }
+        return id
+    }
+    @MainActor static func setup() async throws {
+        clear()
+        let path=PairingController.pairingFilePath()
+        let output=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at:output) }
+        try await Task.detached {
+            try IPAEditorService.run("read_device_once",input:URL(fileURLWithPath:path),output:output)
+        }.value
+        try FileManager.default.setAttributes([.protectionKey:FileProtectionType.complete],ofItemAtPath:output.path)
+        guard let binding=UIDevice.current.identifierForVendor?.uuidString else { throw SideloadError.message(message) }
+        let udid=try String(contentsOf:output,encoding:.utf8)
+        let data=try JSONEncoder().encode(["udid":udid,"binding":binding])
+        var q=query; q[kSecValueData as String]=data
+        q[kSecAttrAccessible as String]=kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        guard SecItemAdd(q as CFDictionary,nil)==errSecSuccess else { throw SideloadError.message(message) }
+    }
+}
+
+import SwiftUI
+struct OwnCertificateDeviceSetup: View {
+    @State private var status = OwnCertificateDevice.message
+    @State private var busy = false
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text(status).font(.caption)
+            Button("قراءة الجهاز مرة واحدة / إعادة المحاولة") {
+                busy = true
+                Task {
+                    do {
+                        try await OwnCertificateDevice.setup()
+                        status = "تم حفظ الجهاز بأمان. فيك تطفي VPN وتثبّت بشهادتك."
+                    } catch { status = error.localizedDescription }
+                    busy = false
+                }
+            }.disabled(busy)
+            Button("مسح بيانات الجهاز المحفوظة", role: .destructive) {
+                OwnCertificateDevice.clear()
+                status = OwnCertificateDevice.message
+            }.disabled(busy)
+        }
     }
 }

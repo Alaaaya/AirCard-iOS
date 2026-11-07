@@ -321,7 +321,7 @@ enum PersonalCertificateSigner {
         try data.write(to: url, options: [.atomic, .completeFileProtection])
         return url.path
     }
-    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init(), install: Bool = false,
+    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init(), cachedUDID: String? = nil, install: Bool = false,
                      control: PersonalSigningControl = PersonalSigningControl(),
                      progress: @escaping (PersonalSigningEvent) -> Void = { _ in }) throws -> Result {
         try control.checkpoint()
@@ -342,6 +342,8 @@ enum PersonalCertificateSigner {
                                       "profile": profile.path, "private_key": key.base64EncodedString(),
                                       "certificate": certificate.base64EncodedString(),
                                       "pairing_path": pairingPath,
+                                      "cached_only": cachedUDID != nil,
+                                      "cached_udid": cachedUDID ?? "",
                                       "bundle_id": options.bundleID ?? "",
                                       "remove_extensions": options.removeExtensions,
                                       "remove_watch": options.removeWatchApp,

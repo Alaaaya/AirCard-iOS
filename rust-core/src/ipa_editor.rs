@@ -949,6 +949,7 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
         #[cfg(test)]
         "__test_worker_panic" => panic!("synthetic worker panic"),
         "personal_sign" => return crate::personal_sign::sign_with_options(Path::new(&r.input), Path::new(&r.profile), &r.private_key, &r.certificate, &r.signing_options),
+        "read_device_once" => crate::personal_sign::actual_udid(&r.input).and_then(|id| std::fs::write(&r.output,id).map_err(err)),
         "validate" => unencrypted(&read_macho(Path::new(&r.input))?),
         "extract" => extract_zip(Path::new(&r.input), Path::new(&r.output)),
         "pack" => pack(Path::new(&r.input), Path::new(&r.output)),

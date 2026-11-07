@@ -1150,10 +1150,11 @@ struct AppsSettingsSheet: View {
                         Text(tr("My certificate", "شهادتي")).tag("certificate")
                     }
                     if installMode == "certificate" {
+                        OwnCertificateDeviceSetup()
                         NavigationLink { PersonalCertificateManagerView() } label: {
                             Label(tr("Certificates", "الشهادات"), systemImage: "signature")
                         }
-                        Text(tr("Self-install and updates use your certificate and a private HTTPS link valid for 15 minutes, OTA installation does not use VPN, but local signing currently still needs the existing pairing/VPN device check. Only the signed IPA and public profile are uploaded, never your P12, password or private key. The profile must cover Mirsa and this device. Keychain data may reset; certificate revocation stops the app. Other Apple ID operations still require VPN.", "تثبيت مرسى وتحديثاته بشهادتك ورابط HTTPS خاص لمدة 15 دقيقة، التثبيت OTA ما بيحتاج VPN، بس التوقيع المحلي حالياً بعده بحاجة لفحص الجهاز بالاقتران وVPN. بينرفع ملف IPA الموقّع والبروفايل العام فقط، مو ملف P12 ولا كلمة السر ولا المفتاح الخاص. لازم البروفايل يدعم مرسى وجهازك. ممكن بيانات سلسلة المفاتيح تنمسح، وإلغاء الشهادة بيوقف التطبيق. عمليات Apple ID التانية بعدها بحاجة VPN."))
+                        Text(tr("Self-install and updates use your certificate and a private HTTPS link valid for 15 minutes, OTA installation does not use VPN, after a one-time real device read in Settings. Signing and installation use only the device-bound secure cache. Only the signed IPA and public profile are uploaded, never your P12, password or private key. The profile must cover Mirsa and this device. Keychain data may reset; certificate revocation stops the app. Other Apple ID operations still require VPN.", "تثبيت مرسى وتحديثاته بشهادتك ورابط HTTPS خاص لمدة 15 دقيقة، التثبيت OTA ما بيحتاج VPN، بعد قراءة الجهاز مرة واحدة بالإعدادات. التوقيع والتثبيت بيستخدموا النسخة الآمنة المرتبطة بهالجهاز بدون VPN. بينرفع ملف IPA الموقّع والبروفايل العام فقط، مو ملف P12 ولا كلمة السر ولا المفتاح الخاص. لازم البروفايل يدعم مرسى وجهازك. ممكن بيانات سلسلة المفاتيح تنمسح، وإلغاء الشهادة بيوقف التطبيق. عمليات Apple ID التانية بعدها بحاجة VPN."))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }

@@ -100,6 +100,8 @@ pub(crate) struct Options {
     /// Explicit user override only. Empty preserves the IPA identity.
     #[serde(default)] pub bundle_id: String,
     #[serde(default)] pub pairing_path: String,
+    #[serde(default)] pub cached_only: bool,
+    #[serde(default)] pub cached_udid: String,
     /// Off by default. When true, a profile that does not cover an app's ID is rejected
     /// (old behavior). When false (compatibility), the app keeps its own CFBundleIdentifier and
     /// the selected profile's authorized identity/entitlements are used.
@@ -179,7 +181,7 @@ fn read_pairing(path: &str) -> Result<Vec<u8>, String> {
     pairing_structure(&bytes)?;
     Ok(bytes)
 }
-fn actual_udid(pairing_path: &str) -> Result<String,String> {
+pub(crate) fn actual_udid(pairing_path: &str) -> Result<String,String> {
     // This API is blocking. Swift calls it on a detached worker, but direct
     // callers must not nest block_on in an active Tokio runtime. Return an
     // actionable error instead of relying on the outer FFI panic handler.
@@ -236,7 +238,7 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
     let mut paths = vec![profile_path.to_path_buf()];
     paths.extend(opts.profiles.iter().map(PathBuf::from));
     paths.dedup();
-    let target_udid = actual_udid(&opts.pairing_path)?;
+    let target_udid = signing_udid(opts, actual_udid)?;
     let mut profiles = Vec::new();
     let mut status = Verification { profile_verification: "verified".into(), warnings: vec![], device_authorization: "not_checked".into() };
     for (index,path) in paths.into_iter().enumerate() {
@@ -569,5 +571,30 @@ mod coexistence_tests {
         assert!(main_identity(&["PREFIX.com.fixture.*"], old, "com.outside.app").is_err());
         assert!(main_identity(&["PREFIX.*"], old, "../bad").is_err());
         std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+fn signing_udid(opts: &Options, read: impl FnOnce(&str)->Result<String,String>) -> Result<String,String> {
+    if opts.cached_only {
+        let id = opts.cached_udid.trim();
+        if !((id.len()==40 && id.bytes().all(|c|c.is_ascii_hexdigit())) ||
+             (id.len()==25 && id.as_bytes()[8]==b'-' && id.bytes().enumerate().all(|(i,c)| i==8 || c.is_ascii_hexdigit()))) {
+            return Err("إعداد الجهاز مطلوب مرة واحدة. افتح الإعدادات وفعّل VPN والاقتران واضغط قراءة الجهاز، وبعدين طفي VPN وثبّت.".into());
+        }
+        return Ok(id.into());
+    }
+    read(&opts.pairing_path)
+}
+#[cfg(test)] mod cached_device_tests {
+    use super::*;
+    #[test] fn cache_never_calls_network() {
+        let o=Options {cached_only:true,cached_udid:"00008110-0012345678901234".into(),..Default::default()};
+        assert!(signing_udid(&o, |_|panic!("VPN called")).is_ok());
+    }
+    #[test] fn missing_invalid_fail_without_network() {
+        for id in ["","invented"] {
+            let o=Options {cached_only:true,cached_udid:id.into(),..Default::default()};
+            assert!(signing_udid(&o, |_|panic!("VPN called")).unwrap_err().contains("مرة واحدة"));
+        }
     }
 }
