@@ -1,6 +1,7 @@
 
 import re,sys
-s=open("Apps/MirsaFormats.swift").read()
+from pathlib import Path
+s=(Path(__file__).resolve().parent / "Apps/MirsaFormats.swift").read_text()
 def ar(n):
     n=abs(n)
     if n==0:return"zero"

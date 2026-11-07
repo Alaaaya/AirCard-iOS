@@ -1,6 +1,7 @@
 
 import re,sys
-d="/tmp/mirsa-lang/ios-app/Apps/"
+from pathlib import Path
+d=str(Path(__file__).resolve().parent / "Apps") + "/"
 a=open(d+"MirsaTr.swift").read(); l=open(d+"MirsaTrLegacy.swift").read()
 def block(s,name):
     m=re.search(name+r".*?= \[\n(.*?)\n    \]",s,re.S); return m.group(1)
