@@ -144,7 +144,7 @@ struct TendiesView: View {
                 if !vm.tendieItems.isEmpty {
                     Section {
                         HStack {
-                            Text(tr("\(vm.tendieItems.count) Wallpapers Imported","تم استيراد \(vm.tendieItems.count) خلفية",ckb:"\(vm.tendieItems.count) وێنەی پشتەوە هاوردەکرا",kmr:"\(vm.tendieItems.count) wallpaper hatin têxistin"))
+                            Text(MirsaTr.p("wallpapersImported", vm.tendieItems.count))
                                 .font(.caption.bold())
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -207,7 +207,7 @@ struct TendiesView: View {
                                 HStack(spacing: 8) {
                                     Spacer()
                                     Image(systemName: "sparkles")
-                                    Text(tr("Flash \(selectedCount) Wallpaper\(selectedCount == 1 ? "" : "s")","تنفيذ \(selectedCount) خلفية",ckb:"نووسینی \(selectedCount) وێنەی پشتەوە",kmr:"\(selectedCount) wallpaper bisepîne"))
+                                    Text(MirsaTr.p("flashWallpapers", selectedCount))
                                     Spacer()
                                 }
                                 .font(.headline)
@@ -351,7 +351,7 @@ struct TendieRowView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
-                    Text(tr("\(item.descriptorCount) item\(item.descriptorCount == 1 ? "" : "s")","\(item.descriptorCount) عنصر",ckb:"\(item.descriptorCount) بڕگە",kmr:"\(item.descriptorCount) tişt"))
+                    Text(MirsaTr.p("items", item.descriptorCount))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }

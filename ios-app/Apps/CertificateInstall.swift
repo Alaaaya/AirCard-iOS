@@ -120,9 +120,7 @@ enum CertificateInstall {
     }
 
     static func retainedMessage(_ error: Error, _ signed: URL) -> String {
-        error.localizedDescription + "\n" + personalText(
-            "The signed IPA was kept: \(signed.lastPathComponent)",
-            "ملف الـIPA الموقّع انحفظ: \(signed.lastPathComponent)")
+        error.localizedDescription + "\n" + MirsaTr.f("signedKept", signed.lastPathComponent)
     }
 }
 

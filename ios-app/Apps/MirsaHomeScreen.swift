@@ -133,7 +133,7 @@ struct MirsaHomeScreen<Menu: View>: View {
                             Circle().fill(.white.opacity(index == page ? 1 : 0.3)).frame(width: 7, height: 7)
                                 .padding(.vertical, 8)
                         }
-                        .accessibilityLabel(tr("Page \(index + 1)", "صفحة \(index + 1)"))
+                        .accessibilityLabel(MirsaTr.f("page", index + 1))
                         .accessibilityAddTraits(index == page ? .isSelected : [])
                     }
                 }

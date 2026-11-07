@@ -357,7 +357,7 @@ struct PersonalAppsHub: View {
                             .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                     Button { detail = app } label: {
-                        chip(personalText("\(ids.count) add-ons", "\(ids.count) المكونات الإضافية"))
+                        chip(MirsaTr.p("addons", ids.count))
                     }.buttonStyle(.plain)
                 }
             }

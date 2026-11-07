@@ -11,8 +11,7 @@ struct NoProfileShortcutGuide: View {
         return c.url!
     }
     private var guide: String {
-        tr("In Shortcuts create a shortcut named \(app.name). Add ‘Open App in Mirsa’ with App ID \(app.id), or URL + Open URLs using \(launchURL.absoluteString). In Details choose Add to Home Screen, set the name and choose the shared icon. No configuration profile is needed.",
-           "بالاختصارات اعمل اختصار باسم \(app.name). ضيف Open App in Mirsa وحط App ID التالي \(app.id)، أو ضيف URL وبعده Open URLs بالرابط \(launchURL.absoluteString). من التفاصيل اختار إضافة للشاشة الرئيسية، سمّيه واختار الأيقونة يلي شاركتها. ما بدّه بروفايل.")
+        MirsaTr.f("shortcut", app.name, app.id, launchURL.absoluteString)
     }
     var body: some View {
         NavigationStack {

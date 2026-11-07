@@ -1430,7 +1430,7 @@ struct WalletCardsTab: View {
                 Color.clear.frame(height: 60)
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle(tr("Wallet Cards (\(vm.cards.count))","البطاقات (\(vm.cards.count))",ckb:"کارتەکان (\(vm.cards.count))",kmr:"Kart (\(vm.cards.count))"))
+            .navigationTitle(MirsaTr.f("walletCards", vm.cards.count))
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
@@ -2109,7 +2109,7 @@ struct PasscodeTargetSection: View {
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text(tr("Fast mode selected: only targets \(vm.passcodeLanguageTarget.rawValue) with \(vm.passcodeBoldTarget.rawValue).","الوضع السريع: يستهدف \(vm.passcodeLanguageTarget.rawValue) مع \(vm.passcodeBoldTarget.rawValue) فقط.",ckb:"دۆخی خێرا: تەنها \(vm.passcodeLanguageTarget.rawValue) لەگەڵ \(vm.passcodeBoldTarget.rawValue) ئامانج دەگرێت.",kmr:"Moda bilez: tenê \(vm.passcodeLanguageTarget.rawValue) bi \(vm.passcodeBoldTarget.rawValue) armanc dike."))
+                        Text(MirsaTr.f("fastMode", vm.passcodeLanguageTarget.rawValue, vm.passcodeBoldTarget.rawValue))
                             .font(.caption2)
                             .foregroundColor(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2350,7 +2350,7 @@ struct ThemeCreatorSection: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(tr("Key \(btn.digit)","المفتاح \(btn.digit)",ckb:"دوگمەی \(btn.digit)",kmr:"Bişkoja \(btn.digit)"))
+                        Text(MirsaTr.f("key", "\(btn.digit)"))
                             .font(.subheadline.weight(.medium))
                         if !btn.letters.isEmpty {
                             Text(btn.letters)

@@ -185,7 +185,7 @@ struct IPAEditorView: View {
                             .foregroundStyle(options.tweakIDs.contains(item.id) ? .purple : .white.opacity(0.5))
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.name).font(.subheadline.weight(.medium)).foregroundStyle(.white)
-                            Text(editorText("\(item.roots.count) code file(s)", "\(item.roots.count) ملفات كود"))
+                            Text(MirsaTr.p("codeFiles", item.roots.count))
                                 .font(.caption).foregroundStyle(.white.opacity(0.5))
                         }
                         Spacer()

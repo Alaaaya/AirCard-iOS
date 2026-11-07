@@ -75,7 +75,7 @@ struct AppScreenshotGallery: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 }
                                 .buttonStyle(.plain)
-                                .accessibilityLabel(tr("Screenshot \(i + 1) of \(model.urls.count)", "صورة \(i + 1) من \(model.urls.count)"))
+                                .accessibilityLabel(MirsaTr.f("screenshot", i + 1, model.urls.count))
                                 .accessibilityAddTraits(.isButton)
                             }
                         }
@@ -103,7 +103,7 @@ struct FullscreenScreenshots: View {
             TabView(selection: $page) {
                 ForEach(Array(urls.enumerated()), id: \.element) { i, u in
                     ScreenshotImage(url: u).background(Color.black).tag(i)
-                        .accessibilityLabel(tr("Screenshot \(i + 1) of \(urls.count)", "صورة \(i + 1) من \(urls.count)"))
+                        .accessibilityLabel(MirsaTr.f("screenshot", i + 1, urls.count))
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
