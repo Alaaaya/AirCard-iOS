@@ -85,9 +85,24 @@ final class MirsaKeyboardTests: XCTestCase {
         XCTAssertFalse(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
                        "CTA must not be exposed or cover the page while software keyboard is visible")
         attach("project-real-keyboard-visible-focused-field", window: window)
+        // First-responder resignation precedes the keyboard's didHide event.
+        // Wait for the real OS lifecycle, not an arbitrary animation duration.
+        let hidden = expectation(description: "Software keyboard did finish hiding")
+        let hiddenToken = NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main
+        ) { _ in hidden.fulfill() }
+        defer { NotificationCenter.default.removeObserver(hiddenToken) }
         window.endEditing(false)
-        try await Task.sleep(nanoseconds: 800_000_000)
+        await fulfillment(of: [hidden], timeout: 5)
         XCTAssertFalse(field.isFirstResponder)
+        // SwiftUI updates the safe-area inset on a subsequent render pass.
+        let deadline = Date().addingTimeInterval(5)
+        while !accessibilityContains(host.view, identifier: "mirsa.project.sign"),
+              Date() < deadline {
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
         XCTAssertTrue(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
                       "CTA must return after keyboard fully dismisses")
         attach("project-real-keyboard-hidden-CTA-restored", window: window)
