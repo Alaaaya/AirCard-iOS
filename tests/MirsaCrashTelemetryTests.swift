@@ -33,10 +33,16 @@ final class MirsaCrashTelemetryTests: XCTestCase {
         XCTAssertFalse(s.contains("https://")); XCTAssertFalse(s.contains("me@x.com")); XCTAssertFalse(s.contains("bob"))
         XCTAssertFalse(s.contains("hunter2")); XCTAssertFalse(s.contains("AAAAAAAA")); XCTAssertTrue(s.contains("-[Foo bar]"))
     }
+    func testProvenance() throws {
+        let s = MirsaTelemetryStore(url: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json"))
+        let r = try s.importCrash(Data(payload.utf8), provenance: .pairedDevice)
+        XCTAssertEqual(r.provenance, .pairedDevice); XCTAssertFalse(r.importedManually)
+        XCTAssertEqual(s.crashes(for: "com.x.foo").first?.provenance, .pairedDevice)
+    }
     func testStoreBoundsAndAssociation() throws {
         let u = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         let s = MirsaTelemetryStore(url: u)
-        for _ in 0..<(MirsaTelemetryStore.maxLaunches + 20) { s.recordLaunch(bundleID: "a", source: .loader) }
+        for _ in 0..<(MirsaTelemetryStore.maxLaunches + 20) { s.recordLaunchAttempt(bundleID: "a", source: ) }
         XCTAssertEqual(s.launches(for: "a").count, MirsaTelemetryStore.maxLaunches)
         let r = try s.importCrash(Data(#"{"procName":"Z","exception":{"type":"EXC_BAD_ACCESS"}}"#.utf8))
         XCTAssertEqual(s.unassociatedCrashes().count, 1)

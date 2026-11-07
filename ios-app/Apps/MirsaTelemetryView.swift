@@ -21,8 +21,8 @@ struct MirsaTelemetryView: View {
                     .appsGlass(cornerRadius: 12, interactive: true)
                     .accessibilityLabel(tr("Import crash log", "استيراد سجل انهيار"))
             }
-            Text(tr("Only launches Mirsa itself observed are listed. Launches from the home screen are unknown.",
-                    "فقط التشغيلات اللي لاحظها Mirsa. التشغيل من الشاشة الرئيسية غير معروف."))
+            Text(tr("Only launch attempts Mirsa itself made are listed (not proof the app started or crashed). Launches from the home screen are unknown.",
+                    "فقط محاولات التشغيل اللي سوّاها Mirsa (مش دليل إنو التطبيق اشتغل أو انهار). التشغيل من الشاشة الرئيسية غير معروف."))
                 .font(.footnote).foregroundStyle(.secondary)
             if let e = error { Text(e).font(.footnote).foregroundStyle(.red) }
             if launches.isEmpty && crashes.isEmpty {
@@ -32,7 +32,7 @@ struct MirsaTelemetryView: View {
                 HStack {
                     Image(systemName: "play.circle")
                     Text(l.date, style: .relative); Spacer()
-                    Text(l.source == .loader ? "loader" : "container").font(.caption).foregroundStyle(.secondary)
+                    Text(tr("launch attempt", "محاولة تشغيل")).font(.caption).foregroundStyle(.secondary)
                 }
             }
             ForEach(crashes) { c in

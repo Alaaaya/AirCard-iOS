@@ -248,6 +248,8 @@ struct CrashLogsView: View {
         let out = DeviceToolsModel.exportsDir.appendingPathComponent(name)
         guard await m.run("crash_pull", arg: name, outPath: out.path) != nil || FileManager.default.fileExists(atPath: out.path) else { return }
         let text = (try? String(contentsOf: out, encoding: .utf8)) ?? tr("Couldn't read the file.", "ما قدرت اقرأ الملف.")
+        // Feed the per-app viewer; attribution only via bundle id inside the report, provenance = paired device.
+        if let d = try? Data(contentsOf: out, options: .mappedIfSafe) { _ = try? MirsaTelemetryStore.shared.importCrash(d, provenance: .pairedDevice) }
         opened = CrashFile(name: name, url: out, text: text)
     }
 }

@@ -167,7 +167,9 @@ enum MirsaRedactor {
 
 // MARK: - Launch records + store
 
-enum MirsaLaunchSource: String, Codable { case loader, container }   // observed only; external launches are unknown
+/// containerAttempt = Mirsa asked the container to start the app (GuestLoader NSLog 'launching' proves ATTEMPT only,
+/// not startup, success, termination or crash). Home-screen launches are unknown. Never infer a crash from an unfinished attempt.
+enum MirsaLaunchSource: String, Codable { case containerAttempt }
 
 struct MirsaLaunchRecord: Codable, Equatable, Identifiable {
     var id = UUID()
@@ -183,7 +185,8 @@ struct MirsaAppTelemetry: Codable, Equatable {
 }
 
 /// JSON file store, bounded, atomic writes. Integration contract (parent wires):
-///   MirsaTelemetryStore.shared.recordLaunch(bundleID:source:) from container launch hook
+///   MirsaTelemetryStore.shared.recordLaunchAttempt(bundleID:) from the Swift call site that asks the container to start a guest,
+///   only after the request is accepted (not on button tap). GuestLoader.m ~203 is the in-process point but needs no change.
 ///   MirsaTelemetryView(bundleID:) from ProjectView
 final class MirsaTelemetryStore {
     static let maxLaunches = 300, maxCrashes = 100
@@ -196,15 +199,16 @@ final class MirsaTelemetryStore {
         self.url = url
         if let d = try? Data(contentsOf: url), d.count < 8 * 1024 * 1024, let t = try? JSONDecoder().decode(MirsaAppTelemetry.self, from: d) { data = t } else { data = MirsaAppTelemetry() }
     }
-    func recordLaunch(bundleID: String, source: MirsaLaunchSource, at: Date = Date()) {
+    func recordLaunchAttempt(bundleID: String, source: MirsaLaunchSource = .containerAttempt, at: Date = Date()) {
         lock.lock(); defer { lock.unlock() }
         data.launches.append(MirsaLaunchRecord(bundleID: String(bundleID.prefix(256)), date: at, source: source))
         if data.launches.count > Self.maxLaunches { data.launches.removeFirst(data.launches.count - Self.maxLaunches) }
         save()
     }
     @discardableResult
-    func importCrash(_ file: Data) throws -> MirsaCrashReport {
-        let r = try MirsaCrashParser.parse(file)
+    func importCrash(_ file: Data, provenance: MirsaCrashProvenance = .userImport) throws -> MirsaCrashReport {
+        var r = try MirsaCrashParser.parse(file)
+        r.provenance = provenance; r.importedManually = provenance == .userImport
         lock.lock(); defer { lock.unlock() }
         data.crashes.removeAll { $0.id == r.id }
         data.crashes.append(r)
