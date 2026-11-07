@@ -47,7 +47,8 @@ final class PersonalSigningProgressTests: XCTestCase {
         let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 430, height: 932)
         defer { window.isHidden = true; original?.makeKey() }
-        for stage: PersonalSigningOperation.Stage in [.preparing, .signing, .packaging, .installing] {
+        let stages: [PersonalSigningOperation.Stage] = [.preparing, .signing, .packaging, .installing]
+        for stage in stages {
             var state = PersonalSigningOperation.State(id: UUID(), projectID: app.id)
             state.stage = stage
             if stage == .signing { state.fraction = 0.25; state.completedUnits = 1; state.totalUnits = 4 }
