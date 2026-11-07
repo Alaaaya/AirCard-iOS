@@ -76,11 +76,41 @@ final class MirsaKeyboardTests: XCTestCase {
         let keyboardTop = window.convert(frame, from: nil).minY
         XCTAssertLessThanOrEqual(visibleField.maxY, keyboardTop, "Focused project field remains above keyboard")
         XCTAssertGreaterThan(visibleField.height, 0)
+        let scroll = try XCTUnwrap(descendants(host.view).compactMap { $0 as? UIScrollView }.first)
+        XCTAssertEqual(scroll.keyboardDismissMode, .interactive)
+        XCTAssertFalse(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
+                       "CTA must not be exposed or cover the page while software keyboard is visible")
         attach("project-real-keyboard-visible-focused-field")
         window.endEditing(false)
         try await Task.sleep(nanoseconds: 800_000_000)
         XCTAssertFalse(field.isFirstResponder)
+        XCTAssertTrue(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
+                      "CTA must return after keyboard fully dismisses")
         attach("project-real-keyboard-hidden-CTA-restored")
+    }
+
+    private func accessibilityContains(_ root: NSObject, identifier: String) -> Bool {
+        var visited = Set<ObjectIdentifier>()
+        func find(_ item: NSObject, depth: Int) -> Bool {
+            guard depth < 60, visited.insert(ObjectIdentifier(item)).inserted else { return false }
+            if let view = item as? UIView, view.accessibilityIdentifier == identifier { return true }
+            if let element = item as? UIAccessibilityElement, element.accessibilityIdentifier == identifier { return true }
+            if let view = item as? UIView {
+                for child in view.subviews where find(child, depth: depth + 1) { return true }
+            }
+            for case let child as NSObject in item.accessibilityElements ?? [] {
+                if find(child, depth: depth + 1) { return true }
+            }
+            let count = item.accessibilityElementCount()
+            if count > 0 && count < 1000 {
+                for i in 0..<count {
+                    if let child = item.accessibilityElement(at: i) as? NSObject,
+                       find(child, depth: depth + 1) { return true }
+                }
+            }
+            return false
+        }
+        return find(root, depth: 0)
     }
 
     private func attach(_ name: String) {
