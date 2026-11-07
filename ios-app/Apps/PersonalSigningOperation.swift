@@ -80,7 +80,7 @@ final class PersonalSigningOperation: ObservableObject {
                     _ = try OwnCertificateDevice.require()
                     let staged = try CertificateInstall.stageSignedApp(ipa:input,in:FileManager.default.temporaryDirectory)
                     defer { try? FileManager.default.removeItem(at:staged.stage) }
-                    try await CertificateOTA.install(source:staged.app)
+                    try await CertificateOTA.install(source:staged.app,material:material,options:options)
                     self.state?.running = false
                     self.state?.stage = .completed
                     self.state?.error = "تم فتح مثبّت iOS. هاد مو تأكيد نجاح التثبيت."

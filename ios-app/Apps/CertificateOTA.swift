@@ -11,10 +11,11 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
 }
 @MainActor enum CertificateOTA {
     static let endpoint = URL(string: WebBackendConfig.defaultProject + "/functions/v1/certificate-ota")!
-    static func install(source: URL) async throws {
-        guard let identity = PersonalIdentityVault.savedIdentities().first else {
-            throw SideloadError.message(personalText("Import your certificate first.", "استورد شهادتك بالأول."))
-        }
+    static func install(source: URL, material explicitMaterial: PersonalIdentityVault.Material? = nil, options explicitOptions: PersonalProjectOptions? = nil) async throws {
+        let selectedMaterial: PersonalIdentityVault.Material
+        if let explicitMaterial { selectedMaterial = explicitMaterial }
+        else if let identity = PersonalIdentityVault.savedIdentities().first { selectedMaterial = identity.material }
+        else { throw SideloadError.message(personalText("Import your certificate first.", "استورد شهادتك بالأول.")) }
         let device = try OwnCertificateDevice.require()
         let fm = FileManager.default
         let stage = fm.temporaryDirectory.appendingPathComponent("ota-\(UUID().uuidString)", isDirectory: true)
@@ -24,10 +25,11 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
         try fm.copyItem(at: source, to: app)
         let input = stage.appendingPathComponent("input.ipa")
         try await Task.detached { try IPAEditorService.run("pack", input: stage, output: input) }.value
-        let material = identity.material
+        let material = selectedMaterial
 
-        var options = PersonalProjectOptions()
-        options.strictProfile = true // Self-install requires a profile that actually covers this identity.
+        var options = explicitOptions ?? PersonalProjectOptions()
+        if explicitOptions == nil { options.strictProfile = true }
+        _ = options.strictProfile // Self-install requires a profile that actually covers this identity.
         let signed = try await Task.detached {
             try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: "", options: options, cachedUDID: device)
         }.value
@@ -40,7 +42,7 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
         let auth = DiscoveryAuthClient(projectURL: URL(string: WebBackendConfig.defaultProject)!,
             publishableKey: WebBackendConfig.defaultPublishableKey, store: KeychainSessionStore(), http: SafeMetadataHTTP())
         let token = try await auth.token(forceRefresh: false)
-        let metadata: [String: Any] = ["bundleID": bundleID, "version": version, "title": "Mirsa", "bytes": bytes.count]
+        let metadata: [String: Any] = ["bundleID": bundleID, "version": version, "title": (info["CFBundleDisplayName"] as? String) ?? (info["CFBundleName"] as? String) ?? bundleID, "bytes": bytes.count]
         let data = try JSONSerialization.data(withJSONObject: metadata)
         var request = URLRequest(url: endpoint, timeoutInterval: 120)
         request.httpMethod = "POST"

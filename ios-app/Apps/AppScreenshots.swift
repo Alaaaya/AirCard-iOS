@@ -34,7 +34,7 @@ enum ScreenshotPolicy {
             }
             return []
         }
-        var raw = flatten(app["screenshotURLs"]) 
+        var raw = flatten(app["screenshotURLs"])
         if raw.isEmpty { raw = flatten(app["screenshots"]) }
         if raw.isEmpty { raw = flatten(app["screenshotUrls"]) }
         var seen = Set<String>(), out: [URL] = []

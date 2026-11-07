@@ -53,7 +53,7 @@ enum CertificateInstall {
             _ = try OwnCertificateDevice.require()
             let staged = try stageSignedApp(ipa:input,in:FileManager.default.temporaryDirectory)
             defer { try? FileManager.default.removeItem(at:staged.stage) }
-            try await CertificateOTA.install(source:staged.app)
+            try await CertificateOTA.install(source:staged.app,material:identity.material,options:PersonalProjectOptions())
             return ["otaInstallerOpened":true, "installed":false]
         }
         guard FileManager.default.fileExists(atPath: input.path) else { throw Failure.missingIPA }
