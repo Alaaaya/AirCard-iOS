@@ -1,6 +1,8 @@
 //! Bounded pre-install archive tooling and conservative Mach-O injection.
 //! Never executes package scripts or loads user code into Mirsa.
 //! Mach-O rewriting only consumes verified zero header padding; no relocation.
+#[path = "load_control.rs"]
+mod load_control;
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -932,6 +934,7 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
             if out.parent().is_none() { return Err("Invalid output".into()); }
             fs::write(out, json).map_err(err)
         }
+        "inject_loader" => load_control::inject_loader(Path::new(&r.input), &r.executable, &r.libraries, r.new_first),
         "inject" => inject(Path::new(&r.input), &r.executable, &r.libraries, r.new_first),
         _ => Err("Unknown editor operation".into()),
     }.map(|_| crate::personal_sign::Verification::default())
