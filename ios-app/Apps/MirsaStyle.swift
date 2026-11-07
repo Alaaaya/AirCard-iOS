@@ -113,6 +113,7 @@ struct LiquidGlass<S: InsettableShape>: ViewModifier {
 
 /// Base #090A1E with violet, cyan and pink light and two floating orbs.
 struct LiquidBackground: View {
+    var paused = false
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width, h = geo.size.height
@@ -124,7 +125,7 @@ struct LiquidBackground: View {
                                center: UnitPoint(x: 0, y: 0.46), startRadius: 0, endRadius: 280)
                 RadialGradient(colors: [Color(red: 236 / 255, green: 72 / 255, blue: 153 / 255).opacity(0.42), .clear],
                                center: UnitPoint(x: 1, y: 0.88), startRadius: 0, endRadius: 310)
-                TimelineView(.animation(minimumInterval: 1.0 / 15.0)) { ctx in
+                TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: paused)) { ctx in
                     let t = ctx.date.timeIntervalSinceReferenceDate
                     ZStack {
                         Circle()

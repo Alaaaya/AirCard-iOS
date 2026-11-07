@@ -25,7 +25,8 @@ struct PersonalProjectDetailView: View {
     @State private var deps: [String]?
     @State private var showDeps = false
     @State private var pickingEntitlements = false
-    @State private var inspectRoot: URL?
+    @StateObject private var draftWriter = PersonalProjectDraftWriter()
+    @State private var scrolling = false
     @State private var workspace: ProjectFolderLocation?
 
     private var configOnly: Bool { selected == nil }
@@ -36,7 +37,7 @@ struct PersonalProjectDetailView: View {
 
     var body: some View {
         ZStack {
-            AuroraBackground()
+            PersonalProjectBackdrop(paused: keyboard.isVisible || scrolling).equatable()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
@@ -62,6 +63,7 @@ struct PersonalProjectDetailView: View {
                 }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
             }.scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
+                .onScrollPhaseChange { _, phase in scrolling = phase != .idle }
         }
         .safeAreaInset(edge: .bottom) {
             if !keyboard.isVisible {
@@ -113,8 +115,8 @@ struct PersonalProjectDetailView: View {
         }
         .task { await load(); await inspect(); consumeSigningResult() }
         .onChange(of: signing.state?.running) { _ in consumeSigningResult() }
-        .onChange(of: draft) { _ in if loaded { saveDraft() } }
-        .onDisappear { if !sharing { cleanOutput() } }
+        .onChange(of: draft) { _ in if loaded { draftWriter.schedule(draft, to: library.draftURL(app)) } }
+        .onDisappear { draftWriter.flush(); if !sharing { cleanOutput() } }
     }
 
     private var appCard: some View {
@@ -269,7 +271,7 @@ struct PersonalProjectDetailView: View {
                     Image(systemName: showDeps ? "chevron.up" : "chevron.down")
                 }
             }.buttonStyle(.plain)
-            if showDeps { ForEach(deps ?? [], id: \.self) { Text($0).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(2) } }
+            if showDeps { LazyVStack(alignment: .leading, spacing: 8) { ForEach(deps ?? [], id: \.self) { Text($0).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(2) } } }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).appsGlass(cornerRadius: 24)
     }
     private func openWorkspace() {
@@ -281,21 +283,12 @@ struct PersonalProjectDetailView: View {
     }
     private func inspect() async {
         let input = library.url(app)
-        let result: (Int, [String])? = await Task.detached(priority: .utility) {
-            let fm = FileManager.default
-            let dir = fm.temporaryDirectory.appendingPathComponent("inspect-\(UUID().uuidString)")
-            defer { try? fm.removeItem(at: dir) }
-            do {
-                try IPAEditorService.run("extract", input: input, output: dir)
-                let appDir = try IPAEditorService.app(in: dir)
-                let info = try IPAEditorService.info(in: appDir)
-                let plugs = (try? fm.contentsOfDirectory(atPath: appDir.appendingPathComponent("PlugIns").path))?.filter { $0.hasSuffix(".appex") }.count ?? 0
-                let list = try IPAEditorService.dependencies(of: appDir.appendingPathComponent(info["CFBundleExecutable"] as! String))
-                return (plugs, list)
-            } catch { return nil }
-        }.value
-        if let result { extensionCount = result.0; deps = result.1 } else { extensionCount = 0; deps = [] }
+        let result = await PersonalProjectInspection.shared.inspect(input)
+        guard !Task.isCancelled else { return }
+        extensionCount = result?.extensions ?? 0
+        deps = result?.dependencies ?? []
     }
+
     private var certificateCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             Label(personalText("Signing certificate", "شهادة التوقيع"), systemImage: "key.fill").font(.subheadline.weight(.semibold))
@@ -348,9 +341,6 @@ struct PersonalProjectDetailView: View {
            let saved = try? JSONDecoder().decode(PersonalProjectDraft.self, from: data) { d = saved }
         draft = d; loaded = true
     }
-    private func saveDraft() {
-        try? JSONEncoder().encode(draft).write(to: library.draftURL(app), options: [.atomic, .completeFileProtection])
-    }
     private func reloadIdentities() {
         do {
             identities = try PersonalIdentityVault.savedIdentities()
@@ -363,6 +353,7 @@ struct PersonalProjectDetailView: View {
     }
 
     private func sign() {
+        draftWriter.flush()
         let material = selected?.material
         cleanOutput(); message = nil
         var options = PersonalProjectOptions()
