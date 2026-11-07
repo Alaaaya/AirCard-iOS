@@ -140,7 +140,7 @@ enum PersonalIdentityVault {
         try collection().entries.map { entry in
             let details = try importResult(entry.material)
             return SavedIdentity(id: entry.id, material: entry.material,
-                name: details["name"] as? String ?? "شهادة شخصية",
+                name: PersonalCertificateLabel.name(certificate: (details["certificate"] as? String).flatMap { Data(base64Encoded: $0) }),
                 teamID: details["teamID"] as? String ?? "",
                 bundleID: details["bundleID"] as? String ?? "",
                 expiry: (details["expiry"] as? Double).map { Date(timeIntervalSince1970: $0) },

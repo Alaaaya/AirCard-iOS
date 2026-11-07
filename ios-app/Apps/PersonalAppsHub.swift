@@ -37,9 +37,42 @@ final class PersonalAppsLibrary: ObservableObject {
             }
         } catch { loadError = error.localizedDescription }
     }
-    func url(_ app: PersonalLibraryApp) -> URL { root.appendingPathComponent(app.filename) }
-    func iconURL(_ app: PersonalLibraryApp) -> URL { root.appendingPathComponent("icon-\(app.id.uuidString).png") }
-    func draftURL(_ app: PersonalLibraryApp) -> URL { root.appendingPathComponent("project-\(app.id.uuidString).json") }
+    func url(_ app: PersonalLibraryApp) -> URL { projectFile(app, name: app.filename) }
+    func iconURL(_ app: PersonalLibraryApp) -> URL { projectFile(app, name: "icon-\(app.id.uuidString).png") }
+    func draftURL(_ app: PersonalLibraryApp) -> URL { projectFile(app, name: "project-\(app.id.uuidString).json") }
+    private func projectFile(_ app: PersonalLibraryApp, name: String) -> URL {
+        // Existing installations keep their flat files until the explicit browse migration.
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        if let directory = try? PersonalProjectFolder.directory(documents: documents, id: app.id, create: false),
+           FileManager.default.fileExists(atPath: directory.appendingPathComponent(app.filename).path) {
+            return directory.appendingPathComponent(name)
+        }
+        return root.appendingPathComponent(name)
+    }
+    func browseDirectory(_ app: PersonalLibraryApp) throws -> URL {
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let directory = try PersonalProjectFolder.directory(documents: documents, id: app.id)
+        let files = [url(app), iconURL(app), draftURL(app)]
+        // Copy all first, then remove old copies. Never leave a half-moved library.
+        var copied: [URL] = []
+        do {
+            for source in files where source.deletingLastPathComponent() != directory && FileManager.default.fileExists(atPath: source.path) {
+                let destination = directory.appendingPathComponent(source.lastPathComponent)
+                guard !FileManager.default.fileExists(atPath: destination.path) else { throw CocoaError(.fileWriteFileExists) }
+                let attributes = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else { throw CocoaError(.fileReadNoPermission) }
+                try FileManager.default.copyItem(at: source, to: destination)
+                copied.append(destination)
+            }
+        } catch {
+            for url in copied { try? FileManager.default.removeItem(at: url) }
+            throw error
+        }
+        for source in files where source.deletingLastPathComponent() != directory {
+            try? FileManager.default.removeItem(at: source)
+        }
+        return directory
+    }
 
     private func persist(_ list: [PersonalLibraryApp]) throws {
         guard loadError == nil else { throw SideloadError.message(personalText("Personal library could not be opened. Unlock your device and reopen Mirsa.", "المكتبة ما انفتحت. افتح قفل الجهاز وافتح ميرسا من جديد.")) }
