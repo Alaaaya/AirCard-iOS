@@ -37,7 +37,7 @@ private func num(_ v: Any?) -> Double? {
 private extension View {
     func toolAlert(_ m: DeviceToolsModel) -> some View {
         alert(tr("Device", "الجهاز"), isPresented: Binding(get: { m.error != nil }, set: { if !$0 { m.error = nil } })) {
-            Button("OK") { m.error = nil }
+            Button(MirsaTr.lit("OK")) { m.error = nil }
         } message: { Text(m.error ?? "") }
     }
 }

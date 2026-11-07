@@ -2,6 +2,12 @@ import Foundation
 
 extension MirsaTr {
     static let extraCkb: [String: String] = [
+        "@mak5er • Lead & Core Developer": "@mak5er • گەشەپێدەری سەرەکی",
+        "Preparing edits": "دەستکارییەکان ئامادە دەکرێن",
+        "Name, icon, version and your own code": "ناو، ئایکۆن، وەشان و کۆدی خۆت",
+        "Choose .passthm from Files…": "هەڵبژاردنی .passthm لە Files…",
+        "Change .passthm…": "گۆڕینی .passthm…",
+        "Edit IPA & inject tweaks": "دەستکاریکردنی IPA و تێخستنی تویکس",
         "Edits are saved into the IPA used for this installation and future refreshes. The source download stays unchanged.": "دەستکارییەکان لەناو IPAی بەکارهاتوو بۆ ئەم دامەزراندنە و نوێکردنەوەکانی داهاتوو هەڵدەگیرێن. داگرتنی سەرچاوە وەک خۆی دەمێنێتەوە.",
         "Save IPA edits": "هەڵگرتنی دەستکارییەکانی IPA",
         "Edit IPA": "دەستکاریکردنی IPA",
@@ -38,6 +44,12 @@ extension MirsaTr {
         "{} code file(s)": "{} فایلی کۆد",
     ]
     static let extraKmr: [String: String] = [
+        "@mak5er • Lead & Core Developer": "@mak5er • Pêşdebirê sereke",
+        "Preparing edits": "Guherîn têne amadekirin",
+        "Name, icon, version and your own code": "Nav, îkon, guherto û koda te",
+        "Choose .passthm from Files…": "Ji Files .passthm hilbijêre…",
+        "Change .passthm…": "Guherandina .passthm…",
+        "Edit IPA & inject tweaks": "IPA biguherîne û tweakan têxe",
         "Edits are saved into the IPA used for this installation and future refreshes. The source download stays unchanged.": "Guhertin di IPA-ya ku ji bo vê sazkirinê û nûkirinên pêşerojê tê bikaranîn de têne tomarkirin. Daxistina çavkaniyê wekî xwe dimîne.",
         "Save IPA edits": "Guhertinên IPA tomar bike",
         "Edit IPA": "IPA biguherîne",

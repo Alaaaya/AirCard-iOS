@@ -1027,6 +1027,10 @@ enum MirsaTr {
 extension MirsaTr {
     /// Templates for interpolated strings: "{}" marks a value. (en, ckb, kmr)
     static let templates: [(String, String, String)] = [
+        ("In Shortcuts create a shortcut named {}. Add ‘Open App in Mirsa’ with App ID {}, or URL + Open URLs using {}. In Details choose Add to Home Screen, set the name and choose the shared icon. No configuration profile is needed.", "لە Shortcuts کورتەڕێیەک بە ناوی {} دروست بکە. Open App in Mirsa زیاد بکە لەگەڵ App ID {}، یان URL + Open URLs بە {}. لە وردەکاری Add to Home Screen هەڵبژێرە، ناو دابنێ و ئایکۆنی هاوبەش هەڵبژێرە. پڕۆفایلی ڕێکخستن پێویست نییە.", "Di Shortcuts de kurtebirekê bi navê {} çêke. Open App in Mirsa bi App ID {} zêde bike, an URL + Open URLs bi {}. Di Details de Add to Home Screen hilbijêre, nav deyne û îkona parvekirî hilbijêre. Profîla veavakirinê ne hewce ye."),
+        ("The signed IPA was kept: {}", "IPAی واژۆکراو هەڵگیرا: {}", "IPA-ya îmzekirî hat parastin: {}"),
+        ("Mirsa also backs up automatically before updating or deleting the app, and keeps the last {}. Backups are in Files › Mirsa › Backups.", "Mirsa هەروەها پێش نوێکردنەوە یان سڕینەوەی ئەپ خۆکارانە پاڵپشتگیری دەکات و دوایین {} دەهێڵێتەوە. پاڵپشتگیرییەکان لە Files › Mirsa › Backups دان.", "Mirsa her wiha beriya nûkirin an jêbirina sepanê bixweber paşgir digire û {} yên dawî dihêle. Paşgir di Files › Mirsa › Backups de ne."),
+
         ("Source answered {}.", "سەرچاوە بە {} وەڵامی دایەوە.", "Çavkaniyê bi {} bersiv da."),
         ("Remove {} expired", "لابردنی {} بەسەرچوو", "{} qediyayî rake"),
         ("{} days left", "{} ڕۆژ ماوە", "{} roj mane"),
