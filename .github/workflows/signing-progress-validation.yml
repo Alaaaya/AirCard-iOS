@@ -2,7 +2,7 @@ name: Private signing lifecycle validation
 on:
   workflow_dispatch:
   push:
-    branches: [kat/signing-progress-87]
+    branches: [kat/signing-progress-87, kat/private-progress-integrated]
 permissions:
   contents: read
 jobs:
