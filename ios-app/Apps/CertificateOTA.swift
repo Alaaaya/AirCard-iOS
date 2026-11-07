@@ -76,13 +76,21 @@ enum OwnCertificateDevice {
     static var query: [String: Any] {
         [kSecClass as String:kSecClassGenericPassword, kSecAttrService as String:"mirsa.owncert.realdevice.v1", kSecAttrAccount as String:"device", kSecAttrSynchronizable as String:false]
     }
-    static func clear() { SecItemDelete(query as CFDictionary) }
+    static func clear() { SecItemDelete(query as CFDictionary); try? FileManager.default.removeItem(at:bindingFile) }
+    static var bindingFile: URL {
+        FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("owncert-install-binding")
+    }
+    static func validRecord(_ value: [String:String], vendor: String?, installation: String?) -> Bool {
+        guard let vendor, !vendor.isEmpty, let installation, !installation.isEmpty else { return false }
+        guard value["binding"] == vendor, value["installation"] == installation, let id=value["udid"] else { return false }
+        return id.range(of:"^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{8}-[0-9a-fA-F]{16})$",options:.regularExpression) != nil
+    }
     static func require() throws -> String {
         var q=query; q[kSecReturnData as String]=true
         var item: CFTypeRef?
         guard SecItemCopyMatching(q as CFDictionary,&item)==errSecSuccess, let data=item as? Data,
               let value=try? JSONDecoder().decode([String:String].self,from:data),
-              value["binding"] == UIDevice.current.identifierForVendor?.uuidString,
+              validRecord(value, vendor:UIDevice.current.identifierForVendor?.uuidString, installation:try? String(contentsOf:bindingFile,encoding:.utf8)),
               let id=value["udid"], !id.isEmpty else {
             clear(); throw SideloadError.message(message)
         }
@@ -99,7 +107,14 @@ enum OwnCertificateDevice {
         try FileManager.default.setAttributes([.protectionKey:FileProtectionType.complete],ofItemAtPath:output.path)
         guard let binding=UIDevice.current.identifierForVendor?.uuidString else { throw SideloadError.message(message) }
         let udid=try String(contentsOf:output,encoding:.utf8)
-        let data=try JSONEncoder().encode(["udid":udid,"binding":binding])
+        let installation=UUID().uuidString
+        try FileManager.default.createDirectory(at:bindingFile.deletingLastPathComponent(),withIntermediateDirectories:true)
+        try Data(installation.utf8).write(to:bindingFile,options:[.atomic,.completeFileProtection])
+        var file=bindingFile
+        var resource=URLResourceValues(); resource.isExcludedFromBackup=true
+        try file.setResourceValues(resource)
+        guard validRecord(["udid":udid,"binding":binding,"installation":installation],vendor:binding,installation:installation) else { clear(); throw SideloadError.message(message) }
+        let data=try JSONEncoder().encode(["udid":udid,"binding":binding,"installation":installation])
         var q=query; q[kSecValueData as String]=data
         q[kSecAttrAccessible as String]=kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         guard SecItemAdd(q as CFDictionary,nil)==errSecSuccess else { throw SideloadError.message(message) }

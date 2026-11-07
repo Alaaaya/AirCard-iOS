@@ -76,6 +76,20 @@ final class PersonalSigningOperation: ObservableObject {
         // Deliberately NOT attached to SwiftUI .task; leaving the screen cannot cancel it.
         Task {
             do {
+                if MirsaInstallMode.ownCertificate {
+                    _ = try OwnCertificateDevice.require()
+                    let staged = try CertificateInstall.stageSignedApp(ipa:input,in:FileManager.default.temporaryDirectory)
+                    defer { try? FileManager.default.removeItem(at:staged.stage) }
+                    try await CertificateOTA.install(source:staged.app)
+                    self.state?.running = false
+                    self.state?.stage = .completed
+                    self.state?.error = "تم فتح مثبّت iOS. هاد مو تأكيد نجاح التثبيت."
+                    self.finishActivity(success:true)
+                    MirsaOperationProgress.shared.finish(operation)
+                    self.endBackgroundTime()
+                    self.control = nil
+                    return
+                }
                 let result = try await Task.detached(priority: .userInitiated) {
                     try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairingPath,
                         options: options, install: true, control: control) { event in

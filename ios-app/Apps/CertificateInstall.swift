@@ -49,6 +49,13 @@ enum CertificateInstall {
     static func run(input: URL, appID: String?, identity: PersonalIdentityVault.SavedIdentity,
                     store: AppsStore? = nil) async throws -> [String: Any] {
         guard !running, store?.busy == nil else { throw Failure.busy }
+        if MirsaInstallMode.ownCertificate {
+            _ = try OwnCertificateDevice.require()
+            let staged = try stageSignedApp(ipa:input,in:FileManager.default.temporaryDirectory)
+            defer { try? FileManager.default.removeItem(at:staged.stage) }
+            try await CertificateOTA.install(source:staged.app)
+            return ["otaInstallerOpened":true, "installed":false]
+        }
         guard FileManager.default.fileExists(atPath: input.path) else { throw Failure.missingIPA }
         running = true
         // Reserve the shared busy slot so AppsStore operations cannot start meanwhile.
