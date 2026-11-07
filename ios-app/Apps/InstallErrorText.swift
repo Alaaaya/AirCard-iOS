@@ -30,7 +30,7 @@ enum InstallErrorText {
                 ("Publishing app snapshot:", "ما اكتمل تجهيز نسخة التثبيت")
             ]
             for (prefix, localized) in stages where text.hasPrefix(prefix) {
-                text = localized + "، " + text.dropFirst(prefix.count()).trimmingCharacters(in: .whitespaces)
+                text = localized + "، " + text.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
                 break
             }
             text = text.replacingOccurrences(of: "No such file or directory", with: "ملف أو مجلد مؤقت مو متاح")
