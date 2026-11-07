@@ -121,9 +121,9 @@ struct TendiesView: View {
                         .font(.caption).foregroundStyle(.orange)
                 } footer: {
                     if vm.posterBoardContainer.isEmpty {
-                        Text("PosterBoard container will be auto-detected automatically on flash.")
+                        Text(MirsaTr.lit("PosterBoard container will be auto-detected automatically on flash."))
                     } else {
-                        Text("Target: PosterBoard container detected ✅")
+                        Text(MirsaTr.lit("Target: PosterBoard container detected ✅"))
                     }
                 }
 
@@ -131,9 +131,9 @@ struct TendiesView: View {
                 Section {
                     Toggle(isOn: $vm.resetPBProtections) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Force PosterBoard Cache Refresh")
+                            Text(MirsaTr.lit("Force PosterBoard Cache Refresh"))
                                 .font(.subheadline.weight(.medium))
-                            Text("Resets file protections so iOS re-indexes wallpapers immediately")
+                            Text(MirsaTr.lit("Resets file protections so iOS re-indexes wallpapers immediately"))
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
@@ -144,7 +144,7 @@ struct TendiesView: View {
                 if !vm.tendieItems.isEmpty {
                     Section {
                         HStack {
-                            Text("\(vm.tendieItems.count) Wallpapers Imported")
+                            Text(tr("\(vm.tendieItems.count) Wallpapers Imported","تم استيراد \(vm.tendieItems.count) خلفية",ckb:"\(vm.tendieItems.count) وێنەی پشتەوە هاوردەکرا",kmr:"\(vm.tendieItems.count) wallpaper hatin têxistin"))
                                 .font(.caption.bold())
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -165,7 +165,7 @@ struct TendiesView: View {
                             }
                         }
                     } header: {
-                        Text("Wallpapers Gallery")
+                        Text(MirsaTr.lit("Wallpapers Gallery"))
                     }
                 } else {
                     Section {
@@ -173,10 +173,10 @@ struct TendiesView: View {
                             Image(systemName: "photo.stack")
                                 .font(.system(size: 32))
                                 .foregroundColor(.secondary)
-                            Text("No .tendies wallpapers loaded yet")
+                            Text(MirsaTr.lit("No .tendies wallpapers loaded yet"))
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
-                            Text("Tap 'Choose .tendies from Files' or copy wallpapers into On My iPhone › Mirsa.")
+                            Text(MirsaTr.lit("Tap 'Choose .tendies from Files' or copy wallpapers into On My iPhone › Mirsa."))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                                 .multilineTextAlignment(.center)
@@ -193,7 +193,7 @@ struct TendiesView: View {
                             HStack(spacing: 10) {
                                 ProgressView()
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("Flashing Wallpapers…").font(.subheadline.bold())
+                                    Text(MirsaTr.lit("Flashing Wallpapers…")).font(.subheadline.bold())
                                     ProgressView(value: vm.tendiesFlashProgress)
                                 }
                             }
@@ -207,7 +207,7 @@ struct TendiesView: View {
                                 HStack(spacing: 8) {
                                     Spacer()
                                     Image(systemName: "sparkles")
-                                    Text("Flash \(selectedCount) Wallpaper\(selectedCount == 1 ? "" : "s")")
+                                    Text(tr("Flash \(selectedCount) Wallpaper\(selectedCount == 1 ? "" : "s")","تنفيذ \(selectedCount) خلفية",ckb:"نووسینی \(selectedCount) وێنەی پشتەوە",kmr:"\(selectedCount) wallpaper bisepîne"))
                                     Spacer()
                                 }
                                 .font(.headline)
@@ -227,7 +227,7 @@ struct TendiesView: View {
                             HStack(spacing: 8) {
                                 Spacer()
                                 Image(systemName: "bolt.fill")
-                                Text("Respring (NeoSpring)")
+                                Text(MirsaTr.lit("Respring (NeoSpring)"))
                                 Spacer()
                             }
                             .font(.headline)
@@ -239,7 +239,7 @@ struct TendiesView: View {
                     }
                     .listRowInsets(EdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14))
                 } footer: {
-                    Text("Flashing will automatically trigger NeoSpring to respring the device and apply your new wallpapers.")
+                    Text(MirsaTr.lit("Flashing will automatically trigger NeoSpring to respring the device and apply your new wallpapers."))
                 }
 
                 // Section 5: Flash Log (CompactLogView)
@@ -256,7 +256,7 @@ struct TendiesView: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 60)
             }
-            .navigationTitle("Wallpapers")
+            .navigationTitle(MirsaTr.lit("Wallpapers"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -351,7 +351,7 @@ struct TendieRowView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
-                    Text("\(item.descriptorCount) item\(item.descriptorCount == 1 ? "" : "s")")
+                    Text(tr("\(item.descriptorCount) item\(item.descriptorCount == 1 ? "" : "s")","\(item.descriptorCount) عنصر",ckb:"\(item.descriptorCount) بڕگە",kmr:"\(item.descriptorCount) tişt"))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
@@ -404,7 +404,7 @@ struct TendieDetailSheet: View {
                     }
                 }
 
-                Section("Information") {
+                Section(MirsaTr.lit("Information")) {
                     detailRow(title: "Name", value: item.name)
                     detailRow(title: "File Name", value: item.fileName)
                     detailRow(title: "Type", value: item.posterType.rawValue)
@@ -420,7 +420,7 @@ struct TendieDetailSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
+                    Button(MirsaTr.lit("Done")) {
                         dismiss()
                     }
                 }

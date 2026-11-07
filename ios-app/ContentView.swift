@@ -103,7 +103,7 @@ struct DonateView: View {
                             Text("🇺🇦")
                                 .font(.subheadline)
                         }
-                        Text("@mak5er • Lead & Core Developer")
+                        Text(tr("@mak5er • Lead & Core Developer","@mak5er • المطوّر الرئيسي",ckb:"@mak5er • گەشەپێدەری سەرەکی",kmr:"@mak5er • Pêşdebirê sereke"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -145,7 +145,7 @@ struct DonateView: View {
 
             // Payment Methods
             VStack(alignment: .leading, spacing: 10) {
-                Text("Donate & Support")
+                Text(MirsaTr.lit("Donate & Support"))
                     .font(.caption.bold().uppercaseSmallCaps())
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 4)
@@ -156,9 +156,9 @@ struct DonateView: View {
                         Image(systemName: "creditcard.fill")
                             .font(.title3)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Donate with PayPal")
+                            Text(MirsaTr.lit("Donate with PayPal"))
                                 .font(.subheadline.bold())
-                            Text("Recipient: Maksym Reva")
+                            Text(MirsaTr.lit("Recipient: Maksym Reva"))
                                 .font(.caption2)
                                 .opacity(0.85)
                         }
@@ -203,7 +203,7 @@ struct DonateView: View {
                 )
             }
 
-            Text("Thank you so much for supporting Mirsa development! ❤️")
+            Text(MirsaTr.lit("Thank you so much for supporting Mirsa development! ❤️"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -229,10 +229,10 @@ struct SupportPopupSheet: View {
                             .font(.system(size: 56))
                             .foregroundStyle(.pink)
 
-                        Text("Welcome to Mirsa!")
+                        Text(MirsaTr.lit("Welcome to Mirsa!"))
                             .font(.title2.bold())
 
-                        Text("Free & Open Source • Developed by @mak5er")
+                        Text(MirsaTr.lit("Free & Open Source • Developed by @mak5er"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -244,7 +244,7 @@ struct SupportPopupSheet: View {
                         Button {
                             dismiss()
                         } label: {
-                            Text("Continue to Mirsa")
+                            Text(MirsaTr.lit("Continue to Mirsa"))
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
@@ -254,13 +254,13 @@ struct SupportPopupSheet: View {
                         }
 
                         Toggle(isOn: $dontShowOnLaunch) {
-                            Text("Don't show this popup on startup")
+                            Text(MirsaTr.lit("Don't show this popup on startup"))
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
                         }
                         .padding(.horizontal, 4)
 
-                        Text("You can reopen donation options anytime in Credits › Donate ❤️")
+                        Text(MirsaTr.lit("You can reopen donation options anytime in Credits › Donate ❤️"))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                             .multilineTextAlignment(.center)
@@ -270,11 +270,11 @@ struct SupportPopupSheet: View {
                 }
                 .padding(.vertical)
             }
-            .navigationTitle("Support Creator")
+            .navigationTitle(MirsaTr.lit("Support Creator"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Close") {
+                    Button(MirsaTr.lit("Close")) {
                         dismiss()
                     }
                     .bold()
@@ -292,7 +292,7 @@ struct CreditsSheet: View {
     var body: some View {
         NavigationStack {
             LicensesView()
-                .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button("Done") { dismiss() }.bold() } }
+                .toolbar { ToolbarItem(placement: .navigationBarTrailing) { Button(MirsaTr.lit("Done")) { dismiss() }.bold() } }
         }
     }
 
@@ -310,9 +310,9 @@ struct PairingGuideSheet: View {
                 VStack(alignment: .leading, spacing: 18) {
                     // Header
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Where to find your pairing file")
+                        Text(MirsaTr.lit("Where to find your pairing file"))
                             .font(.title2.bold())
-                        Text("Mirsa can import pairing files exported by SideStore, LiveContainer, iLoader, or your computer.")
+                        Text(MirsaTr.lit("Mirsa can import pairing files exported by SideStore, LiveContainer, iLoader, or your computer."))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
@@ -326,7 +326,7 @@ struct PairingGuideSheet: View {
                             Text("SideStore")
                                 .font(.headline.bold())
                             Spacer()
-                            Text("Recommended")
+                            Text(MirsaTr.lit("Recommended"))
                                 .font(.caption2.bold())
                                 .padding(.horizontal, 6).padding(.vertical, 2)
                                 .background(Color.blue.opacity(0.12))
@@ -334,15 +334,15 @@ struct PairingGuideSheet: View {
                                 .clipShape(Capsule())
                         }
 
-                        Text("SideStore automatically creates a pairing file during setup. You can pick it directly in the Files app:")
+                        Text(MirsaTr.lit("SideStore automatically creates a pairing file during setup. You can pick it directly in the Files app:"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Path in Files app:")
+                            Text(MirsaTr.lit("Path in Files app:"))
                                 .font(.caption2.bold())
                                 .foregroundStyle(.secondary)
-                            Text("On My iPhone › SideStore › ALTPairingFile.mobiledevicepairing")
+                            Text(MirsaTr.lit("On My iPhone › SideStore › ALTPairingFile.mobiledevicepairing"))
                                 .font(.caption.monospaced())
                                 .padding(8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -360,19 +360,19 @@ struct PairingGuideSheet: View {
                             Image(systemName: "shippingbox.fill")
                                 .font(.title3)
                                 .foregroundStyle(.purple)
-                            Text("LiveContainer (SideStore inside)")
+                            Text(MirsaTr.lit("LiveContainer (SideStore inside)"))
                                 .font(.headline.bold())
                         }
 
-                        Text("If you run SideStore inside LiveContainer, the pairing file is stored inside LiveContainer's app storage:")
+                        Text(MirsaTr.lit("If you run SideStore inside LiveContainer, the pairing file is stored inside LiveContainer's app storage:"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Path in Files app:")
+                            Text(MirsaTr.lit("Path in Files app:"))
                                 .font(.caption2.bold())
                                 .foregroundStyle(.secondary)
-                            Text("On My iPhone › LiveContainer › SideStore › Documents › ALTPairingFile.mobiledevicepairing")
+                            Text(MirsaTr.lit("On My iPhone › LiveContainer › SideStore › Documents › ALTPairingFile.mobiledevicepairing"))
                                 .font(.caption.monospaced())
                                 .padding(8)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -394,7 +394,7 @@ struct PairingGuideSheet: View {
                                 .font(.headline.bold())
                         }
 
-                        Text("• In iLoader: Settings › Export Pairing File › save to Files.\n• In Jitterbug: Export your <UDID>.mobiledevicepairing.\n• On PC/Mac: Run jitterbugpair or export from SideServer / AltServer, then AirDrop to your iPhone.")
+                        Text(MirsaTr.lit("• In iLoader: Settings › Export Pairing File › save to Files.\n• In Jitterbug: Export your <UDID>.mobiledevicepairing.\n• On PC/Mac: Run jitterbugpair or export from SideServer / AltServer, then AirDrop to your iPhone."))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
@@ -408,22 +408,22 @@ struct PairingGuideSheet: View {
                             Image(systemName: "folder.fill")
                                 .font(.title3)
                                 .foregroundStyle(.green)
-                            Text("Manual Drop in Files App")
+                            Text(MirsaTr.lit("Manual Drop in Files App"))
                                 .font(.headline.bold())
                         }
 
-                        Text("You can also copy any .mobiledevicepairing or .plist file directly into:")
+                        Text(MirsaTr.lit("You can also copy any .mobiledevicepairing or .plist file directly into:"))
                             .font(.footnote)
                             .foregroundStyle(.secondary)
 
-                        Text("Files app › On My iPhone › Mirsa")
+                        Text(MirsaTr.lit("Files app › On My iPhone › Mirsa"))
                             .font(.caption.monospaced())
                             .padding(8)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(Color(uiColor: .systemBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 8))
 
-                        Text("It will immediately appear under 'Discovered in Documents' in Mirsa.")
+                        Text(MirsaTr.lit("It will immediately appear under 'Discovered in Documents' in Mirsa."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -439,7 +439,7 @@ struct PairingGuideSheet: View {
                         HStack {
                             Spacer()
                             Image(systemName: "square.and.arrow.down.fill")
-                            Text("Import Pairing File Now")
+                            Text(MirsaTr.lit("Import Pairing File Now"))
                             Spacer()
                         }
                         .font(.headline)
@@ -450,11 +450,11 @@ struct PairingGuideSheet: View {
                 }
                 .padding()
             }
-            .navigationTitle("Pairing Guide")
+            .navigationTitle(MirsaTr.lit("Pairing Guide"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") { dismiss() }.bold()
+                    Button(MirsaTr.lit("Done")) { dismiss() }.bold()
                 }
             }
         }
@@ -702,16 +702,16 @@ struct ContentView: View {
                 }
             )
         }
-        .alert("Notice", isPresented: Binding(
+        .alert(MirsaTr.lit("Notice"), isPresented: Binding(
             get: { vm.errorMessage != nil },
             set: { if !$0 { vm.errorMessage = nil } }
         )) {
-            Button("OK") { vm.errorMessage = nil }
+            Button(MirsaTr.lit("OK")) { vm.errorMessage = nil }
         } message: {
             Text(vm.errorMessage ?? "")
         }
-        .alert("Success! 🎉", isPresented: $vm.showSuccessAlert) {
-            Button("OK") {}
+        .alert(MirsaTr.lit("Success! 🎉"), isPresented: $vm.showSuccessAlert) {
+            Button(MirsaTr.lit("OK")) {}
         } message: {
             Text(vm.successAlertMessage)
         }
@@ -768,7 +768,7 @@ struct PairingTab: View {
                                 .foregroundStyle(.blue)
                                 .clipShape(Capsule())
                         }
-                        Text("Apply custom wallet card skins and passcode themes on-device. Supports iOS 18.0 – 27.2 beta 2 (iOS 27.2 beta 3+ patched).")
+                        Text(MirsaTr.lit("Apply custom wallet card skins and passcode themes on-device. Supports iOS 18.0 – 27.2 beta 2 (iOS 27.2 beta 3+ patched)."))
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
 
@@ -776,7 +776,7 @@ struct PairingTab: View {
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundStyle(.orange)
-                                Text("iOS 27.2 beta 3 or newer detected: Apple patched the AirTraffic exploit on this version. Operations will likely fail.")
+                                Text(MirsaTr.lit("iOS 27.2 beta 3 or newer detected: Apple patched the AirTraffic exploit on this version. Operations will likely fail."))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -787,17 +787,17 @@ struct PairingTab: View {
                 }
 
                 // Network / VPN Status
-                Section("Network") {
+                Section(MirsaTr.lit("Network")) {
                     VPNStatusRow(vm: vm)
                 }
 
                 // Pairing Status
-                Section("Active Pairing") {
+                Section(MirsaTr.lit("Active Pairing")) {
                     HStack(spacing: 10) {
                         if vm.hasPairingFile {
                             Image(systemName: "checkmark.seal.fill").foregroundStyle(.green)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Ready to exploit ✅")
+                                Text(MirsaTr.lit("Ready to exploit ✅"))
                                     .font(.subheadline.bold())
                                 Text("\(vm.pairingFileName) (\(vm.pairingFileSizeString))")
                                     .font(.caption.monospaced())
@@ -806,7 +806,7 @@ struct PairingTab: View {
                         } else {
                             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Not Paired")
+                                Text(MirsaTr.lit("Not Paired"))
                                     .font(.subheadline.bold())
                                 Text(isIOS27OrNewer
                                      ? "Pair on this iPhone below or import a pairing file."
@@ -834,7 +834,7 @@ struct PairingTab: View {
                             HStack {
                                 Spacer()
                                 Image(systemName: "trash.fill")
-                                Text("Delete Pairing File")
+                                Text(MirsaTr.lit("Delete Pairing File"))
                                 Spacer()
                             }
                             .font(.subheadline.bold())
@@ -847,14 +847,14 @@ struct PairingTab: View {
                     isPresented: $showDeleteConfirm,
                     titleVisibility: .visible
                 ) {
-                    Button("Delete Pairing", role: .destructive) { vm.deletePairingFile() }
-                    Button("Cancel", role: .cancel) {}
+                    Button(MirsaTr.lit("Delete Pairing"), role: .destructive) { vm.deletePairingFile() }
+                    Button(MirsaTr.lit("Cancel"), role: .cancel) {}
                 } message: {
-                    Text("The active pairing credentials will be removed so you can re-pair or import another file.")
+                    Text(MirsaTr.lit("The active pairing credentials will be removed so you can re-pair or import another file."))
                 }
 
                 // Pairing File Import (SideStore / iLoader / PC)
-                Section("Pairing File") {
+                Section(MirsaTr.lit("Pairing File")) {
                     VStack(alignment: .leading, spacing: 8) {
                         Button {
                             showFilePicker = true
@@ -862,7 +862,7 @@ struct PairingTab: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "square.and.arrow.down.fill")
                                     .foregroundStyle(.blue)
-                                Text("Import Pairing File…")
+                                Text(MirsaTr.lit("Import Pairing File…"))
                                     .font(.headline)
                                 Spacer()
                                 Image(systemName: "chevron.right")
@@ -877,21 +877,21 @@ struct PairingTab: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "questionmark.circle")
-                                Text("Where to find SideStore / LiveContainer pairing file?")
+                                Text(MirsaTr.lit("Where to find SideStore / LiveContainer pairing file?"))
                             }
                             .font(.footnote)
                             .foregroundStyle(.blue)
                         }
                         .buttonStyle(.plain)
 
-                        Text("Supports .mobiledevicepairing, .plist, or .mobilepair exported from SideStore, iLoader, AltStore, Jitterbug, or Mac/PC.")
+                        Text(MirsaTr.lit("Supports .mobiledevicepairing, .plist, or .mobilepair exported from SideStore, iLoader, AltStore, Jitterbug, or Mac/PC."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
                     if !vm.documentsPlistFiles.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Discovered in Documents:")
+                            Text(MirsaTr.lit("Discovered in Documents:"))
                                 .font(.caption.bold())
                                 .foregroundStyle(.secondary)
 
@@ -904,7 +904,7 @@ struct PairingTab: View {
                                         .lineLimit(1)
                                         .truncationMode(.middle)
                                     Spacer()
-                                    Button("Use") {
+                                    Button(MirsaTr.lit("Use")) {
                                         vm.selectPairingFile(filename: filename)
                                     }
                                     .buttonStyle(.bordered)
@@ -918,7 +918,7 @@ struct PairingTab: View {
 
                 // On-Device Pairing Section (shown ONLY on iOS 27+)
                 if isIOS27OrNewer {
-                    Section("Pair on This iPhone") {
+                    Section(MirsaTr.lit("Pair on This iPhone")) {
                         if vm.pairingPhase == .pairing {
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack(spacing: 8) {
@@ -930,7 +930,7 @@ struct PairingTab: View {
 
                                 if let pin = vm.pairingPIN {
                                     VStack(alignment: .leading, spacing: 12) {
-                                        Text("ENTER THIS PIN ON THIS IPHONE:")
+                                        Text(MirsaTr.lit("ENTER THIS PIN ON THIS IPHONE:"))
                                             .font(.caption2.bold().uppercaseSmallCaps())
                                             .foregroundStyle(.secondary)
 
@@ -943,14 +943,14 @@ struct PairingTab: View {
                                                 UIPasteboard.general.string = pin
                                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                             } label: {
-                                                Label("Copy", systemImage: "doc.on.doc")
+                                                Label(MirsaTr.lit("Copy"), systemImage: "doc.on.doc")
                                                     .font(.caption.bold())
                                             }
                                             .buttonStyle(.bordered)
                                             .tint(.orange)
                                         }
 
-                                        Text("Settings › Privacy & Security › Developer Mode › Pair with Mirsa")
+                                        Text(MirsaTr.lit("Settings › Privacy & Security › Developer Mode › Pair with Mirsa"))
                                             .font(.footnote.weight(.semibold))
                                             .foregroundStyle(.primary)
 
@@ -959,7 +959,7 @@ struct PairingTab: View {
                                                 UIApplication.shared.open(url)
                                             }
                                         } label: {
-                                            Label("Open Settings App Now", systemImage: "arrow.up.forward.app")
+                                            Label(MirsaTr.lit("Open Settings App Now"), systemImage: "arrow.up.forward.app")
                                                 .bold()
                                                 .frame(maxWidth: .infinity, alignment: .center)
                                         }
@@ -977,7 +977,7 @@ struct PairingTab: View {
                                     HStack(spacing: 8) {
                                         Spacer()
                                         Image(systemName: "xmark")
-                                        Text("Cancel Pairing")
+                                        Text(MirsaTr.lit("Cancel Pairing"))
                                         Spacer()
                                     }
                                     .font(.headline)
@@ -1116,7 +1116,7 @@ struct VPNStatusRow: View {
 
             if !vm.vpnUp {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Setup LocalDevVPN:")
+                    Text(MirsaTr.lit("Setup LocalDevVPN:"))
                         .font(.caption.bold())
                     ForEach([
                         "1. Open LocalDevVPN app and tap Connect.",
@@ -1136,7 +1136,7 @@ struct VPNStatusRow: View {
             }
 
             HStack(spacing: 8) {
-                Text("Device IP:")
+                Text(MirsaTr.lit("Device IP:"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 TextField("10.7.0.1", text: $vm.deviceIP)
@@ -1262,11 +1262,11 @@ struct WalletCardView: View {
                                     .font(.system(size: 32))
                                     .foregroundStyle(.blue)
 
-                                Text("Assign Card Skin")
+                                Text(MirsaTr.lit("Assign Card Skin"))
                                     .font(.subheadline.bold())
                                     .foregroundStyle(.primary)
 
-                                Text("Tap to choose photo")
+                                Text(MirsaTr.lit("Tap to choose photo"))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -1365,14 +1365,14 @@ struct WalletCardView: View {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(card.isSelected ? Color.blue.opacity(0.35) : Color.clear, lineWidth: 1.5)
         )
-        .alert("Rename Card", isPresented: $isRenaming) {
-            TextField("Card Name (e.g. Monobank)", text: $renameText)
-            Button("Save") {
+        .alert(MirsaTr.lit("Rename Card"), isPresented: $isRenaming) {
+            TextField(MirsaTr.lit("Card Name (e.g. Monobank)"), text: $renameText)
+            Button(MirsaTr.lit("Save")) {
                 onRename?(renameText)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(MirsaTr.lit("Cancel"), role: .cancel) {}
         } message: {
-            Text("Enter a custom display name or bank name for this card.")
+            Text(MirsaTr.lit("Enter a custom display name or bank name for this card."))
         }
     }
 }
@@ -1430,7 +1430,7 @@ struct WalletCardsTab: View {
                 Color.clear.frame(height: 60)
             }
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Wallet Cards (\(vm.cards.count))")
+            .navigationTitle(tr("Wallet Cards (\(vm.cards.count))","البطاقات (\(vm.cards.count))",ckb:"کارتەکان (\(vm.cards.count))",kmr:"Kart (\(vm.cards.count))"))
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
@@ -1450,14 +1450,14 @@ struct WalletCardsTab: View {
                         Button {
                             showAddSheet = true
                         } label: {
-                            Label("Add Card Manually", systemImage: "plus")
+                            Label(MirsaTr.lit("Add Card Manually"), systemImage: "plus")
                         }
                         if !vm.cards.isEmpty {
                             Button {
                                 activePicker = .bulkAll
                                 showSourceDialog = true
                             } label: {
-                                Label("Set Skin for All Cards...", systemImage: "photo.on.rectangle.angled")
+                                Label(MirsaTr.lit("Set Skin for All Cards..."), systemImage: "photo.on.rectangle.angled")
                             }
 
                             Divider()
@@ -1465,13 +1465,13 @@ struct WalletCardsTab: View {
                             Button {
                                 vm.selectAllCards(true)
                             } label: {
-                                Label("Select All", systemImage: "checkmark.circle")
+                                Label(MirsaTr.lit("Select All"), systemImage: "checkmark.circle")
                             }
 
                             Button {
                                 vm.selectAllCards(false)
                             } label: {
-                                Label("Deselect All", systemImage: "circle")
+                                Label(MirsaTr.lit("Deselect All"), systemImage: "circle")
                             }
 
                             Divider()
@@ -1481,7 +1481,7 @@ struct WalletCardsTab: View {
                                     vm.clearAllCards()
                                 }
                             } label: {
-                                Label("Clear All Cards", systemImage: "trash")
+                                Label(MirsaTr.lit("Clear All Cards"), systemImage: "trash")
                             }
 
                         }
@@ -1509,14 +1509,14 @@ struct WalletCardsTab: View {
                 Button {
                     isPhotosPickerPresented = true
                 } label: {
-                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                    Label(MirsaTr.lit("Photo Library"), systemImage: "photo.on.rectangle")
                 }
                 Button {
                     isDocumentPickerPresented = true
                 } label: {
-                    Label("Choose from Files…", systemImage: "folder")
+                    Label(MirsaTr.lit("Choose from Files…"), systemImage: "folder")
                 }
-                Button("Cancel", role: .cancel) {
+                Button(MirsaTr.lit("Cancel"), role: .cancel) {
                     activePicker = nil
                 }
             }
@@ -1552,10 +1552,10 @@ struct WalletCardsTab: View {
                     activePicker = nil
                 }
             }
-            .alert("Couldn't Load Photo", isPresented: $photoLoadFailed) {
-                Button("OK", role: .cancel) { }
+            .alert(MirsaTr.lit("Couldn't Load Photo"), isPresented: $photoLoadFailed) {
+                Button(MirsaTr.lit("OK"), role: .cancel) { }
             } message: {
-                Text("Choose another image or try downloading the photo to your iPhone first.")
+                Text(MirsaTr.lit("Choose another image or try downloading the photo to your iPhone first."))
             }
         }
     }
@@ -1589,19 +1589,19 @@ struct WalletCardsTab: View {
                 HStack {
                     if vm.isScanningCards {
                         ProgressView().scaleEffect(0.85)
-                        Text("Live Scanner Active")
+                        Text(MirsaTr.lit("Live Scanner Active"))
                             .font(.subheadline.bold())
                             .foregroundStyle(.blue)
                     } else {
                         Image(systemName: "wave.3.left.circle")
                             .foregroundStyle(.secondary)
-                        Text("Scanner Status")
+                        Text(MirsaTr.lit("Scanner Status"))
                             .font(.subheadline.bold())
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
                     if vm.isScanningCards {
-                        Button("Stop") {
+                        Button(MirsaTr.lit("Stop")) {
                             vm.stopCardScanning()
                         }
                         .font(.caption.bold())
@@ -1675,17 +1675,17 @@ struct WalletCardsTab: View {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.75)
-                    Text("Flashing…")
+                    Text(MirsaTr.lit("Flashing…"))
                         .font(.system(size: 13, weight: .semibold))
                 } else if case .done(let ok) = vm.cardFlashPhase, !ok {
                     Image(systemName: "arrow.clockwise")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Retry")
+                    Text(MirsaTr.lit("Retry"))
                         .font(.system(size: 13, weight: .semibold))
                 } else {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 12, weight: .semibold))
-                    Text("Flash")
+                    Text(MirsaTr.lit("Flash"))
                         .font(.system(size: 13, weight: .semibold))
                 }
             }
@@ -1709,7 +1709,7 @@ struct WalletCardsTab: View {
                 .font(.system(size: 56))
                 .foregroundStyle(.blue.opacity(0.8))
 
-            Text("No Cards Detected Yet")
+            Text(MirsaTr.lit("No Cards Detected Yet"))
                 .font(.title3.bold())
 
             VStack(alignment: .leading, spacing: 10) {
@@ -1717,19 +1717,19 @@ struct WalletCardsTab: View {
                     Text("1.")
                         .bold()
                         .foregroundStyle(.blue)
-                    Text("Tap **Scan Cards** in the toolbar above.")
+                    Text(LocalizedStringKey(MirsaTr.lit("Tap **Scan Cards** in the toolbar above.")))
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Text("2.")
                         .bold()
                         .foregroundStyle(.blue)
-                    Text("On this iPhone, **double-click the Side button** (Apple Pay), authenticate with **Face ID**, and **tap your card**.")
+                    Text(LocalizedStringKey(MirsaTr.lit("On this iPhone, **double-click the Side button** (Apple Pay), authenticate with **Face ID**, and **tap your card**.")))
                 }
                 HStack(alignment: .top, spacing: 10) {
                     Text("3.")
                         .bold()
                         .foregroundStyle(.blue)
-                    Text("Your card will appear here automatically!")
+                    Text(MirsaTr.lit("Your card will appear here automatically!"))
                 }
             }
             .font(.subheadline)
@@ -1763,7 +1763,7 @@ struct WalletCardsTab: View {
                     HStack(spacing: 6) {
                         Spacer()
                         Image(systemName: "plus")
-                        Text("Add Manually")
+                        Text(MirsaTr.lit("Add Manually"))
                         Spacer()
                     }
                     .font(.headline)
@@ -1791,27 +1791,27 @@ struct AddCardSheet: View {
     var body: some View {
         NavigationStack {
             MirsaForm {
-                Section("Card Hash") {
-                    TextField("Paste card hash (e.g. M6nDwZrkYbFl…)", text: $hashText, axis: .vertical)
+                Section(MirsaTr.lit("Card Hash")) {
+                    TextField(MirsaTr.lit("Paste card hash (e.g. M6nDwZrkYbFl…)"), text: $hashText, axis: .vertical)
                         .font(.system(.body, design: .monospaced))
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .lineLimit(4...8)
                 }
                 Section {
-                    Text("You can add multiple hashes at once — separate them with spaces, commas, or newlines.")
+                    Text(MirsaTr.lit("You can add multiple hashes at once — separate them with spaces, commas, or newlines."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Add Card")
+            .navigationTitle(MirsaTr.lit("Add Card"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { dismiss() }
+                    Button(MirsaTr.lit("Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add") { onAdd() }
+                    Button(MirsaTr.lit("Add")) { onAdd() }
                         .disabled(hashText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                         .bold()
                 }
@@ -1859,7 +1859,7 @@ struct PasscodeThemeTab: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 60)
             }
-            .navigationTitle("Passcode Theme")
+            .navigationTitle(MirsaTr.lit("Passcode Theme"))
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
@@ -1887,7 +1887,7 @@ struct ApplyThemeSection: View {
     var body: some View {
         // Themes dropped directly into Documents folder
         if !vm.documentsThemes.isEmpty {
-            Section("Themes in App Folder (On My iPhone › Mirsa)") {
+            Section(MirsaTr.lit("Themes in App Folder (On My iPhone › Mirsa)")) {
                 ForEach(vm.documentsThemes, id: \.self) { file in
                     HStack {
                         Image(systemName: "paintpalette.fill")
@@ -1895,7 +1895,7 @@ struct ApplyThemeSection: View {
                         Text(file)
                             .font(.system(size: 13, design: .monospaced))
                         Spacer()
-                        Button("Load") {
+                        Button(MirsaTr.lit("Load")) {
                             vm.loadPassthmFromDocuments(filename: file)
                         }
                         .font(.caption.bold())
@@ -1906,12 +1906,12 @@ struct ApplyThemeSection: View {
             }
         }
 
-        Section("Browse Files") {
+        Section(MirsaTr.lit("Browse Files")) {
             HStack {
                 Button {
                     showDocumentPicker = true
                 } label: {
-                    Label(vm.loadedTheme == nil ? "Choose .passthm from Files…" : "Change .passthm…",
+                    Label(vm.loadedTheme == nil ? tr("Choose .passthm from Files…","اختيار .passthm من الملفات…",ckb:"هەڵبژاردنی .passthm لە Files…",kmr:"Ji Files .passthm hilbijêre…") : tr("Change .passthm…","تغيير .passthm…",ckb:"گۆڕینی .passthm…",kmr:"Guherandina .passthm…"),
                           systemImage: "doc.badge.plus")
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
@@ -1920,7 +1920,7 @@ struct ApplyThemeSection: View {
                     Button {
                         vm.clearLoadedTheme()
                     } label: {
-                        Text("Clear")
+                        Text(MirsaTr.lit("Clear"))
                             .font(.caption.bold())
                             .foregroundStyle(.red)
                     }
@@ -1939,20 +1939,20 @@ struct ApplyThemeSection: View {
         }
 
         if let theme = vm.loadedTheme {
-            Section("Interactive Lock Screen Preview") {
+            Section(MirsaTr.lit("Interactive Lock Screen Preview")) {
                 KeypadPreviewView(keys: theme.keysPreview)
                     .listRowInsets(EdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6))
                     .listRowBackground(Color.clear)
             }
 
-            Section("Theme Information") {
+            Section(MirsaTr.lit("Theme Information")) {
                 LabeledContent("Files in theme", value: "\(theme.fileCount)")
                 LabeledContent("Digits styled", value: "\(theme.keysPreview.count) keys")
 
                 Button {
                     vm.adoptThemeIntoCreator()
                 } label: {
-                    Label("Edit in Theme Creator", systemImage: "pencil")
+                    Label(MirsaTr.lit("Edit in Theme Creator"), systemImage: "pencil")
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
                 .buttonStyle(.bordered)
@@ -1970,7 +1970,7 @@ struct ApplyThemeSection: View {
                         HStack(spacing: 8) {
                             Spacer()
                             Image(systemName: "trash")
-                            Text("Remove / Unload Theme")
+                            Text(MirsaTr.lit("Remove / Unload Theme"))
                             Spacer()
                         }
                         .font(.headline)
@@ -1991,7 +1991,7 @@ struct ApplyThemeSection: View {
             HStack(spacing: 10) {
                 ProgressView()
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Flashing Theme…").font(.subheadline.bold())
+                    Text(MirsaTr.lit("Flashing Theme…")).font(.subheadline.bold())
                     ProgressView(value: vm.passthmFlashProgress)
                 }
             }
@@ -2003,7 +2003,7 @@ struct ApplyThemeSection: View {
                 HStack(spacing: 8) {
                     Spacer()
                     Image(systemName: "arrow.clockwise")
-                    Text("Retry Flash Theme")
+                    Text(MirsaTr.lit("Retry Flash Theme"))
                     Spacer()
                 }
                 .font(.headline)
@@ -2020,7 +2020,7 @@ struct ApplyThemeSection: View {
                 HStack(spacing: 8) {
                     Spacer()
                     Image(systemName: "bolt.fill")
-                    Text("Flash Theme to iPhone")
+                    Text(MirsaTr.lit("Flash Theme to iPhone"))
                     Spacer()
                 }
                 .font(.headline)
@@ -2045,20 +2045,20 @@ struct PasscodeTargetSection: View {
                     Image(systemName: "bolt.badge.clock")
                         .foregroundColor(.blue)
                         .font(.headline)
-                    Text("Flash & Language Target")
+                    Text(MirsaTr.lit("Flash & Language Target"))
                         .font(.headline)
                 }
 
                 // 1. Target System
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("System Caches")
+                    Text(MirsaTr.lit("System Caches"))
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
                     Picker("System Caches", selection: $vm.targetTelephonyVersion) {
-                        Text("TelephonyUI-10 (iOS 18+)").tag("TelephonyUI-10")
-                        Text("TelephonyUI-9 (iOS 16–17)").tag("TelephonyUI-9")
-                        Text("TelephonyUI-8 (iOS 14–15)").tag("TelephonyUI-8")
-                        Text("Universal (All)").tag("all")
+                        Text(MirsaTr.lit("TelephonyUI-10 (iOS 18+)")).tag("TelephonyUI-10")
+                        Text(MirsaTr.lit("TelephonyUI-9 (iOS 16–17)")).tag("TelephonyUI-9")
+                        Text(MirsaTr.lit("TelephonyUI-8 (iOS 14–15)")).tag("TelephonyUI-8")
+                        Text(MirsaTr.lit("Universal (All)")).tag("all")
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
@@ -2068,7 +2068,7 @@ struct PasscodeTargetSection: View {
 
                 // 2. System Language
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("System Language")
+                    Text(MirsaTr.lit("System Language"))
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
                     Picker("System Language", selection: $vm.passcodeLanguageTarget) {
@@ -2084,7 +2084,7 @@ struct PasscodeTargetSection: View {
 
                 // 3. Font Weight / Style
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Font Weight / Style")
+                    Text(MirsaTr.lit("Font Weight / Style"))
                         .font(.caption.bold())
                         .foregroundColor(.secondary)
                     Picker("Font Weight / Style", selection: $vm.passcodeBoldTarget) {
@@ -2104,12 +2104,12 @@ struct PasscodeTargetSection: View {
                         .padding(.top, 1)
 
                     if vm.passcodeLanguageTarget == .all && vm.passcodeBoldTarget == .both {
-                        Text("Universal mode flashes ~600 files for all languages & Bold text. Selecting a specific language (e.g. Ukrainian) speeds up flashing dramatically.")
+                        Text(MirsaTr.lit("Universal mode flashes ~600 files for all languages & Bold text. Selecting a specific language (e.g. Ukrainian) speeds up flashing dramatically."))
                             .font(.caption2)
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text("Fast mode selected: only targets \(vm.passcodeLanguageTarget.rawValue) with \(vm.passcodeBoldTarget.rawValue).")
+                        Text(tr("Fast mode selected: only targets \(vm.passcodeLanguageTarget.rawValue) with \(vm.passcodeBoldTarget.rawValue).","الوضع السريع: يستهدف \(vm.passcodeLanguageTarget.rawValue) مع \(vm.passcodeBoldTarget.rawValue) فقط.",ckb:"دۆخی خێرا: تەنها \(vm.passcodeLanguageTarget.rawValue) لەگەڵ \(vm.passcodeBoldTarget.rawValue) ئامانج دەگرێت.",kmr:"Moda bilez: tenê \(vm.passcodeLanguageTarget.rawValue) bi \(vm.passcodeBoldTarget.rawValue) armanc dike."))
                             .font(.caption2)
                             .foregroundColor(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -2137,7 +2137,7 @@ struct ThemeCreatorSection: View {
     @State private var selectedPoster: [PhotosPickerItem] = []
 
     var body: some View {
-        Section("Slice Mode") {
+        Section(MirsaTr.lit("Slice Mode")) {
             Picker("", selection: $vm.sliceMode) {
                 ForEach(SliceMode.allCases) { m in
                     Text(m.rawValue).tag(m)
@@ -2153,7 +2153,7 @@ struct ThemeCreatorSection: View {
         }
 
         // Preview
-        Section("Interactive Lock Screen Preview") {
+        Section(MirsaTr.lit("Interactive Lock Screen Preview")) {
             KeypadPreviewView(keys: vm.effectiveKeys)
                 .listRowInsets(EdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6))
                 .listRowBackground(Color.clear)
@@ -2173,7 +2173,7 @@ struct ThemeCreatorSection: View {
                         HStack(spacing: 8) {
                             Spacer()
                             Image(systemName: "square.and.arrow.up")
-                            Text("Export .passthm...")
+                            Text(MirsaTr.lit("Export .passthm..."))
                             Spacer()
                         }
                         .font(.headline)
@@ -2188,7 +2188,7 @@ struct ThemeCreatorSection: View {
                         HStack(spacing: 8) {
                             Spacer()
                             Image(systemName: "trash")
-                            Text("Clear All")
+                            Text(MirsaTr.lit("Clear All"))
                             Spacer()
                         }
                         .font(.headline)
@@ -2205,7 +2205,7 @@ struct ThemeCreatorSection: View {
 
     private var posterSliceSection: some View {
         Group {
-            Section("Poster Image") {
+            Section(MirsaTr.lit("Poster Image")) {
                 Button {
                     showPosterSourceDialog = true
                 } label: {
@@ -2218,14 +2218,14 @@ struct ThemeCreatorSection: View {
                 Button {
                     isPosterPhotosPickerPresented = true
                 } label: {
-                    Label("Photo Library", systemImage: "photo.on.rectangle")
+                    Label(MirsaTr.lit("Photo Library"), systemImage: "photo.on.rectangle")
                 }
                 Button {
                     isPosterDocumentPickerPresented = true
                 } label: {
-                    Label("Choose from Files…", systemImage: "folder")
+                    Label(MirsaTr.lit("Choose from Files…"), systemImage: "folder")
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(MirsaTr.lit("Cancel"), role: .cancel) {}
             }
             .photosPicker(
                 isPresented: $isPosterPhotosPickerPresented,
@@ -2256,11 +2256,11 @@ struct ThemeCreatorSection: View {
             }
 
             if vm.posterImage != nil {
-                Section("Slicing Style") {
+                Section(MirsaTr.lit("Slicing Style")) {
                     VStack(alignment: .leading, spacing: 6) {
                         Picker("", selection: $vm.maskToCircles) {
-                            Text("Seamless Poster").tag(false)
-                            Text("Circle Buttons").tag(true)
+                            Text(MirsaTr.lit("Seamless Poster")).tag(false)
+                            Text(MirsaTr.lit("Circle Buttons")).tag(true)
                         }
                         .pickerStyle(.segmented)
                         .onChange(of: vm.maskToCircles) { _, _ in
@@ -2278,11 +2278,11 @@ struct ThemeCreatorSection: View {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("Zoom & Framing")
+                            Text(MirsaTr.lit("Zoom & Framing"))
                                 .font(.caption.bold())
                                 .foregroundColor(.secondary)
                             Spacer()
-                            Button("Reset Position") {
+                            Button(MirsaTr.lit("Reset Position")) {
                                 withAnimation(.spring()) {
                                     vm.resetPosterPosition()
                                 }
@@ -2314,7 +2314,7 @@ struct ThemeCreatorSection: View {
                             Image(systemName: "hand.draw")
                                 .foregroundColor(.secondary)
                                 .font(.caption2)
-                            Text("Drag anywhere on the dialer preview to reposition")
+                            Text(MirsaTr.lit("Drag anywhere on the dialer preview to reposition"))
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
@@ -2326,8 +2326,8 @@ struct ThemeCreatorSection: View {
     }
 
     private var individualKeysSection: some View {
-        Section("Individual Keys") {
-            Text("Tap a button row to assign a custom image.")
+        Section(MirsaTr.lit("Individual Keys")) {
+            Text(MirsaTr.lit("Tap a button row to assign a custom image."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -2350,7 +2350,7 @@ struct ThemeCreatorSection: View {
                     }
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Key \(btn.digit)")
+                        Text(tr("Key \(btn.digit)","المفتاح \(btn.digit)",ckb:"دوگمەی \(btn.digit)",kmr:"Bişkoja \(btn.digit)"))
                             .font(.subheadline.weight(.medium))
                         if !btn.letters.isEmpty {
                             Text(btn.letters)
@@ -2387,14 +2387,14 @@ struct ThemeCreatorSection: View {
             Button {
                 isKeyPhotosPickerPresented = true
             } label: {
-                Label("Photo Library", systemImage: "photo.on.rectangle")
+                Label(MirsaTr.lit("Photo Library"), systemImage: "photo.on.rectangle")
             }
             Button {
                 isKeyDocumentPickerPresented = true
             } label: {
-                Label("Choose from Files…", systemImage: "folder")
+                Label(MirsaTr.lit("Choose from Files…"), systemImage: "folder")
             }
-            Button("Cancel", role: .cancel) {
+            Button(MirsaTr.lit("Cancel"), role: .cancel) {
                 selectedDigitForPicker = nil
             }
         }
@@ -2443,7 +2443,7 @@ struct ThemeCreatorSection: View {
             HStack(spacing: 10) {
                 ProgressView()
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Flashing Theme…").font(.subheadline.bold())
+                    Text(MirsaTr.lit("Flashing Theme…")).font(.subheadline.bold())
                     ProgressView(value: vm.passthmFlashProgress)
                 }
             }
@@ -2455,7 +2455,7 @@ struct ThemeCreatorSection: View {
                 HStack(spacing: 8) {
                     Spacer()
                     Image(systemName: "arrow.clockwise")
-                    Text("Retry Flash Theme")
+                    Text(MirsaTr.lit("Retry Flash Theme"))
                     Spacer()
                 }
                 .font(.headline)
@@ -2472,7 +2472,7 @@ struct ThemeCreatorSection: View {
                 HStack(spacing: 8) {
                     Spacer()
                     Image(systemName: "bolt.fill")
-                    Text("Flash Theme to iPhone")
+                    Text(MirsaTr.lit("Flash Theme to iPhone"))
                     Spacer()
                 }
                 .font(.headline)
@@ -2586,7 +2586,7 @@ struct KeypadPreviewView: View {
                     HStack(spacing: 5) {
                         Image(systemName: "hand.draw.fill")
                             .font(.system(size: 10))
-                        Text("Drag preview to reposition")
+                        Text(MirsaTr.lit("Drag preview to reposition"))
                             .font(.system(size: 11, weight: .medium))
                     }
                     .foregroundStyle(.white.opacity(0.65))
