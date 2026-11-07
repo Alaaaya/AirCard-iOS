@@ -247,7 +247,7 @@ struct AppsTab: View {
         .onReceive(NotificationCenter.default.publisher(for: .mirsaShowHidden)) { _ in showHidden = true }
         .onChange(of: scenePhaseForUpdates) { _, ph in
             if ph != .active { hiddenStore.lock() }
-            if ph == .active { Task { await updater.check() } }
+            if ph == .active { Task { await updater.passiveCheck(vm: vm) } }
         }
         .sheet(item: $updater.available) { rel in
             MirsaUpdateSheet(release: rel, updater: updater) { Task { await updater.install(rel, vm: vm) } }
@@ -289,7 +289,7 @@ struct AppsTab: View {
                 store.error = store.signingDiagnostics + "\n" + t + "\n\n" + e
             }
             store.scheduleExpiryReminders()
-            await updater.check()
+            await updater.passiveCheck(vm: vm)
             if GitHubWatcher.shared.autoInstall && !GitHubWatcher.shared.sources.isEmpty && store.networkReady(vm) {
                 Task { await GitHubWatcher.shared.checkAll(install: true) }
             }
@@ -1122,6 +1122,8 @@ struct AppsSettingsSheet: View {
     @AppStorage("mirsa.apps.homeLayout") private var homeLayout = false
     @AppStorage(MirsaCompletionFeedback.enabledKey) private var completionFeedback = true
     @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
+    @AppStorage(AutoUpdatePolicy.enabledKey) private var autoUpdate = false
+    @ObservedObject private var updater = MirsaUpdater.shared
     @EnvironmentObject var vm: AppViewModel
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     @ObservedObject var store: AppsStore
@@ -1176,6 +1178,13 @@ struct AppsSettingsSheet: View {
                     Toggle(L.t("settings.autoRefresh"), isOn: $store.autoRefresh)
                 } footer: { Text(L.t("settings.limitFoot")) }
 
+                Section {
+                    Toggle(tr("Automatic update", "تحديث تلقائي"), isOn: $autoUpdate)
+                        .onChange(of: autoUpdate) { _, on in MirsaUpdater.shared.setAutoUpdate(on, vm: vm) }
+                } footer: {
+                    Text(updater.autoMessage ?? tr("When on, Mirsa checks for a newer build when you open it and installs it. iOS may ask you to confirm or reopen the app.",
+                            "إذا شغّلتو، مرسى بيفحص عن نسخة أحدث لما تفتحو وبيثبّتها. ممكن iOS يطلب منك تأكيد أو تفتح التطبيق من جديد."))
+                }
                 Section {
                     Button {
                         dismiss()

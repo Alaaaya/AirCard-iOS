@@ -558,6 +558,68 @@ final class MirsaUpdater: ObservableObject {
         available = rel
     }
 
+    // MARK: Optional automatic update (setting «تحديث تلقائي», default OFF)
+
+    private let policy = AutoUpdatePolicy()
+    private var autoTask: Task<Void, Never>?
+    @Published var autoMessage: String?
+
+    private func fetchLatest() async -> Release? {
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
+        guard let (d, r) = try? await URLSession.shared.data(for: req),
+              (r as? HTTPURLResponse)?.statusCode == 200,
+              let rel = try? JSONDecoder().decode(Release.self, from: d), rel.ipa != nil else { return nil }
+        return rel
+    }
+
+    /// Launch / foreground entry. OFF: the unchanged manual prompt flow. ON: throttled automatic install
+    /// through the same install(_:vm:) path (same trusted feed, same signing).
+    func passiveCheck(vm: AppViewModel) async {
+        guard policy.enabled else { await check(); return }
+        guard autoTask == nil else { return }
+        let task = Task { [weak self] in
+            await self?.autoUpdate(vm: vm)
+            self?.autoTask = nil
+        }
+        autoTask = task
+        await task.value
+    }
+
+    /// Called by the settings toggle.
+    func setAutoUpdate(_ on: Bool, vm: AppViewModel) {
+        policy.enabled = on
+        if on {
+            autoMessage = nil
+            Task { await passiveCheck(vm: vm) }
+        } else {
+            autoTask?.cancel(); autoTask = nil
+            policy.reset(); autoMessage = nil
+        }
+    }
+
+    private func autoUpdate(vm: AppViewModel) async {
+        let store = AppsStore.shared
+        guard policy.enabled, !AppsStore.isSetupMode, !installing, !checking,
+              store.busy == nil, store.downloadTask == nil,
+              store.account != nil || store.hasSavedLogin,
+              policy.shouldCheck() else { return }
+        policy.recordCheck()
+        guard let rel = await fetchLatest(), !Task.isCancelled, policy.enabled,
+              policy.shouldInstall(build: rel.build, current: Self.currentBuild),
+              store.networkReady(vm) else { return }
+        policy.recordAttempt(build: rel.build)
+        store.error = nil
+        await install(rel, vm: vm)
+        if policy.enabled, !Task.isCancelled, store.error != nil {
+            store.error = nil
+            policy.recordFailure()
+            autoMessage = tr("Automatic update didn't finish. Mirsa will try again later.",
+                             "التحديث التلقائي ما خلص. رح يحاول مرة تانية بعدين.")
+        }
+    }
+
     /// Hide the prompt for now; it comes back the next time Mirsa is opened.
     func later(_ rel: Release) { snoozedUntil = Date().addingTimeInterval(60); available = nil }
 
