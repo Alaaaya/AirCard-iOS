@@ -12,7 +12,7 @@ fn executable(bundle:&Path)->Result<String>{
  if relative(s)?.components().count()!=1 {return Err("Invalid bundle executable".into())} Ok(s.into())
 }
 fn targets(app:&Path)->Result<Vec<Target>>{
- let app=fs::canonicalize(app).map_err(err)?;
+ checked_tree(app)?;let app=fs::canonicalize(app).map_err(err)?;
  let mut files=Vec::new();walk(&app,&mut files)?;
  let main=executable(&app)?;
  let mut result=Vec::new();
@@ -27,6 +27,7 @@ fn targets(app:&Path)->Result<Vec<Target>>{
 }
 pub(super) fn list_targets(app:&Path,out:&Path)->Result<()> {json(out,&targets(app)?)}
 pub(super) fn package_roots(root:&Path,out:&Path)->Result<()> {
+ checked_tree(root)?;
  if fs::symlink_metadata(root).map_err(err)?.file_type().is_symlink(){return Err("Package root cannot be a symlink".into())}
  let mut files=Vec::new();walk(root,&mut files)?;
  let mut total=0u64;
@@ -43,7 +44,7 @@ pub(super) fn package_roots(root:&Path,out:&Path)->Result<()> {
  }
  result.sort_by(|a,b|a["id"].as_str().cmp(&b["id"].as_str()));json(out,&result)
 }
-pub(super) fn inject_plan(app:&Path,items:&[Injection],order:&[String],loader:bool,first:bool)->Result<()> {
+fn inject_plan_inner(app:&Path,items:&[Injection],order:&[String],loader:bool,first:bool)->Result<()> {
  if items.is_empty() || items.len()>64 || order.len()>4096{return Err("Injection plan exceeds limits or is empty".into())}
  let available=targets(app)?;let mut ids=HashSet::new();let mut groups:BTreeMap<String,Vec<String>>=BTreeMap::new();let mut destinations=HashSet::new();
  let mut sorted=items.to_vec();
@@ -79,6 +80,35 @@ pub(super) fn inject_plan(app:&Path,items:&[Injection],order:&[String],loader:bo
  }
  Ok(())
 }
+/// Transactional private sibling copy. No original app mutations on validation or
+/// injection error. Rename rollback handles commit failure. Caller must serialize
+/// edits to its app workspace; this is not a cross-process filesystem lock.
+pub(super) fn inject_plan(app:&Path,items:&[Injection],order:&[String],loader:bool,first:bool)->Result<()> {
+ if items.is_empty()||items.len()>64||order.len()>4096{return Err("Injection plan exceeds limits or is empty".into())}
+ use std::sync::atomic::{AtomicU64,Ordering};static NEXT:AtomicU64=AtomicU64::new(0);
+ if fs::symlink_metadata(app).map_err(err)?.file_type().is_symlink(){return Err("App root cannot be a symlink".into())}
+ let app=fs::canonicalize(app).map_err(err)?;let parent=app.parent().ok_or("Invalid app path")?;
+ let suffix=format!("{}-{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed));
+ let temp=parent.join(format!(".mirsa-plan-{suffix}.app"));let backup=parent.join(format!(".mirsa-backup-{suffix}.app"));
+ if temp.exists()||backup.exists(){return Err("Plan transaction collision".into())}
+ let result=(||{
+  checked_tree(&app)?;copy_tree(&app,&temp)?;
+  // Snapshot selected libraries so validation and edits never revisit caller paths.
+  let imports=parent.join(format!(".mirsa-imports-{suffix}"));fs::create_dir(&imports).map_err(err)?;
+  let work=(||{let mut snapshots=Vec::new();for(i,item)in items.iter().enumerate(){let source=Path::new(&item.library);checked_tree(source)?;let slot=imports.join(i.to_string());fs::create_dir(&slot).map_err(err)?;let name=source.file_name().ok_or("Invalid library filename")?;let dest=slot.join(name);copy_tree(source,&dest)?;let mut copy=item.clone();copy.library=dest.to_string_lossy().into();snapshots.push(copy)}inject_plan_inner(&temp,&snapshots,order,loader,first)})();
+  let _=fs::remove_dir_all(&imports);work?;
+  // Recheck original immediately before swap; reject new symlinks/case aliases.
+  checked_tree(&app)?;fs::rename(&app,&backup).map_err(err)?;
+  if let Err(e)=fs::rename(&temp,&app){let restore=fs::rename(&backup,&app);return Err(format!("Plan commit failed: {e}; rollback: {restore:?}"))}
+  let _=fs::remove_dir_all(&backup);Ok(())
+ })();if result.is_err(){let _=fs::remove_dir_all(&temp);}result
+}
+fn checked_tree(root:&Path)->Result<()> {
+ let m=fs::symlink_metadata(root).map_err(err)?;if m.file_type().is_symlink()||!(m.is_file()||m.is_dir()){return Err("Links or special files not supported".into())}
+ if m.is_file(){if m.len()>FILE_LIMIT{return Err("Library too large".into())}return Ok(())}
+ let mut files=Vec::new();walk(root,&mut files)?;let mut names=BTreeMap::new();let mut total=0u64;
+ for p in files {let rel=p.strip_prefix(root).map_err(err)?.to_str().ok_or("Non UTF8 tree path")?.to_owned();relative(&rel)?;if names.insert(rel.to_lowercase(),rel).is_some(){return Err("Case aliased tree path".into())}let m=fs::symlink_metadata(&p).map_err(err)?;if m.is_file(){total=total.checked_add(m.len()).ok_or("Tree size overflow")?;if m.len()>FILE_LIMIT||total>TOTAL_LIMIT{return Err("Tree resource limit".into())}}}Ok(())
+}
 #[cfg(test)]mod tests{
  use super::*;
  fn fixture(kind:u32)->Vec<u8>{let mut d=vec![0;4096];for(o,v)in[(0,0xfeedfacf),(4,0x100000c),(12,kind),(16,1),(20,152),(32,0x19),(36,152),(96,1),(152,1024)]{put32(&mut d,o,v)}d[80..88].copy_from_slice(&4096u64.to_le_bytes());d[144..152].copy_from_slice(&16u64.to_le_bytes());d}
@@ -91,4 +121,7 @@ pub(super) fn inject_plan(app:&Path,items:&[Injection],order:&[String],loader:bo
  #[test]fn unsupported_and_duplicate_fail(){let(p,a)=setup("reject");bundle(&a.join("PlugIns/X.appex"),"X",2);let lib=p.join("T.dylib");fs::write(&lib,fixture(6)).unwrap();assert!(inject_plan(&a,&[item("a",&lib,"PlugIns/X.appex/X")],&[],true,false).is_err());assert!(inject_plan(&a,&[item("a",&lib,"Main"),item("a",&lib,"Main")],&[],false,false).is_err());assert!(inject_plan(&a,&[item("a",&lib,"../outside")],&[],false,false).is_err());let mut d=fixture(6);put32(&mut d,8,2);fs::write(&lib,d).unwrap();assert!(inject_plan(&a,&[item("a",&lib,"Main")],&[],false,false).is_err());fs::remove_dir_all(p).unwrap();}
  #[test]fn roots_separate_same_basename_and_symlink_reject(){let(p,_)=setup("roots");let r=p.join("pkg");fs::create_dir_all(r.join("a")).unwrap();fs::create_dir_all(r.join("b")).unwrap();for n in["a/T.dylib","b/T.dylib"]{fs::write(r.join(n),fixture(6)).unwrap()}let out=p.join("roots.json");package_roots(&r,&out).unwrap();let v:serde_json::Value=serde_json::from_slice(&fs::read(&out).unwrap()).unwrap();assert_eq!(v[0]["id"],"a/T.dylib");assert_eq!(v[1]["id"],"b/T.dylib");#[cfg(unix)]{std::os::unix::fs::symlink("/tmp",r.join("escape")).unwrap();assert!(package_roots(&r,&out).is_err());}fs::remove_dir_all(p).unwrap();}
  #[test]fn missing_dependency_and_colliding_roots_fail(){let(p,a)=setup("deps");let l=p.join("A.dylib");let m=macho(fixture(6),true).unwrap();let mut cs:Vec<_>=m.commands.iter().map(|c|c.data.clone()).collect();cs.push(dylib_command(0xc,"@rpath/Missing.dylib",None).unwrap());fs::write(&l,write_commands(m,cs).unwrap()).unwrap();assert!(inject_plan(&a,&[item("a",&l,"Main")],&[],false,false).is_err());fs::remove_dir_all(p).unwrap();}
+ #[test]fn transaction_rolls_back_after_late_failure(){let(p,a)=setup("transaction");bundle(&a.join("PlugIns/Z.appex"),"Z",2);let good=p.join("Good.dylib");let bad=p.join("Bad.dylib");fs::write(&good,fixture(6)).unwrap();let m=macho(fixture(6),true).unwrap();let mut cs:Vec<_>=m.commands.iter().map(|c|c.data.clone()).collect();cs.push(dylib_command(0xc,"@rpath/DoesNotExist.dylib",None).unwrap());fs::write(&bad,write_commands(m,cs).unwrap()).unwrap();let before=fs::read(a.join("Main")).unwrap();assert!(inject_plan(&a,&[item("good",&good,"Main"),item("bad",&bad,"PlugIns/Z.appex/Z")],&[],false,false).is_err());assert_eq!(fs::read(a.join("Main")).unwrap(),before);assert!(!a.join("Frameworks").exists());assert!(!a.join("PlugIns/Z.appex/Frameworks").exists());assert!(!fs::read_dir(&p).unwrap().any(|e|e.unwrap().file_name().to_string_lossy().starts_with(".mirsa-")));fs::remove_dir_all(p).unwrap();}
+ #[test]fn target_tree_case_alias_and_symlink_reject(){let(p,a)=setup("alias");fs::create_dir(a.join("Foo")).unwrap();fs::create_dir(a.join("foo")).unwrap();assert!(targets(&a).is_err());fs::remove_dir_all(a.join("foo")).unwrap();#[cfg(unix)]{std::os::unix::fs::symlink("/tmp",a.join("escape")).unwrap();assert!(targets(&a).is_err());}fs::remove_dir_all(p).unwrap();}
+
 }
