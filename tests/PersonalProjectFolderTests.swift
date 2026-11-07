@@ -70,6 +70,24 @@ final class PersonalProjectFolderTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: collision), Data("destination draft".utf8))
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent("app.ipa").path))
     }
+    func testSecondMoveFailureRollsBackAllAlreadyMovedFiles() throws {
+        let legacy = try sandbox()
+        let root = try PersonalProjectFolder.directory(documents: sandbox(), id: UUID())
+        let ipa = legacy.appendingPathComponent("app.ipa")
+        let draft = legacy.appendingPathComponent("draft.json")
+        try Data("ipa".utf8).write(to: ipa)
+        try Data("draft".utf8).write(to: draft)
+        var moves = 0
+        XCTAssertThrowsError(try PersonalProjectFolder.migrate(files: [ipa, draft], to: root) { source, destination in
+            moves += 1
+            if moves == 2 { throw CocoaError(.fileWriteOutOfSpace) }
+            try FileManager.default.moveItem(at: source, to: destination)
+        })
+        XCTAssertEqual(moves, 2)
+        XCTAssertEqual(try Data(contentsOf: ipa), Data("ipa".utf8))
+        XCTAssertEqual(try Data(contentsOf: draft), Data("draft".utf8))
+        XCTAssertTrue(try PersonalProjectFolder.contents(of: root, in: root).isEmpty)
+    }
     func testInterruptedMigrationKeepsMovedIPAAndRecoversRemainingFiles() throws {
         let legacy = try sandbox()
         let root = try PersonalProjectFolder.directory(documents: sandbox(), id: UUID())
