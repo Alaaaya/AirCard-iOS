@@ -46,12 +46,39 @@ final class AutoUpdatePolicyTests: XCTestCase {
         p.recordAttempt(build: 6, now: t2); p.recordFailure(now: t2)
         XCTAssertFalse(p.shouldInstall(build: 6, current: 5, now: t2.addingTimeInterval(7 * 3600)), "max attempts per build")
     }
-    func testTurningOffClearsState() {
+    func testTurningOffKeepsPendingAndAttemptState() {
         let p = make(); p.enabled = true
-        p.recordAttempt(build: 6, now: t0); p.recordFailure(now: t0)
+        p.recordAttempt(build: 6, now: t0)
         p.enabled = false; p.reset()
-        XCTAssertFalse(p.shouldCheck(now: t0.addingTimeInterval(99999)))
-        p.enabled = true
-        XCTAssertTrue(p.shouldInstall(build: 6, current: 5, now: t0.addingTimeInterval(1)))
+        p.enabled = true   // OFF then ON while install still pending
+        XCTAssertFalse(p.shouldInstall(build: 6, current: 5, now: t0.addingTimeInterval(60)))
+    }
+    func testOffNeverResetsAttemptCap() {
+        let p = make(); p.enabled = true
+        var t = t0
+        for _ in 0..<3 {
+            p.recordAttempt(build: 6, now: t); p.recordFailure(now: t)
+            p.enabled = false; p.reset(); p.enabled = true
+            t = t.addingTimeInterval(7 * 3600)
+        }
+        XCTAssertFalse(p.shouldInstall(build: 6, current: 5, now: t))
+        XCTAssertTrue(p.shouldInstall(build: 7, current: 5, now: t), "new version resets")
+    }
+    func testRelaunchSharesPersistedState() {
+        let d = UserDefaults(suiteName: "au-\(UUID().uuidString)")!
+        let a = AutoUpdatePolicy(defaults: d); a.enabled = true
+        a.recordCheck(now: t0); a.recordAttempt(build: 6, now: t0)
+        let b = AutoUpdatePolicy(defaults: d)   // relaunch
+        XCTAssertFalse(b.shouldCheck(now: t0.addingTimeInterval(60)))
+        XCTAssertFalse(b.shouldInstall(build: 6, current: 5, now: t0.addingTimeInterval(60)))
+    }
+    func testRepeatedForegroundChecksAreThrottled() {
+        let p = make(); p.enabled = true
+        var allowed = 0
+        for i in 0..<20 {
+            let now = t0.addingTimeInterval(Double(i) * 30)
+            if p.shouldCheck(now: now) { allowed += 1; p.recordCheck(now: now) }
+        }
+        XCTAssertEqual(allowed, 1)
     }
 }

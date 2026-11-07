@@ -57,10 +57,8 @@ struct AutoUpdatePolicy {
         defaults.set(now.addingTimeInterval(delay), forKey: "mirsa.autoUpdate.nextRetry")
         defaults.removeObject(forKey: "mirsa.autoUpdate.attemptAt")
     }
-    /// Turning the setting off clears all pending state.
-    func reset() {
-        for k in ["lastCheck", "nextRetry", "attemptBuild", "attemptAt", "attempts"] {
-            defaults.removeObject(forKey: "mirsa.autoUpdate.\(k)")
-        }
-    }
+    /// Turning the setting off only forgets the passive-check throttle. The in-flight / attempt
+    /// identity (build, count, time) and failure backoff persist until the version advances,
+    /// so OFF then ON or a relaunch can't duplicate an install or reset the 3-attempt cap.
+    func reset() { defaults.removeObject(forKey: "mirsa.autoUpdate.lastCheck") }
 }

@@ -594,7 +594,7 @@ final class MirsaUpdater: ObservableObject {
             autoMessage = nil
             Task { await passiveCheck(vm: vm) }
         } else {
-            autoTask?.cancel(); autoTask = nil
+            autoTask?.cancel(); autoTask = nil   // cancels only the passive check / download; a running OS install is not pretended stopped
             policy.reset(); autoMessage = nil
         }
     }
@@ -612,7 +612,7 @@ final class MirsaUpdater: ObservableObject {
         policy.recordAttempt(build: rel.build)
         store.error = nil
         await install(rel, vm: vm)
-        if policy.enabled, !Task.isCancelled, store.error != nil {
+        if store.error != nil {
             store.error = nil
             policy.recordFailure()
             autoMessage = tr("Automatic update didn't finish. Mirsa will try again later.",
