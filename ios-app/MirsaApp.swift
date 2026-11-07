@@ -31,10 +31,23 @@ struct MirsaApp: App {
         AppsStore.importHandoffIfNeeded()
     }
 
+    private static var hostedUnitTests: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestBundlePath"] != nil
+            || NSClassFromString("XCTestCase") != nil
+        #else
+        return false
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             Group {
-                if AppsStore.isSetupMode { SetupView() } else { ContentView() }
+                // Hosted XCTest windows own their fixtures. Do not let the ordinary
+                // home start network work or present OS permission sheets behind them.
+                if Self.hostedUnitTests { Color.clear }
+                else if AppsStore.isSetupMode { SetupView() } else { ContentView() }
             }
             .environmentObject(vm)
             .mirsaKeyboardDismissal()

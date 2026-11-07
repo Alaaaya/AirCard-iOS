@@ -206,9 +206,17 @@ final class PersonalProjectIntegrationTests: XCTestCase {
 
     /// Offline simulator fixture, validated through the same IPA verifier as real sources.
     /// This does not claim a live host download or a device run.
-    /// OCR-only normalisation: just the capital-I/lowercase-l glyph ambiguity (Vision reads "UI" as "Ul").
+    /// OCR-only glyph/word-spacing normalization. Preserve every non-whitespace character.
+    /// Vision reads UI as Ul and joins the Arabic words "ما لقيت" as "مالقيت".
     static func ocrFold(_ s: String) -> String {
-        s.replacingOccurrences(of: "l", with: "I") // only observed Vision ambiguity: "UI" read as "Ul"; case and spacing stay exact
+        s.replacingOccurrences(of: "l", with: "I")
+            .components(separatedBy: .whitespacesAndNewlines).joined()
+    }
+
+    func testOCRFoldPreservesMissingWordsAndArabicGlyphs() {
+        XCTAssertEqual(Self.ocrFold("ما لقيت IPA لهالتطبيق"), Self.ocrFold("مالقيت IPA لهالتطبيق"))
+        XCTAssertNotEqual(Self.ocrFold("ما لقيت IPA لهالتطبيق"), Self.ocrFold("ما لقيت لهالتطبيق"))
+        XCTAssertNotEqual(Self.ocrFold("ما لقيت IPA لهالتطبيق"), Self.ocrFold("ما لقيت IPA لتطبيق آخر"))
     }
 
     func testDiscoveryValidatedIPAAndEmptyArabicSnapshots() async throws {
@@ -325,25 +333,34 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             // NavigationStack content is not exposed through the hosted accessibility tree on the simulator
             // (only the bar title is). Fall back to OCR of the actually drawn pixels; assertions stay unchanged.
             if !requiredText.allSatisfy({ text.contains($0) }) {
-                let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 2
-                let shot = UIGraphicsImageRenderer(size: window.bounds.size, format: fmt).image { _ in
-                    _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
-                }
-                if let cg = shot.cgImage {
-                    let req = VNRecognizeTextRequest()
-                    req.recognitionLevel = .accurate
-                    req.usesLanguageCorrection = false
-                    req.customWords = requiredText
-                    req.recognitionLanguages = ["ar-SA", "en-US"]
-                    if #available(iOS 18.0, *) { req.automaticallyDetectsLanguage = true }
-                    try? VNImageRequestHandler(cgImage: cg).perform([req])
-                    let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
-                    text += "\n" + ocr
+                for _ in 0..<10 {
+                    window.layoutIfNeeded(); host.view.layoutIfNeeded()
+                    let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 2
+                    let shot = UIGraphicsImageRenderer(size: window.bounds.size, format: fmt).image { _ in
+                        _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+                    }
+                    if let cg = shot.cgImage {
+                        let req = VNRecognizeTextRequest()
+                        req.recognitionLevel = .accurate
+                        req.usesLanguageCorrection = false
+                        req.customWords = requiredText
+                        req.recognitionLanguages = ["ar-SA", "en-US"]
+                        if #available(iOS 18.0, *) { req.automaticallyDetectsLanguage = true }
+                        try VNImageRequestHandler(cgImage: cg).perform([req])
+                        let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+                        let currentText = renderedAccessibilityText(host.view) + "\n" + ocr
+                        text = currentText
+                    }
+                    if requiredText.allSatisfy({ Self.ocrFold(text).contains(Self.ocrFold($0)) }) { break }
+                    try await Task.sleep(nanoseconds: 200_000_000)
                 }
             }
             XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
             for expected in requiredText { XCTAssertTrue(text.contains(expected) || Self.ocrFold(text).contains(Self.ocrFold(expected)), "Missing rendered text: \(expected); actual: \(text)") }
-            for forbidden in forbiddenText { XCTAssertFalse(text.contains(forbidden), "Forbidden rendered text: \(forbidden)") }
+            for forbidden in forbiddenText {
+                XCTAssertFalse(text.contains(forbidden) || Self.ocrFold(text).contains(Self.ocrFold(forbidden)),
+                               "Forbidden rendered text: \(forbidden)")
+            }
         }
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
         var rendered = false

@@ -42,7 +42,7 @@ final class MirsaKeyboardTests: XCTestCase {
     }
 
     /// Actual project + actual first responder + OS keyboard notifications.
-    /// Attachments use XCUIScreen so the software keyboard is included.
+    /// Host simctl captures include the OS keyboard; a file handshake keeps this window alive.
     func testProjectActualKeyboardFocusedFieldAndCTA() async throws {
         let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "PersonalUIFixture", withExtension: "zip"))
         let library = PersonalAppsLibrary.shared
@@ -62,6 +62,8 @@ final class MirsaKeyboardTests: XCTestCase {
         func descendants(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(descendants) }
         let fields = descendants(host.view).compactMap { $0 as? UITextField }
         let field = try XCTUnwrap(fields.first)
+        XCTAssertTrue(accessibilityContains(window, identifier: "mirsa.project.sign"),
+                      "CTA must exist before editing, otherwise this is not a valid restoration test")
         var keyboardFrame: CGRect?
         let token = NotificationCenter.default.addObserver(forName: UIResponder.keyboardDidShowNotification,
             object: nil, queue: .main) { note in
@@ -79,17 +81,17 @@ final class MirsaKeyboardTests: XCTestCase {
         let scroll = try XCTUnwrap(descendants(host.view).compactMap { $0 as? UIScrollView }.first)
         XCTAssertEqual(scroll.keyboardDismissMode, UIScrollView.KeyboardDismissMode.interactiveWithAccessory)
         XCTAssertEqual(scroll.keyboardDismissMode.rawValue, 4, "interactiveWithAccessory raw value")
-        XCTAssertFalse(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
+        XCTAssertFalse(accessibilityContains(window, identifier: "mirsa.project.sign"),
                        "CTA must not be exposed or cover the page while software keyboard is visible")
         try await attach("project-real-keyboard-visible-focused-field")
         window.endEditing(false)
-        for _ in 0..<50 where accessibilityContains(host.view, identifier: "mirsa.project.sign") == false {
+        for _ in 0..<50 where accessibilityContains(window, identifier: "mirsa.project.sign") == false {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
         XCTAssertFalse(field.isFirstResponder)
-        XCTAssertTrue(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
-                      "CTA must return after keyboard fully dismisses")
         try await attach("project-real-keyboard-hidden-CTA-restored")
+        XCTAssertTrue(accessibilityContains(window, identifier: "mirsa.project.sign"),
+                      "CTA must return after keyboard fully dismisses")
     }
 
     private func accessibilityContains(_ root: NSObject, identifier: String) -> Bool {
@@ -117,9 +119,24 @@ final class MirsaKeyboardTests: XCTestCase {
     }
 
     private func attach(_ name: String) async throws {
-        // The host runner captures the real simulator display via simctl.
-        // XCUIScreen requires a UI-test runner and throws from hosted unit tests.
-        NSLog("MIRSA_SCREENSHOT_REQUEST %@", name)
-        try await Task.sleep(nanoseconds: 2_000_000_000)
+        // Do not use NSLog as a trigger: xcodebuild buffers output for seconds,
+        // so the screenshot may otherwise show an entirely different test.
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MirsaRuntimeCapture", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let token = UUID().uuidString
+        let request = ["token": token, "name": name]
+        try JSONSerialization.data(withJSONObject: request).write(
+            to: directory.appendingPathComponent("request.json"), options: .atomic)
+        for _ in 0..<400 {
+            if let data = try? Data(contentsOf: directory.appendingPathComponent("ack.json")),
+               let ack = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               ack["token"] as? String == token {
+                XCTAssertEqual(ack["ok"] as? Bool, true, "Host screenshot failed: \(ack)")
+                return
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Timed out waiting for synchronous host screenshot \(name)")
     }
 }
