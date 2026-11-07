@@ -280,6 +280,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
             }
             // NavigationStack content is not exposed through the hosted accessibility tree on the simulator
             // (only the bar title is). Fall back to OCR of the actually drawn pixels; assertions stay unchanged.
+            var ocrText = ""
             if !requiredText.allSatisfy({ text.contains($0) }) {
                 let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 2
                 let shot = UIGraphicsImageRenderer(size: window.bounds.size, format: fmt).image { _ in
@@ -292,12 +293,24 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                     if #available(iOS 18.0, *) { req.automaticallyDetectsLanguage = true }
                     try? VNImageRequestHandler(cgImage: cg).perform([req])
                     let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+                    ocrText = ocr
                     text += "\n" + ocr
                 }
             }
             XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
-            for expected in requiredText { XCTAssertTrue(text.contains(expected), "Missing rendered text: \(expected); actual: \(text)") }
-            for forbidden in forbiddenText { XCTAssertFalse(text.contains(forbidden), "Forbidden rendered text: \(forbidden)") }
+            // OCR confuses I/l/1 and drops Arabic word spaces; compare OCR text on a folded form (no whitespace, I/l/1 unified, case-insensitive).
+            func fold(_ v: String) -> String {
+                String(v.lowercased().filter { !$0.isWhitespace }.map { "1il|".contains($0) ? "l" : $0 })
+            }
+            let foldedOCR = fold(ocrText)
+            for expected in requiredText {
+                XCTAssertTrue(text.contains(expected) || (!ocrText.isEmpty && foldedOCR.contains(fold(expected))),
+                              "Missing rendered text: \(expected); actual: \(text)")
+            }
+            for forbidden in forbiddenText {
+                XCTAssertFalse(text.contains(forbidden) || (!ocrText.isEmpty && foldedOCR.contains(fold(forbidden))),
+                               "Forbidden rendered text: \(forbidden)")
+            }
         }
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
         var rendered = false
