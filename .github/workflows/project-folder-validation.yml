@@ -1,0 +1,97 @@
+name: Private project folder validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [kat/project-folder-cn]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-core
+      - name: Test Rust validation
+        run: cargo test --manifest-path rust-core/Cargo.toml --lib
+      - name: Build Rust device library
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        run: |
+          cd rust-core
+          cargo build --release --target aarch64-apple-ios
+          cd ..
+          rm -rf AirliftFFI.xcframework
+          xcodebuild -create-xcframework -library rust-core/target/aarch64-apple-ios/release/libairlift_ffi.a -headers rust-core/include -output AirliftFFI.xcframework
+      - name: Build application
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          bash build-ipa.sh
+          mv build/Mirsa.ipa build/Mirsa-validation.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mirsa-personal-signing-validation
+          path: build/Mirsa-validation.ipa
+          if-no-files-found: error
+
+  simulator:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-core
+          key: simulator
+      - name: Build real simulator FFI
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        run: |
+          cargo build --release --manifest-path rust-core/Cargo.toml --target aarch64-apple-ios-sim
+          rm -rf AirliftFFI.xcframework
+          xcodebuild -create-xcframework -library rust-core/target/aarch64-apple-ios-sim/release/libairlift_ffi.a -headers rust-core/include -output AirliftFFI.xcframework
+      - name: Run actual SwiftUI integration and Arabic snapshots
+        run: |
+          set -o pipefail
+          brew install xcodegen
+          xcodegen generate
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLanguages -array ar en
+          xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLocale ar
+          mkdir -p build
+          xcodebuild -project Mirsa.xcodeproj -scheme Mirsa -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/SimulatorData -resultBundlePath build/PersonalUI.xcresult test CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/simulator-validation.log
+      - name: Export runtime screenshot attachments
+        if: always()
+        run: |
+          if [ -d build/PersonalUI.xcresult ]; then
+            mkdir -p build/screenshots
+            xcrun xcresulttool export attachments --path build/PersonalUI.xcresult --output-path build/screenshots
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Mirsa-real-SwiftUI-Arabic-validation
+          path: |
+            build/screenshots
+            build/PersonalUI.xcresult
+            build/simulator-validation.log
+          if-no-files-found: warn

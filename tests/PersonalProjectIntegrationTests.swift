@@ -19,6 +19,45 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         return store
     }
 
+    func testOwnProjectFolderMigrationAndCertificateNameSnapshots() async throws {
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "PersonalUIFixture", withExtension: "zip"))
+        let library = PersonalAppsLibrary.shared
+        let before = Set(library.apps.map(\.id))
+        try await library.add(fixture, signed: false)
+        let app = try XCTUnwrap(library.apps.first { !before.contains($0.id) })
+        var folder: URL?
+        defer {
+            try? library.delete(app)
+            if let folder { try? FileManager.default.removeItem(at: folder) }
+        }
+        let oldIPA = library.url(app)
+        let oldIcon = library.iconURL(app)
+        var draft = PersonalProjectDraft(name: app.name, bundleID: app.bundleID, version: app.version)
+        draft.workspaceNote = "migration fixture"
+        try JSONEncoder().encode(draft).write(to: library.draftURL(app))
+        let originalDraft = try Data(contentsOf: library.draftURL(app))
+        folder = try library.browseDirectory(app)
+        let root = try XCTUnwrap(folder)
+        XCTAssertEqual(root.lastPathComponent, app.id.uuidString)
+        XCTAssertEqual(root.deletingLastPathComponent().lastPathComponent, "Projects")
+        XCTAssertEqual(library.url(app).deletingLastPathComponent(), root)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldIPA.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldIcon.path))
+        XCTAssertEqual(try Data(contentsOf: library.draftURL(app)), originalDraft)
+        XCTAssertNotNil(library.icon(for: app))
+        XCTAssertEqual(try library.browseDirectory(app), root)
+        XCTAssertEqual(try PersonalProjectFolder.contents(of: root, in: root).count, 3)
+        try await snapshot(PersonalProjectFolderBrowser(root: root, title: app.name), name: "Arabic-Mirsa-own-project-folder-no-Files-redirect")
+        let certURL = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "escaped", withExtension: "der", subdirectory: "CertificateLabels")
+            ?? Bundle(for: Self.self).url(forResource: "escaped", withExtension: "der"))
+        let name = PersonalCertificateLabel.name(certificate: try Data(contentsOf: certURL))
+        XCTAssertEqual(name, "فريق Mirsa, Example")
+        try await snapshot(VStack(alignment: .leading) {
+            Label("شهادة التوقيع", systemImage: "key.fill")
+            Text(name).font(.headline).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
+        }.padding().background(AuroraBackground()), name: "Arabic-certificate-structured-CN-not-raw-DN")
+    }
+
     func testURLValidation() throws {
         XCTAssertEqual(try PersonalIPAURL.validate(" https://example.com/test.ipa?token=public ").host, "example.com")
         for link in ["http://example.com/a.ipa", "https://localhost/a.ipa", "https://127.0.0.1/a.ipa",

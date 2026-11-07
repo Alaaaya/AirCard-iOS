@@ -22,6 +22,7 @@ struct PersonalProjectDetailView: View {
     @State private var showDeps = false
     @State private var pickingEntitlements = false
     @State private var inspectRoot: URL?
+    @State private var workspace: ProjectFolderLocation?
 
     private var configOnly: Bool { selected == nil }
     private var selected: PersonalIdentityVault.SavedIdentity? {
@@ -94,6 +95,9 @@ struct PersonalProjectDetailView: View {
         }
         .sheet(isPresented: $sharing, onDismiss: cleanOutput) {
             if let output { PersonalSignedShare(url: output) }
+        }
+        .sheet(item: $workspace) { location in
+            PersonalProjectFolderBrowser(root: location.url, title: draft.name)
         }
         .task { await load(); await inspect() }
         .onChange(of: draft) { _ in if loaded { saveDraft() } }
@@ -255,9 +259,12 @@ struct PersonalProjectDetailView: View {
             if showDeps { ForEach(deps ?? [], id: \.self) { Text($0).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(2) } }
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).appsGlass(cornerRadius: 24)
     }
-    private var rootURL: URL { library.root }
     private func openWorkspace() {
-        if let url = URL(string: "shareddocuments://" + rootURL.path) { UIApplication.shared.open(url) }
+        do {
+            workspace = ProjectFolderLocation(url: try library.browseDirectory(app))
+        } catch {
+            message = personalText("Could not open this project folder.", "ما قدرنا نفتح مجلد هالمشروع.")
+        }
     }
     private func inspect() async {
         let input = library.url(app)
@@ -280,7 +287,7 @@ struct PersonalProjectDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(personalText("Signing certificate", "شهادة التوقيع"), systemImage: "key.fill").font(.subheadline.weight(.semibold))
             if let selected {
-                Text(selected.name).font(.headline).foregroundStyle(selected.verification.isVerified ? Color.green : Color.orange)
+                Text(selected.name).font(.headline).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
                 if !selected.verification.isVerified {
                     Label(selected.verification.warningText, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
