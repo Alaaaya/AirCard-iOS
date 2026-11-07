@@ -14,8 +14,6 @@ struct MirsaCrashFrame: Codable, Equatable {
 
 enum MirsaCrashProvenance: String, Codable, Equatable { case userImport, pairedDevice }
 
-enum MirsaCrashProvenance: String, Codable { case userImport, pairedDevice }
-
 struct MirsaCrashReport: Codable, Equatable, Identifiable {
     var id: String
     var bundleID: String?
@@ -28,7 +26,6 @@ struct MirsaCrashReport: Codable, Equatable, Identifiable {
     var crashedThread: Int?
     var frames: [MirsaCrashFrame]
     var imageUUIDs: [String: String]   // image name -> UUID (for offline symbolication)
-    var provenance: MirsaCrashProvenance? = nil
     var importedManually: Bool
     var provenance: MirsaCrashProvenance? = nil
 
