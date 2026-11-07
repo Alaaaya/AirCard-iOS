@@ -24,7 +24,7 @@ jobs:
           workspaces: rust-core
           key: simulator
       - name: Rust tests
-        run: cargo test --manifest-path rust-core/Cargo.toml --lib 2>&1 | tail -15
+        run: cargo test --manifest-path rust-core/Cargo.toml --lib 2>&1 | grep -E "extract|test result|FAILED|error" | tail -30
       - name: Build simulator FFI
         env:
           IPHONEOS_DEPLOYMENT_TARGET: "18.0"

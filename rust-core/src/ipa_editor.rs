@@ -1015,6 +1015,20 @@ unsafe fn editor_run_with_progress(request: *const c_char, sink: Option<crate::s
 #[cfg(test)]
 mod tests {
     #[test]
+    fn extract_concurrent_independent_children_and_cleanup_after_use() {
+        let root = std::env::temp_dir().join(format!("extract-conc-{}",std::process::id()));
+        let _=fs::remove_dir_all(&root);fs::create_dir_all(&root).unwrap();
+        let ipa=root.join("F.ipa");
+        fs::write(&ipa,include_bytes!("../tests/fixtures/incoming/SignedFixture.ipa")).unwrap();
+        let hs:Vec<_>=(0..4).map(|i|{let ipa=ipa.clone();let d=root.join(format!("op-{i}")).join("payload");
+            std::thread::spawn(move||{fs::create_dir_all(d.parent().unwrap()).unwrap();extract_zip(&ipa,&d).unwrap();
+                // consumer reads the app AFTER extraction, before cleanup
+                assert!(d.join("Payload/Fixture.app").is_dir());
+                fs::remove_dir_all(d.parent().unwrap()).unwrap();d.exists()})}).collect();
+        for h in hs{assert!(!h.join().unwrap());}
+        let _=fs::remove_dir_all(&root);
+    }
+    #[test]
     fn extract_requires_nonexistent_child_of_owned_parent() {
         let root = std::env::temp_dir().join(format!("extract-owned-{}",std::process::id()));
         let _=fs::remove_dir_all(&root);fs::create_dir_all(&root).unwrap();
