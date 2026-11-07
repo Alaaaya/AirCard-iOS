@@ -37,6 +37,7 @@ struct MirsaApp: App {
                 if AppsStore.isSetupMode { SetupView() } else { ContentView() }
             }
             .environmentObject(vm)
+            .mirsaKeyboardDismissal()
         }
     }
 }
