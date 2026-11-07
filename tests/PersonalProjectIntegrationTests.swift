@@ -328,8 +328,12 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                     let req = VNRecognizeTextRequest()
                     req.recognitionLevel = .accurate
                     req.usesLanguageCorrection = false
-                    if #available(iOS 18.0, *) { req.automaticallyDetectsLanguage = true }
-                    try? VNImageRequestHandler(cgImage: cg).perform([req])
+                    // Automatic language detection can return no observations for this
+                    // mixed Arabic/Latin page. Use the supported languages explicitly,
+                    // and surface Vision failures instead of treating them as no text.
+                    let supported = try req.supportedRecognitionLanguages()
+                    req.recognitionLanguages = ["ar-SA", "en-US"].filter { supported.contains($0) }
+                    try VNImageRequestHandler(cgImage: cg).perform([req])
                     let ocr = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
                     text += "\n" + ocr
                 }

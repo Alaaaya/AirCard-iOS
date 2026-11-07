@@ -73,8 +73,10 @@ jobs:
           brew install xcodegen
           xcodegen generate
           DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["name"].startswith("iPhone")))')
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
           xcrun simctl boot "$DEVICE" || true
           xcrun simctl bootstatus "$DEVICE" -b
+          open -a Simulator --args -CurrentDeviceUDID "$DEVICE"
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLanguages -array ar en
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLocale ar
           mkdir -p build
