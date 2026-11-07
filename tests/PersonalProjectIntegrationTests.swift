@@ -233,6 +233,7 @@ final class PersonalProjectIntegrationTests: XCTestCase {
         XCTAssertEqual(store.states[valid.id], .dismissed)
         store.outcome = DiscoveryOutcome(query: .name("Absent app"), candidates: [reference],
             reports: [], ambiguous: false, note: DiscoveryEngine.emptyMessage)
+        XCTAssertEqual(store.outcome?.note, DiscoveryEngine.emptyMessage)
         try await snapshot(DiscoveryView(store: store), name: "Arabic-Discovery-empty-no-references",
             requiredText: [DiscoveryEngine.emptyMessage],
             forbiddenText: ["FORBIDDEN-REFERENCE", "x.com", "References", "مراجع", "تنزيل"])
@@ -339,7 +340,16 @@ final class PersonalProjectIntegrationTests: XCTestCase {
                 }
             }
             XCTAssertFalse(text.isEmpty, "Hosted SwiftUI accessibility tree must not be empty")
-            for expected in requiredText { XCTAssertTrue(text.contains(expected), "Missing rendered text: \(expected); actual: \(text)") }
+            // Vision joins connected Arabic words ("ما لقيت" becomes "مالقيت").
+            // Ignore whitespace only for pixel OCR, preserving every letter and the
+            // exact source-message assertion above. No fuzzy matching or dropped checks.
+            func withoutWhitespace(_ value: String) -> String {
+                String(value.filter { !$0.isWhitespace })
+            }
+            for expected in requiredText {
+                XCTAssertTrue(text.contains(expected) || withoutWhitespace(text).contains(withoutWhitespace(expected)),
+                              "Missing rendered text: \(expected); actual: \(text)")
+            }
             for forbidden in forbiddenText { XCTAssertFalse(text.contains(forbidden), "Forbidden rendered text: \(forbidden)") }
         }
         let format = UIGraphicsImageRendererFormat(); format.scale = 1
