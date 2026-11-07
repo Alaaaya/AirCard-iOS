@@ -16,8 +16,8 @@ final class MirsaBrowserModel: NSObject, ObservableObject, WKNavigationDelegate,
     let webView: WKWebView
     private var observers: [NSKeyValueObservation] = []
 
-    init(router: MirsaBrowserRouter = MirsaBrowserRouter()) {
-        self.router = router
+    init(router: MirsaBrowserRouter? = nil) {
+        self.router = router ?? MirsaBrowserRouter()
         let config = WKWebViewConfiguration()
         // Isolated, non-persistent store: nothing from this browser is shared with other contexts.
         config.websiteDataStore = .nonPersistent()
