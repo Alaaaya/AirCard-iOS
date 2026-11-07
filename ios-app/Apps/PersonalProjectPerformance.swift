@@ -44,7 +44,11 @@ actor PersonalProjectInspection {
         let modified: Date
         let identifier: String
         init(_ url: URL) throws {
-            let v = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey, .isRegularFileKey, .isSymbolicLinkKey])
+            // URL resource values are cached on the URL instance. Always query a fresh
+            // instance so rewrites at the same path invalidate cached inspection.
+            var current = URL(fileURLWithPath: url.path)
+            current.removeAllCachedResourceValues()
+            let v = try current.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey, .isRegularFileKey, .isSymbolicLinkKey])
             guard v.isRegularFile == true, v.isSymbolicLink != true,
                   let size = v.fileSize, let modified = v.contentModificationDate else { throw CocoaError(.fileReadCorruptFile) }
             self.path = url.standardizedFileURL.path
