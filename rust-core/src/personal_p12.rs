@@ -71,7 +71,7 @@ fn process(text: &str) -> Result<serde_json::Value, &'static str> {
     Ok(serde_json::json!({"ok":true,"key":B64.encode(key),"certificate":B64.encode(cert),
         "name":x509.tbs_certificate.subject.to_string(), "teamID":profile.team_id(),
         "bundleID":profile.entitlements().get("application-identifier").and_then(plist::Value::as_string),
-        "expiry":expiry, "profileType":kind,"profile_verification":verification.profile_verification,"warnings":verification.warnings,"device_authorization":"not_checked"}))
+        "expiry":expiry, "profileType":kind,"profileEntitlements":profile.entitlements(), "provisionedDevices":profile.plist().get("ProvisionedDevices"),"profile_verification":verification.profile_verification,"warnings":verification.warnings,"device_authorization":"not_checked"}))
 }
 /// Local memory-only boundary; response is released with al_string_free.
 /// Safety: request must be a valid NUL-terminated UTF-8 string.

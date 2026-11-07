@@ -66,6 +66,8 @@ enum PersonalIdentityVault {
         let expiry: Date?
         let profileType: String
         let verification: PersonalProfileVerification
+        let entitlements: [String: Any]
+        let devices: [String]
     }
     private struct Entry: Codable { let id: String; let material: Material }
     private struct Collection: Codable { var entries: [Entry]; var selected: String? }
@@ -145,7 +147,9 @@ enum PersonalIdentityVault {
                 bundleID: details["bundleID"] as? String ?? "",
                 expiry: (details["expiry"] as? Double).map { Date(timeIntervalSince1970: $0) },
                 profileType: details["profileType"] as? String ?? "",
-                verification: PersonalProfileVerification.parse(details))
+                verification: PersonalProfileVerification.parse(details),
+                entitlements: details["profileEntitlements"] as? [String: Any] ?? [:],
+                devices: details["provisionedDevices"] as? [String] ?? [])
         }
     }
     private static func importResult(_ material: Material) throws -> [String: Any] {
