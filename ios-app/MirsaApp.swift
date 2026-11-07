@@ -46,8 +46,15 @@ struct MirsaApp: App {
             Group {
                 // Hosted XCTest windows own their fixtures. Do not let the ordinary
                 // home start network work or present OS permission sheets behind them.
+                #if DEBUG && targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("--mirsa-keyboard-ui-test") {
+                    MirsaKeyboardUITestRoot()
+                } else if Self.hostedUnitTests { Color.clear }
+                else if AppsStore.isSetupMode { SetupView() } else { ContentView() }
+                #else
                 if Self.hostedUnitTests { Color.clear }
                 else if AppsStore.isSetupMode { SetupView() } else { ContentView() }
+                #endif
             }
             .environmentObject(vm)
             .mirsaKeyboardDismissal()

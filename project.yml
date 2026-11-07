@@ -68,6 +68,21 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: com.alaa.mirsa.tests
 
+  MirsaKeyboardUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: ui-tests
+      - path: tests/Fixtures/PersonalUIFixture.zip
+        buildPhase: resources
+    dependencies:
+      - target: Mirsa
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.alaa.mirsa.keyboard-uitests
+        TEST_TARGET_NAME: Mirsa
+
 schemes:
   Mirsa:
     build:
@@ -76,3 +91,4 @@ schemes:
     test:
       targets:
         - MirsaTests
+        - MirsaKeyboardUITests
