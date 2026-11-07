@@ -126,7 +126,7 @@ struct DownloadsList: View {
                      + " · " + i.date.formatted(date: .abbreviated, time: .omitted))
                     .font(.caption).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                 if let installed {
-                    Text(installed.version == i.version ? tr("Installed", "منصّب") : tr("Installed: \(installed.version)", "المنصّب: \(installed.version)"))
+                    Text(installed.version == i.version ? tr("Installed", "منصّب") : MirsaTr.f("installedVer", installed.version))
                         .font(.caption2.weight(.semibold)).foregroundStyle(.green.opacity(0.85))
                 }
             }
@@ -220,7 +220,7 @@ enum HomeShortcut {
         let root: [String: Any] = [
             "PayloadContent": [clip],
             "PayloadDisplayName": "\(app.name) · Mirsa",
-            "PayloadDescription": tr("Opens \(app.name) in Mirsa's container.", "بيفتح \(app.name) بكونتينر Mirsa."),
+            "PayloadDescription": MirsaTr.f("opens", app.name),
             "PayloadIdentifier": "com.alaa.mirsa.shortcut.\(app.id)",
             "PayloadType": "Configuration",
             "PayloadUUID": UUID().uuidString,

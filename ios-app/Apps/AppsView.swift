@@ -1183,8 +1183,7 @@ struct AppsSettingsSheet: View {
                     } label: { Label(tr("Update Mirsa", "حدّث مرسى"), systemImage: "arrow.triangle.2.circlepath") }
                     .disabled(store.account == nil && !store.hasSavedLogin)
                 } footer: {
-                    Text(tr("Checks for a newer build and installs it right away. Current build: \(MirsaUpdater.currentBuild).",
-                            "بيفحص إذا في نسخة أحدث وبيثبّتها فوراً. نسختك الحالية: \(MirsaUpdater.currentBuild)."))
+                    Text(MirsaTr.f("checks", "\(MirsaUpdater.currentBuild)"))
                 }
                 Section {
                     Button {

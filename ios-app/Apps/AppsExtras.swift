@@ -125,8 +125,7 @@ extension AppsStore {
                     guard fire > Date() else { continue }
                     let c = UNMutableNotificationContent()
                     c.title = "Mirsa"
-                    c.body = tr("\(name) expires tomorrow. Open Mirsa to refresh it.",
-                                "\(name) بتنتهي صلاحيته بكرا. افتح Mirsa وجدّده.")
+                    c.body = MirsaTr.f("expiresTomorrow", name)
                     c.sound = .default
                     let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
                     center.add(UNNotificationRequest(identifier: "mirsa.expiry.\(id)", content: c,
@@ -227,7 +226,7 @@ final class GitHubWatcher: ObservableObject {
             }
         }
         lastResult = found == 0 ? tr("Everything is up to date", "كلشي محدّث")
-                                : tr("\(found) update(s) found", "في \(found) تحديث")
+                                : MirsaTr.p("updates", found)
         return found
     }
 }
@@ -429,7 +428,7 @@ struct ExpiryListView: View {
             Text(name)
             Spacer()
             if let days {
-                Text(tr("\(days) days", "\(days) يوم"))
+                Text(MirsaTr.p("days", days))
                     .font(.callout.weight(.bold).monospacedDigit())
                     .foregroundStyle(days <= 2 ? .red : (days <= 4 ? .orange : .green))
             } else {
@@ -504,7 +503,7 @@ struct WebUploadView: View {
                     }
                 }
                 if let r = server.received {
-                    Label(tr("Received \(r)", "وصل \(r)"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    Label(MirsaTr.f("received", "\(r)"), systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 }
             } footer: {
                 Text(tr("Keep Mirsa open. Drop an .ipa on the page and choose Container or Real App here.",
@@ -624,7 +623,7 @@ final class MirsaUpdater: ObservableObject {
             return
         }
         guard UpdaterMetadata.isNewer(remote: remoteBuild, installed: Self.currentBuild) else {
-            store.error = tr("Mirsa is up to date (build \(Self.currentBuild)).", "مرسى محدّث، معك آخر نسخة (\(Self.currentBuild)).")
+            store.error = MirsaTr.f("upToDate", "\(Self.currentBuild)")
             return
         }
         await install(rel, vm: vm)
@@ -687,7 +686,7 @@ struct MirsaUpdateSheet: View {
                     .font(.system(size: 40)).foregroundStyle(.green)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(tr("New version available", "في نسخة جديدة")).font(.title3.bold())
-                    Text(tr("Build \(release.build)", "النسخة \(release.build)")).foregroundStyle(.secondary)
+                    Text(MirsaTr.f("build", "\(release.build)")).foregroundStyle(.secondary)
                 }
                 Spacer()
             }

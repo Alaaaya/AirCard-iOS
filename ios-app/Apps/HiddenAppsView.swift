@@ -116,7 +116,7 @@ struct HiddenAppsView<Content: View>: View {
                 HiddenPINPad(mode: .enter, message: message ?? lockedText) { pin in
                     switch store.unlock(pin) {
                     case .success: message = nil
-                    case .wrongPIN(let r): message = r > 0 ? personalText("Wrong PIN. \(r) tries left.", "الرمز غلط. باقي \(r) محاولات.") : personalText("Wrong PIN.", "الرمز غلط.")
+                    case .wrongPIN(let r): message = MirsaTr.p("wrongPin", max(r, 0))
                     case .locked(let u): message = lockText(u)
                     case .faulted: message = personalText("Could not verify the PIN.", "ما قدرنا نتحقق من الرمز.")
                     case .notConfigured: message = nil
@@ -132,8 +132,8 @@ struct HiddenAppsView<Content: View>: View {
     private var lockedText: String? { nil }
     private func lockText(_ until: Date) -> String {
         let s = max(1, Int(until.timeIntervalSince(Date()).rounded(.up)))
-        let t = s >= 60 ? personalText("\(s / 60) min", "\(s / 60) دقيقة") : personalText("\(s) s", "\(s) ثانية")
-        return personalText("Too many tries. Wait \(t).", "محاولات كتير. استنى \(t).")
+        let t = s >= 60 ? MirsaTr.p("minutes", s / 60) : MirsaTr.p("seconds", s)
+        return MirsaTr.f("tooMany", t)
     }
 }
 

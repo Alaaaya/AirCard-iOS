@@ -5,8 +5,8 @@ enum MirsaTr {
         switch AppLanguageStore.shared.current {
         case .english: return en
         case .arabic: return ar
-        case .sorani: return ckb[en] ?? extraCkb[en] ?? template(en, ckbOut: true) ?? ar
-        case .kurmanji: return kmr[en] ?? extraKmr[en] ?? template(en, ckbOut: false) ?? ar
+        case .sorani: return ckb[en] ?? extraCkb[en] ?? ar
+        case .kurmanji: return kmr[en] ?? extraKmr[en] ?? ar
         }
     }
 
@@ -1022,55 +1022,4 @@ enum MirsaTr {
         "Folder": "Peldank",
         "Drag an app outside to remove it": "Sepanekê derxe derve da ku rake",
     ]
-}
-
-extension MirsaTr {
-    /// Templates for interpolated strings: "{}" marks a value. (en, ckb, kmr)
-    static let templates: [(String, String, String)] = [
-        ("In Shortcuts create a shortcut named {}. Add ‘Open App in Mirsa’ with App ID {}, or URL + Open URLs using {}. In Details choose Add to Home Screen, set the name and choose the shared icon. No configuration profile is needed.", "لە Shortcuts کورتەڕێیەک بە ناوی {} دروست بکە. Open App in Mirsa زیاد بکە لەگەڵ App ID {}، یان URL + Open URLs بە {}. لە وردەکاری Add to Home Screen هەڵبژێرە، ناو دابنێ و ئایکۆنی هاوبەش هەڵبژێرە. پڕۆفایلی ڕێکخستن پێویست نییە.", "Di Shortcuts de kurtebirekê bi navê {} çêke. Open App in Mirsa bi App ID {} zêde bike, an URL + Open URLs bi {}. Di Details de Add to Home Screen hilbijêre, nav deyne û îkona parvekirî hilbijêre. Profîla veavakirinê ne hewce ye."),
-        ("The signed IPA was kept: {}", "IPAی واژۆکراو هەڵگیرا: {}", "IPA-ya îmzekirî hat parastin: {}"),
-        ("Mirsa also backs up automatically before updating or deleting the app, and keeps the last {}. Backups are in Files › Mirsa › Backups.", "Mirsa هەروەها پێش نوێکردنەوە یان سڕینەوەی ئەپ خۆکارانە پاڵپشتگیری دەکات و دوایین {} دەهێڵێتەوە. پاڵپشتگیرییەکان لە Files › Mirsa › Backups دان.", "Mirsa her wiha beriya nûkirin an jêbirina sepanê bixweber paşgir digire û {} yên dawî dihêle. Paşgir di Files › Mirsa › Backups de ne."),
-
-        ("Source answered {}.", "سەرچاوە بە {} وەڵامی دایەوە.", "Çavkaniyê bi {} bersiv da."),
-        ("Remove {} expired", "لابردنی {} بەسەرچوو", "{} qediyayî rake"),
-        ("{} days left", "{} ڕۆژ ماوە", "{} roj mane"),
-        ("Wrong PIN. {} tries left.", "PINی هەڵە. {} هەوڵ ماوە.", "PIN şaş e. {} hewldan mane."),
-        ("{} min", "{} خولەک", "{} deqe"),
-        ("{} s", "{} چرکە", "{} çirke"),
-        ("Too many tries. Wait {}.", "هەوڵی زۆر. {} چاوەڕێ بکە.", "Pir hewldan. {} bisekine."),
-        ("Show all {} keys", "نیشاندانی هەموو {} کلیلەکان", "Hemû {} mifteyan nîşan bide"),
-        ("{} expires tomorrow. Open Mirsa to refresh it.", "{} سبەی بەسەردەچێت. Mirsa بکەرەوە بۆ نوێکردنەوەی.", "{} sibê diqede. Mirsa veke da ku nû bike."),
-        ("{} update(s) found", "{} نوێکردنەوە دۆزرایەوە", "{} nûkirin hatin dîtin"),
-        ("{} days", "{} ڕۆژ", "{} roj"),
-        ("Received {}", "وەرگیرا {}", "Hat stendin {}"),
-        ("Mirsa is up to date (build {}).", "Mirsa نوێیە (build {}).", "Mirsa nûjen e (build {})."),
-        ("Build {}", "Build {}", "Build {}"),
-        ("{} code file(s)", "{} فایلی کۆد", "{} pelê kodê"),
-        ("Screenshot {} of {}", "وێنەی {} لە {}", "Dîmena ekranê {} ji {}"),
-        ("Installed: {}", "دامەزراو: {}", "Hat sazkirin: {}"),
-        ("Opens {} in Mirsa's container.", "{} لە کۆنتەینەری Mirsa دەکاتەوە.", "{} di konteynerê Mirsa de vedike."),
-        ("Checks for a newer build and installs it right away. Current build: {}.", "وەشانێکی نوێتر دەپشکنێت و یەکسەر دایدەمەزرێنێت. Buildی ئێستا: {}.", "Guhertoyeke nûtir kontrol dike û rasterast saz dike. Build-a heyî: {}."),
-        ("Page {}", "لاپەڕە {}", "Rûpel {}"),
-        ("{} add-ons", "{} زیادکراو", "{} lêzêde"),
-        ("Pending changes: {} added, {} removed. Applied on next export.", "گۆڕانکاری چاوەڕێکراو: {} زیادکرا، {} لابرا. لە دەرهێنانی داهاتوودا جێبەجێ دەکرێت.", "Guhertinên li bendê: {} hat zêdekirin, {} hat rakirin. Di derxistina paşê de tê sepandin."),
-        ("Remove {}", "لابردنی {}", "{} rake"),
-        ("Target: {}", "ئامانج: {}", "Armanc: {}"),
-    ]
-
-    static func template(_ en: String, ckbOut: Bool) -> String? {
-        for t in templates {
-            let parts = t.0.components(separatedBy: "{}")
-            guard parts.count > 1 else { continue }
-            let pattern = "^" + parts.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "(.+?)") + "$"
-            guard let re = try? NSRegularExpression(pattern: pattern),
-                  let m = re.firstMatch(in: en, range: NSRange(en.startIndex..., in: en)) else { continue }
-            var out = ckbOut ? t.1 : t.2
-            for i in 1..<m.numberOfRanges {
-                guard let r = Range(m.range(at: i), in: en) else { continue }
-                if let ph = out.range(of: "{}") { out.replaceSubrange(ph, with: String(en[r])) }
-            }
-            return out
-        }
-        return nil
-    }
 }

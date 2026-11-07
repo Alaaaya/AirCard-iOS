@@ -113,8 +113,7 @@ struct BackupsSheet: View {
                         Task { await store.backupData(app); list = store.backups(for: app) }
                     } label: { Label(tr("Back up now", "خذ نسخة هلّق"), systemImage: "externaldrive.badge.plus") }
                 } footer: {
-                    Text(tr("Mirsa also backs up automatically before updating or deleting the app, and keeps the last \(AppsStore.keepBackups). Backups are in Files › Mirsa › Backups.",
-                            "Mirsa بياخد نسخة لحاله قبل التحديث أو الحذف، وبيحتفظ بآخر \(AppsStore.keepBackups). النسخ بتلاقيها بالملفات › Mirsa › Backups."))
+                    Text(MirsaTr.f("backups", AppsStore.keepBackups))
                 }
                 if !list.isEmpty {
                     Section(tr("Backups", "النسخ")) {

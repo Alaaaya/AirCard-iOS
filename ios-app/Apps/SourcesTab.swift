@@ -185,7 +185,7 @@ final class SourcesStore: ObservableObject {
             let (data, resp) = try await URLSession.shared.data(for: req)
             if let h = resp as? HTTPURLResponse, !(200..<300).contains(h.statusCode) {
                 throw NSError(domain: "Mirsa", code: h.statusCode,
-                              userInfo: [NSLocalizedDescriptionKey: tr("Source answered \(h.statusCode).", "السورس ردّ بـ \(h.statusCode).")])
+                              userInfo: [NSLocalizedDescriptionKey: MirsaTr.f("sourceAnswered", h.statusCode)])
             }
             let json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
             let root: [String: Any]? = (json as? [String: Any]) ?? ((json as? [[String: Any]]).map { ["apps": $0] })

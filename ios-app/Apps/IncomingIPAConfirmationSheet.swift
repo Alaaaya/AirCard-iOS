@@ -180,7 +180,7 @@ struct IncomingIPAConfirmationSheet: View {
             }
             if rows.count > 5 {
                 Button { expanded.wrappedValue.toggle() } label: {
-                    Text(expanded.wrappedValue ? tr("Show less", "عرض أقل") : tr("Show all \(rows.count) keys", "عرض كل المفاتيح \(rows.count)"))
+                    Text(expanded.wrappedValue ? tr("Show less", "عرض أقل") : MirsaTr.p("showAllKeys", rows.count))
                         .font(.caption.weight(.semibold)).foregroundStyle(gold)
                 }
             }

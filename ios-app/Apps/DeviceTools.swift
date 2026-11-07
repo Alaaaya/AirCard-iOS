@@ -161,7 +161,7 @@ struct ProfilesView: View {
                 Section {
                     Button(role: .destructive) {
                         Task { for p in expired { _ = await m.run("profile_remove", arg: p.id) }; await load() }
-                    } label: { Label(tr("Remove \(expired.count) expired", "احذف \(expired.count) منتهية"), systemImage: "trash") }
+                    } label: { Label(MirsaTr.p("removeExpired", expired.count), systemImage: "trash") }
                 }
             }
             Section {
@@ -192,7 +192,7 @@ struct ProfilesView: View {
     private func expiryText(_ d: Date?) -> String {
         guard let d else { return "—" }
         let days = Int(ceil(d.timeIntervalSinceNow / 86_400))
-        return days < 0 ? tr("Expired", "منتهي") : tr("\(days) days left", "باقي \(days) يوم")
+        return days < 0 ? tr("Expired", "منتهي") : MirsaTr.p("daysLeft", days)
     }
 
     private func load() async {

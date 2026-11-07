@@ -197,7 +197,7 @@ struct PersonalProjectDetailView: View {
             let added = ids.filter { !applied.contains($0) }.count
             let removed = applied.filter { !ids.contains($0) }.count
             if added + removed > 0 {
-                Label(personalText("Pending changes: \(added) added, \(removed) removed. Applied on next export.", "تغييرات معلّقة: أُضيف \(added)، حُذف \(removed). بتنطبق عند التصدير."), systemImage: "exclamationmark.circle.fill")
+                Label(MirsaTr.f("pending", added, removed), systemImage: "exclamationmark.circle.fill")
                     .font(.caption).foregroundStyle(.yellow)
             }
             if ids.isEmpty {
