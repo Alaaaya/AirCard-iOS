@@ -58,22 +58,10 @@ final class PersonalAppsLibrary: ObservableObject {
     func browseDirectory(_ app: PersonalLibraryApp) throws -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let directory = try PersonalProjectFolder.directory(documents: documents, id: app.id)
-        let files = [url(app), iconURL(app), draftURL(app)]
-        // Same-container moves avoid copying a large IPA on the UI thread.
-        var moved: [(source: URL, destination: URL)] = []
-        do {
-            for source in files where source.deletingLastPathComponent() != directory && FileManager.default.fileExists(atPath: source.path) {
-                let destination = directory.appendingPathComponent(source.lastPathComponent)
-                guard !FileManager.default.fileExists(atPath: destination.path) else { throw CocoaError(.fileWriteFileExists) }
-                let attributes = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-                guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else { throw CocoaError(.fileReadNoPermission) }
-                try FileManager.default.moveItem(at: source, to: destination)
-                moved.append((source, destination))
-            }
-        } catch {
-            for pair in moved.reversed() { try? FileManager.default.moveItem(at: pair.destination, to: pair.source) }
-            throw error
-        }
+        // Inspect legacy names directly, even when an interrupted migration already moved the IPA.
+        let files = [app.filename, "icon-\(app.id.uuidString).png", "project-\(app.id.uuidString).json"]
+            .map { root.appendingPathComponent($0) }
+        try PersonalProjectFolder.migrate(files: files, to: directory)
         return directory
     }
 
