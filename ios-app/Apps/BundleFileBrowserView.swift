@@ -17,10 +17,10 @@ struct BundleFileBrowserView: View {
     var body: some View {
         List {
             if !manager.overlay.isEmpty {
-                Section("Staged (applied at signing)") {
+                Section(MirsaTr.lit("Staged (applied at signing)")) {
                     ForEach(Array(manager.overlay.ops.enumerated()), id: \.offset) { i, op in
                         Text(op.summary).font(.footnote)
-                            .swipeActions { Button("Undo") { manager.unstage(at: i); reload() }.tint(.orange) }
+                            .swipeActions { Button(MirsaTr.lit("Undo")) { manager.unstage(at: i); reload() }.tint(.orange) }
                     }
                 }
             }
@@ -29,20 +29,20 @@ struct BundleFileBrowserView: View {
             }
             if let error { Section { Text(error).foregroundStyle(.red).font(.footnote) } }
         }
-        .navigationTitle(directory.isEmpty ? "Files" : BundlePath.lastComponent(directory))
+        .navigationTitle(directory.isEmpty ? MirsaTr.lit("Files") : BundlePath.lastComponent(directory))
         .toolbar { Button { importing = true } label: { Image(systemName: "square.and.arrow.down") } }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.item]) { result in
             guard case let .success(url) = result else { return }
             let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
             run { try manager.stageImport(from: url, intoDirectory: directory) }
         }
-        .alert("Delete?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
-            Button("Delete when signing", role: .destructive) { if let e = confirmDelete { run { try manager.stageDelete(e.path) } } }
+        .alert(MirsaTr.lit("Delete?"), isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
+            Button(MirsaTr.lit("Delete when signing"), role: .destructive) { if let e = confirmDelete { run { try manager.stageDelete(e.path) } } }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("The original bundle is not changed. This is only applied to the signing copy.") }
-        .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField("Name", text: $newName)
-            Button("Rename") { if let e = renaming { run { try manager.stageRename(e.path, to: newName) } } }
+        } message: { Text(MirsaTr.lit("The original bundle is not changed. This is only applied to the signing copy.")) }
+        .alert(MirsaTr.lit("Rename"), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField(MirsaTr.lit("Name"), text: $newName)
+            Button(MirsaTr.lit("Rename")) { if let e = renaming { run { try manager.stageRename(e.path, to: newName) } } }
             Button("Cancel", role: .cancel) {}
         }
         .onAppear(perform: reload)
@@ -63,9 +63,9 @@ struct BundleFileBrowserView: View {
         }
         .swipeActions {
             if reason == nil {
-                Button("Delete", role: .destructive) { confirmDelete = e }
-                Button("Rename") { newName = e.name; renaming = e }.tint(.blue)
-            } else { Button("Protected") { error = reason }.tint(.gray) }
+                Button(MirsaTr.lit("Delete"), role: .destructive) { confirmDelete = e }
+                Button(MirsaTr.lit("Rename")) { newName = e.name; renaming = e }.tint(.blue)
+            } else { Button(MirsaTr.lit("Protected")) { error = reason }.tint(.gray) }
         }
     }
     private func run(_ work: () throws -> Void) {
@@ -95,9 +95,9 @@ struct BundleFileEditorView: View {
             if let message { Text(message).font(.footnote).foregroundStyle(.red).padding(.horizontal) }
         }
         .navigationTitle(entry.name)
-        .toolbar { Button("Stage") { save() } }
-        .alert("Staged with warnings", isPresented: $showWarnings) {
-            Button("OK") { dismiss() }
+        .toolbar { Button(MirsaTr.lit("Stage")) { save() } }
+        .alert(MirsaTr.lit("Staged with warnings"), isPresented: $showWarnings) {
+            Button(MirsaTr.lit("OK")) { dismiss() }
         } message: { Text(warnings.joined(separator: "\n")) }
         .onAppear(perform: load)
     }
@@ -106,7 +106,7 @@ struct BundleFileEditorView: View {
             switch try manager.read(entry.path) {
             case let .plist(d): format = d.format; text = try d.xmlText()
             case let .text(t): text = t
-            default: message = "Not editable."
+            default: message = MirsaTr.lit("Not editable.")
             }
         } catch { message = String(describing: error) }
     }
