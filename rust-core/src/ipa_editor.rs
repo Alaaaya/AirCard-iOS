@@ -795,6 +795,9 @@ fn dependencies(path: &Path) -> Result<Vec<String>> {
     Ok(out)
 }
 fn inject(app: &Path, executable: &str, libraries: &[String], first: bool) -> Result<()> {
+    inject_scoped(app,executable,libraries,first,false)
+}
+fn inject_scoped(app: &Path, executable: &str, libraries: &[String], first: bool, explicit_targets: bool) -> Result<()> {
     let app = fs::canonicalize(app).map_err(err)?;
     let ex = relative(executable)?;
     if ex.components().count() != 1 {
@@ -830,6 +833,7 @@ fn inject(app: &Path, executable: &str, libraries: &[String], first: bool) -> Re
     let mut files = Vec::new();
     walk(&frameworks, &mut files)?;
     let mut names = BTreeMap::new();
+    let mut ambiguous_names = HashSet::new();
     for p in files.iter().filter(|p| p.is_file()) {
         let base = p.file_name().unwrap().to_string_lossy().to_string();
         // Only Mach-O dependencies are candidates. Non-code resources stay untouched.
@@ -840,8 +844,12 @@ fn inject(app: &Path, executable: &str, libraries: &[String], first: bool) -> Re
                 || head == [0xca, 0xfe, 0xba, 0xbe]
                 || head == [0xca, 0xfe, 0xba, 0xbf])
         {
-            if names.insert(base, p.clone()).is_some() {
-                return Err("Ambiguous dependency executable name".into());
+            if ambiguous_names.contains(&base) {continue}
+            if names.insert(base.clone(), p.clone()).is_some() {
+                if !explicit_targets {return Err("Ambiguous dependency executable name".into())}
+                // Explicit target plans allow separate bundles to contain equal
+                // filenames; never use those names as fallback resolution.
+                names.remove(&base);ambiguous_names.insert(base);
             }
         }
     }

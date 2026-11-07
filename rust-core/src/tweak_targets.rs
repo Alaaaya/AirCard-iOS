@@ -75,7 +75,7 @@ fn inject_plan_inner(app:&Path,items:&[Injection],order:&[String],loader:bool,fi
    if t.kind=="framework" {
     for lib in &libraries {let src=Path::new(lib);let code=if src.extension().and_then(|s|s.to_str())==Some("framework"){src.join(framework_executable(src)?)}else{src.to_owned()};for dep in dependencies(&code)?{if dep.starts_with("@executable_path/"){return Err("Framework target cannot resolve executable-relative tweak dependencies".into())}}}
    }
-   inject(scope,target.file_name().and_then(|s|s.to_str()).ok_or("Invalid target")?,&libraries,first)?;
+   inject_scoped(scope,target.file_name().and_then(|s|s.to_str()).ok_or("Invalid target")?,&libraries,first,true)?;
   }
  }
  Ok(())
@@ -123,5 +123,7 @@ fn checked_tree(root:&Path)->Result<()> {
  #[test]fn missing_dependency_and_colliding_roots_fail(){let(p,a)=setup("deps");let l=p.join("A.dylib");let m=macho(fixture(6),true).unwrap();let mut cs:Vec<_>=m.commands.iter().map(|c|c.data.clone()).collect();cs.push(dylib_command(0xc,"@rpath/Missing.dylib",None).unwrap());fs::write(&l,write_commands(m,cs).unwrap()).unwrap();assert!(inject_plan(&a,&[item("a",&l,"Main")],&[],false,false).is_err());fs::remove_dir_all(p).unwrap();}
  #[test]fn transaction_rolls_back_after_late_failure(){let(p,a)=setup("transaction");bundle(&a.join("PlugIns/Z.appex"),"Z",2);let good=p.join("Good.dylib");let bad=p.join("Bad.dylib");fs::write(&good,fixture(6)).unwrap();let m=macho(fixture(6),true).unwrap();let mut cs:Vec<_>=m.commands.iter().map(|c|c.data.clone()).collect();cs.push(dylib_command(0xc,"@rpath/DoesNotExist.dylib",None).unwrap());fs::write(&bad,write_commands(m,cs).unwrap()).unwrap();let before=fs::read(a.join("Main")).unwrap();assert!(inject_plan(&a,&[item("good",&good,"Main"),item("bad",&bad,"PlugIns/Z.appex/Z")],&[],false,false).is_err());assert_eq!(fs::read(a.join("Main")).unwrap(),before);assert!(!a.join("Frameworks").exists());assert!(!a.join("PlugIns/Z.appex/Frameworks").exists());assert!(!fs::read_dir(&p).unwrap().any(|e|e.unwrap().file_name().to_string_lossy().starts_with(".mirsa-")));fs::remove_dir_all(p).unwrap();}
  #[test]fn target_tree_case_alias_and_symlink_reject(){let(p,a)=setup("alias");fs::create_dir(a.join("Foo")).unwrap();fs::create_dir(a.join("foo")).unwrap();assert!(targets(&a).is_err());fs::remove_dir_all(a.join("foo")).unwrap();#[cfg(unix)]{std::os::unix::fs::symlink("/tmp",a.join("escape")).unwrap();assert!(targets(&a).is_err());}fs::remove_dir_all(p).unwrap();}
+
+ #[test]fn identical_names_different_bundles_are_supported(){let(p,a)=setup("same-name");bundle(&a.join("PlugIns/X.appex"),"X",2);bundle(&a.join("Frameworks/F.framework"),"F",6);let lib=p.join("T.dylib");fs::write(&lib,fixture(6)).unwrap();inject_plan(&a,&[item("a",&lib,"Main"),item("b",&lib,"PlugIns/X.appex/X"),item("c",&lib,"Frameworks/F.framework/F")],&[],false,false).unwrap();for ex in["Main","PlugIns/X.appex/X","Frameworks/F.framework/F"]{assert!(dependencies(&a.join(ex)).unwrap()[0].ends_with("T.dylib"))}fs::remove_dir_all(p).unwrap();}
 
 }

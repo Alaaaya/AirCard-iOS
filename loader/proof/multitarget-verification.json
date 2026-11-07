@@ -1,0 +1,53 @@
+{
+  "Main": {
+    "size": 84422,
+    "pages_verified": 17,
+    "cms_signature_verified": true,
+    "dependencies": [
+      "/usr/lib/libSystem.B.dylib",
+      "@loader_path/Frameworks/OwnTweak.dylib"
+    ]
+  },
+  "Frameworks/OwnTweak.dylib": {
+    "size": 84118,
+    "pages_verified": 17,
+    "cms_signature_verified": true,
+    "dependencies": [
+      "/usr/lib/libSystem.B.dylib"
+    ]
+  },
+  "PlugIns/Ext.appex/Ext": {
+    "size": 84438,
+    "pages_verified": 17,
+    "cms_signature_verified": true,
+    "dependencies": [
+      "/usr/lib/libSystem.B.dylib",
+      "@loader_path/Frameworks/OwnTweak.dylib"
+    ]
+  },
+  "PlugIns/Ext.appex/Frameworks/OwnTweak.dylib": {
+    "size": 84118,
+    "pages_verified": 17,
+    "cms_signature_verified": true,
+    "dependencies": [
+      "/usr/lib/libSystem.B.dylib"
+    ]
+  },
+  "Frameworks/F.framework/F": {
+    "size": 84158,
+    "pages_verified": 17,
+    "cms_signature_verified": true,
+    "dependencies": [
+      "/usr/lib/libSystem.B.dylib",
+      "@loader_path/Frameworks/OwnTweak.dylib"
+    ]
+  },
+  "Frameworks/F.framework/Frameworks/OwnTweak.dylib": {
+    "size": 84118,
+    "pages_verified": 17,
+    "cms_signature_verified": true,
+    "dependencies": [
+      "/usr/lib/libSystem.B.dylib"
+    ]
+  }
+}
