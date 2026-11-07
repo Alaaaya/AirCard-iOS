@@ -13,6 +13,20 @@ extension MirsaTr {
     }
 
     static let legacy: [String: (String, String, String)] = [
+        "Staged (applied at signing)": ("مُجهّز (يُطبَّق عند التوقيع)", "ئامادەکراو (لە کاتی واژۆکردن جێبەجێ دەکرێت)", "Amadekirî (di dema îmzekirinê de tê sepandin)"),
+        "Undo": ("تراجع", "پاشگەزبوونەوە", "Vegerîne"),
+        "Files": ("الملفات", "فایلەکان", "Pel"),
+        "Delete?": ("حذف؟", "بسڕدرێتەوە؟", "Jê bibe?"),
+        "Delete when signing": ("احذف عند التوقيع", "لە کاتی واژۆکردن بسڕەوە", "Di dema îmzekirinê de jê bibe"),
+        "The original bundle is not changed. This is only applied to the signing copy.": ("الحزمة الأصلية لا تتغيّر. يُطبَّق هذا على نسخة التوقيع فقط.", "بەندڵی ئەسڵی ناگۆڕێت. ئەمە تەنها بەسەر کۆپییەکەی واژۆکردندا جێبەجێ دەکرێت.", "Bundle-a orîjînal nayê guhertin. Ev tenê li ser kopiya îmzekirinê tê sepandin."),
+        "Rename": ("إعادة تسمية", "گۆڕینی ناو", "Navê biguherîne"),
+        "Name": ("الاسم", "ناو", "Nav"),
+        "Delete": ("حذف", "سڕینەوە", "Jê bibe"),
+        "Protected": ("محمي", "پارێزراو", "Parastî"),
+        "Stage": ("تجهيز", "ئامادەکردن", "Amade bike"),
+        "Staged with warnings": ("جُهّز مع تحذيرات", "بە ئاگادارییەوە ئامادەکرا", "Bi hişyariyê hat amadekirin"),
+        "OK": ("حسناً", "باشە", "Baş e"),
+        "Not editable.": ("غير قابل للتعديل.", "ناتوانرێت دەستکاری بکرێت.", "Nayê guherandin."),
         "Donate & Support": ("دعم المطوّر", "پشتگیری و دەستخۆشی", "Piştgirî û Bexş"),
         "Donate with PayPal": ("التبرع عبر PayPal", "بەخشین بە PayPal", "Bi PayPal bexş bike"),
         "Recipient: Maksym Reva": ("المستلم: Maksym Reva", "وەرگر: Maksym Reva", "Wergir: Maksym Reva"),
