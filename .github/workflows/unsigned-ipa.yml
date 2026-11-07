@@ -65,8 +65,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python3 scripts/curated_release_notes.py docs/release-notes.json "1.3.${{ github.run_number }}" > notes.txt
-          gh release create "build-${{ github.run_number }}" build/Mirsa.ipa \
-            --title "Mirsa build ${{ github.run_number }}" --notes-file notes.txt \
+          gh release create "1.3.${{ github.run_number }}" build/Mirsa.ipa \
+            --title "Mirsa 1.3.${{ github.run_number }}" --notes-file notes.txt \
             --target "${{ github.sha }}" --latest
 
       # Mirsa Setup for ESign/Feather: a fixed "setup" release (never "latest",
