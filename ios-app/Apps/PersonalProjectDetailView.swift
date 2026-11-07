@@ -187,48 +187,69 @@ struct PersonalProjectDetailView: View {
                 Text(personalText("No tweaks. Add .dylib, .deb or .framework files.", "ما في إضافات. ضيف ملفات .dylib أو .deb أو .framework."))
                     .font(.footnote).foregroundStyle(.secondary)
             }
-            ForEach(Array(ids.enumerated()), id: \.element) { index, id in
+            let comps = components()
+            ForEach(Array(comps.enumerated()), id: \.element.id) { index, comp in
                 HStack(spacing: 10) {
-                    Button { draft.tweakIDs.removeAll { $0 == id } } label: {
+                    Button { removeComponent(comp) } label: {
                         Image(systemName: "minus.circle.fill").foregroundStyle(.red)
                     }.buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(tweak(id)?.name ?? "").font(.subheadline).lineLimit(1)
-                        componentList(id)
+                        Text(comp.title).font(.subheadline).lineLimit(1)
+                        if comp.subtitle != comp.title { Text(comp.subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
                         Menu {
                             Button { draft.directInjection = true } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: loaderOn ? "circle" : "checkmark") }
-                            Button { } label: { Text(personalText("Specific framework / extension (unavailable)", "إطار أو إضافة محددة (غير متاح)")) }.disabled(true)
                             Button { draft.directInjection = false } label: { Label(personalText("Via LoadControl", "عبر LoadControl"), systemImage: loaderOn ? "checkmark" : "circle") }
+                            Button { } label: { Text(personalText("Specific framework / extension (unavailable)", "إطار أو إضافة محددة (غير متاح)")) }.disabled(true)
                         } label: {
                             Text((loaderOn ? personalText("Via LoadControl", "عبر LoadControl") : personalText("Via main executable", "عبر الملف التنفيذي الرئيسي")) + " ▾").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
-                    if let url = try? tweaks.urls(for: Set([id])).first { ShareLink(item: url) { Image(systemName: "square.and.arrow.up") } }
-                    Button { move(id, -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0)
-                    Button { move(id, 1) } label: { Image(systemName: "arrow.down") }.disabled(index == ids.count - 1)
+                    ShareLink(item: comp.url) { Image(systemName: "square.and.arrow.up") }
+                    Button { moveComponent(comp.id, -1) } label: { Image(systemName: "arrow.up") }.disabled(index == 0)
+                    Button { moveComponent(comp.id, 1) } label: { Image(systemName: "arrow.down") }.disabled(index == comps.count - 1)
                 }.buttonStyle(.plain).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }.padding(16).appsGlass(cornerRadius: 24)
     }
-    @ViewBuilder private func componentList(_ id: UUID) -> some View {
-        if let item = tweak(id), item.packageOnlyCode, item.roots.count > 1 {
-            ForEach(item.roots, id: \.self) { root in
+    struct TweakComponent { let id: String; let tweakID: UUID; let title: String; let subtitle: String; let url: URL }
+    /// Every selected package expands to one component per dylib/framework root (stable id uuid:path).
+    /// Order = persisted componentOrder (still valid) then new components in package order. Excluded ones are hidden.
+    private func components() -> [TweakComponent] {
+        let excluded = Set(draft.excludedRoots ?? [])
+        var all: [TweakComponent] = []
+        for id in draft.tweakIDs {
+            guard let item = tweak(id) else { continue }
+            for root in item.roots {
                 let cid = IPATweakLibrary.componentID(item, root)
-                Toggle(isOn: Binding(get: { !(draft.excludedRoots ?? []).contains(cid) }, set: { on in
-                    var list = draft.excludedRoots ?? []
-                    list.removeAll { $0 == cid }
-                    if !on { list.append(cid) }
-                    draft.excludedRoots = list
-                })) { Text((root as NSString).lastPathComponent).font(.caption2).lineLimit(1) }
+                if excluded.contains(cid) { continue }
+                let url = IPATweakLibrary.root.appendingPathComponent(item.id.uuidString).appendingPathComponent(root)
+                all.append(TweakComponent(id: cid, tweakID: id, title: (root as NSString).lastPathComponent, subtitle: item.name, url: url))
             }
+        }
+        let byID = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let saved = (draft.componentOrder ?? []).compactMap { byID[$0] }
+        let savedSet = Set(saved.map(\.id))
+        var seen = Set<String>()
+        return (saved + all.filter { !savedSet.contains($0.id) }).filter { seen.insert($0.id).inserted }
+    }
+    private func moveComponent(_ id: String, _ delta: Int) {
+        var order = components().map(\.id)
+        guard let i = order.firstIndex(of: id), order.indices.contains(i + delta) else { return }
+        order.swapAt(i, i + delta)
+        draft.componentOrder = order
+    }
+    private func removeComponent(_ comp: TweakComponent) {
+        var list = draft.excludedRoots ?? []
+        list.append(comp.id)
+        draft.excludedRoots = list
+        draft.componentOrder = (draft.componentOrder ?? []).filter { $0 != comp.id }
+        if !components().contains(where: { $0.tweakID == comp.tweakID }) {
+            draft.tweakIDs.removeAll { $0 == comp.tweakID }
+            draft.excludedRoots = (draft.excludedRoots ?? []).filter { !$0.hasPrefix(comp.tweakID.uuidString + ":") }
         }
     }
     private var loaderOn: Bool { draft.directInjection == false }
-    private func move(_ id: UUID, _ delta: Int) {
-        guard let i = draft.tweakIDs.firstIndex(of: id), draft.tweakIDs.indices.contains(i + delta) else { return }
-        draft.tweakIDs.swapAt(i, i + delta)
-    }
     private var settingsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(personalText("Project settings", "إعدادات المشروع"), systemImage: "gearshape.fill").font(.subheadline.weight(.semibold))
@@ -399,8 +420,7 @@ struct PersonalProjectDetailView: View {
         let minimum = draft.minimumOS.trimmingCharacters(in: .whitespacesAndNewlines)
         options.minimumOS = minimum.isEmpty ? nil : minimum
         do {
-            let excluded = Set(draft.excludedRoots ?? [])
-            options.libraries = try draft.tweakIDs.flatMap { try tweaks.urls(for: $0, excluding: excluded) }
+            options.libraries = components().map(\.url)
         } catch { message = error.localizedDescription; return }
         let input = library.url(app)
         let signingOptions = options

@@ -56,5 +56,7 @@ struct PersonalProjectDraft: Codable, Equatable {
     var tweakTargets: [String: String]? = nil
     /// Excluded package components, keyed "<tweakUUID>:<rootRelativePath>". A .deb exposes each dylib/framework root as its own component.
     var excludedRoots: [String]? = nil
+    /// Ordered stable component ids (uuid:path). Drives per-component load order.
+    var componentOrder: [String]? = nil
     var appliedTweakIDs: [UUID]? = nil
 }
