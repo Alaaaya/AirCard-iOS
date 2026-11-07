@@ -195,10 +195,10 @@ struct PersonalProjectDetailView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(tweak(id)?.name ?? "").font(.subheadline).lineLimit(1)
                         Menu {
-                            Button { } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: "checkmark") }
-                            Button { } label: { Text(personalText("Via LoadControl (unavailable)", "عبر LoadControl (غير متاح)")) }.disabled(true)
+                            Button { draft.directInjection = true } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: loaderOn ? "circle" : "checkmark") }
+                            Button { draft.directInjection = false } label: { Label(personalText("Via LoadControl", "عبر LoadControl"), systemImage: loaderOn ? "checkmark" : "circle") }
                         } label: {
-                            Text(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي") + " ▾").font(.caption2).foregroundStyle(.secondary)
+                            Text((loaderOn ? personalText("Via LoadControl", "عبر LoadControl") : personalText("Via main executable", "عبر الملف التنفيذي الرئيسي")) + " ▾").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                     Spacer()
@@ -209,6 +209,7 @@ struct PersonalProjectDetailView: View {
             }
         }.padding(16).appsGlass(cornerRadius: 24)
     }
+    private var loaderOn: Bool { draft.directInjection == false }
     private func move(_ id: UUID, _ delta: Int) {
         guard let i = draft.tweakIDs.firstIndex(of: id), draft.tweakIDs.indices.contains(i + delta) else { return }
         draft.tweakIDs.swapAt(i, i + delta)
@@ -224,7 +225,7 @@ struct PersonalProjectDetailView: View {
             toggle(personalText("Remove Watch app", "إزالة تطبيق الساعة"), personalText("Deletes the Watch folder before signing.", "بيحذف مجلد الساعة قبل التوقيع."), $draft.removeWatchApp)
             toggle(personalText("Fix white/blank icon", "إصلاح الأيقونة البيضاء"), personalText("Flattens transparent icon PNGs onto black.", "بيحوّل أيقونات PNG الشفافة لخلفية سودا."), Binding(get: { draft.fixWhiteIcon ?? false }, set: { draft.fixWhiteIcon = $0 }))
             toggle(personalText("Fix dark icon (iOS 18)", "إصلاح الأيقونة الداكنة (iOS 18)"), personalText("Unavailable: needs Assets.car rewriting.", "غير متاح: بدو تعديل Assets.car."), .constant(false)).disabled(true).opacity(0.5)
-            toggle(personalText("Direct injection (main executable)", "حقن مباشر بالملف الرئيسي"), personalText("LoadControl mode is not available in Mirsa yet.", "وضع LoadControl مو متاح بميرسا حالياً."), .constant(true)).disabled(true)
+            toggle(personalText("Direct injection (main executable)", "حقن مباشر بالملف الرئيسي"), personalText("Off uses Mirsa's own ordered loader (arm64 only, untested on device).", "إذا طفيته بيستخدم محمّل ميرسا المرتب (arm64 بس، ما انجرّب عالجهاز)."), Binding(get: { !loaderOn }, set: { draft.directInjection = $0 }))
             toggle(personalText("New tweaks first", "الإضافات الجديدة أولاً"), personalText("Injected libraries load before the app's own.", "المكتبات المحقونة بتتحمّل قبل مكتبات التطبيق."), Binding(get: { draft.newTweaksFirst ?? false }, set: { draft.newTweaksFirst = $0 }))
             HStack {
                 Text(personalText("Game Mode", "وضع الألعاب")).font(.subheadline)
@@ -376,6 +377,7 @@ struct PersonalProjectDetailView: View {
         options.gameMode = draft.gameMode ?? .keep
         options.fixWhiteIcon = draft.fixWhiteIcon ?? false
         options.newTweaksFirst = draft.newTweaksFirst ?? false
+        options.useLoader = draft.directInjection == false
         options.customEntitlements = draft.customEntitlements
         options.exportExtension = draft.exportExtension ?? "ipa"
         options.additionalProfiles = identities.filter { (draft.additionalProfileIDs ?? []).contains($0.id) }.map { $0.material.profile }

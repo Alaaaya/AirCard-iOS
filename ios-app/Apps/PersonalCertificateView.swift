@@ -273,7 +273,7 @@ enum PersonalCertificateSigner {
             }
         }
         if !options.libraries.isEmpty {
-            try IPAEditorService.run("inject", input: app, executable: info["CFBundleExecutable"] as? String, libraries: options.libraries, newFirst: options.newTweaksFirst)
+            try IPAEditorService.run(options.useLoader ? "inject_loader" : "inject", input: app, executable: info["CFBundleExecutable"] as? String, libraries: options.libraries, newFirst: options.newTweaksFirst)
         }
         return (root, app, info)
     }

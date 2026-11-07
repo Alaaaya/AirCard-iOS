@@ -18,6 +18,7 @@ struct PersonalProjectOptions: Sendable {
     var gameMode: PersonalGameMode = .keep
     var fixWhiteIcon = false
     var newTweaksFirst = false
+    var useLoader = false
     var customEntitlements: Data? = nil
     var exportExtension = "ipa"
 }
