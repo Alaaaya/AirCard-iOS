@@ -647,8 +647,7 @@ final class MirsaUpdater: ObservableObject {
             }
             try Task.checkCancellation()
             store.busy = tr("Importing…", "عم يجهّز الملف…")
-            let out = work.appendingPathComponent("x", isDirectory: true)
-            try fm.createDirectory(at: out, withIntermediateDirectories: true)
+            let out = work.appendingPathComponent("x-\(UUID().uuidString)", isDirectory: true) // must not pre-exist
             try await Task.detached { try IPAEditorService.run("extract", input: ipa, output: out) }.value
             try Task.checkCancellation()
             let payload = out.appendingPathComponent("Payload", isDirectory: true)
