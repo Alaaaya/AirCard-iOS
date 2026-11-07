@@ -129,4 +129,32 @@ final class PersonalProjectFolderTests: XCTestCase {
         XCTAssertEqual(PersonalCertificateLabel.name(certificate: nil), PersonalCertificateLabel.fallback)
         XCTAssertEqual(PersonalCertificateLabel.name(certificate: Data("CN=raw,OU=never display".utf8)), PersonalCertificateLabel.fallback)
     }
+    func testImporterDisplayMappingUsesSelectedDERNotRawDN() throws {
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "escaped", withExtension: "der", subdirectory: "CertificateLabels")
+            ?? Bundle(for: Self.self).url(forResource: "escaped", withExtension: "der"))
+        let der = try Data(contentsOf: url)
+        let details: [String: Any] = [
+            "certificate": der.base64EncodedString(),
+            "name": "CN=Wrong Name,OU=Private Team,O=Private Organization",
+            "subject": "CN=Wrong Subject+UID=123,O=Private Organization"
+        ]
+        XCTAssertEqual(PersonalCertificateLabel.name(importDetails: details), "فريق Mirsa, Example")
+    }
+    func testImporterMissingOrInvalidDERDoesNotExposeDN() throws {
+        for certificate in ["not base64!", 42, ""] as [Any] {
+            XCTAssertEqual(PersonalCertificateLabel.name(importDetails: [
+                "certificate": certificate, "name": "CN=Raw Name,OU=Secret",
+                "subject": "CN=Raw Subject,O=Secret"
+            ]), PersonalCertificateLabel.fallback)
+        }
+        XCTAssertEqual(PersonalCertificateLabel.name(importDetails: ["name": "CN=Raw,OU=Secret"]),
+                       PersonalCertificateLabel.fallback)
+        let url = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "missing", withExtension: "der", subdirectory: "CertificateLabels")
+            ?? Bundle(for: Self.self).url(forResource: "missing", withExtension: "der"))
+        XCTAssertEqual(PersonalCertificateLabel.name(importDetails: [
+            "certificate": try Data(contentsOf: url).base64EncodedString(),
+            "name": "O=No Common Name,OU=Secret"
+        ]), PersonalCertificateLabel.fallback)
+    }
+
 }

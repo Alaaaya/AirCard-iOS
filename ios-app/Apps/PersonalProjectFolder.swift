@@ -97,6 +97,12 @@ enum PersonalProjectFolder {
 }
 
 enum PersonalCertificateLabel {
+    /// Only the selected leaf returned by the importer supplies a display name.
+    /// Never fall back to its textual name/subject (which can be a full DN).
+    static func name(importDetails: [String: Any]) -> String {
+        name(certificate: (importDetails["certificate"] as? String).flatMap { Data(base64Encoded: $0) })
+    }
+
     /// Decode the already-selected leaf DER, not the RFC4514 display DN.
     /// Security handles escaped commas, multi-valued RDNs and Unicode.
     static func name(certificate: Data?) -> String {
