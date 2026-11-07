@@ -2,6 +2,40 @@ import SwiftUI
 
 // MARK: - Model (AltStore / SideStore / Feather source format)
 
+/// Copy/share of a source's stored URL. Only plain http(s) URLs without embedded credentials are allowed.
+enum SourceURLAction {
+    static func shareableURL(_ stored: String) -> URL? {
+        let t = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, let c = URLComponents(string: t),
+              let scheme = c.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = c.host, !host.isEmpty,
+              c.user == nil, c.password == nil, let u = c.url else { return nil }
+        return u
+    }
+    @MainActor static func copy(_ stored: String) {
+        guard let u = shareableURL(stored) else { return }
+        UIPasteboard.general.string = u.absoluteString
+    }
+}
+
+private struct SharedSourceURL: Identifiable { let url: URL; var id: String { url.absoluteString } }
+
+private struct SourceShareSheet: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: [url], applicationActivities: nil) }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+private struct SourceURLButtons: View {
+    let stored: String
+    @Binding var sharing: URL?
+    var body: some View {
+        let ok = SourceURLAction.shareableURL(stored) != nil
+        Button { SourceURLAction.copy(stored) } label: { Label(tr("Copy URL", "نسخ الرابط"), systemImage: "doc.on.doc") }.disabled(!ok)
+        Button { sharing = SourceURLAction.shareableURL(stored) } label: { Label(tr("Share URL", "مشاركة الرابط"), systemImage: "square.and.arrow.up") }.disabled(!ok)
+    }
+}
+
 struct RepoApp: Identifiable, Hashable {
     var id: String { bundleID + "|" + version }
     let name: String
@@ -254,6 +288,7 @@ struct SourcesTab: View {
     @StateObject private var store = SourcesStore.shared
     @ObservedObject private var installedApps = AppsStore.shared
     @State private var adding = false
+    @State private var sharingURL: URL?
     @State private var input = ""
     @State private var finding = false
 
@@ -284,8 +319,13 @@ struct SourcesTab: View {
                             Button { store.hiddenURLs.insert(s.url) } label: {
                                 Label(tr("Hide", "إخفاء"), systemImage: "eye.slash")
                             }.tint(.orange)
+                            SourceURLButtons(stored: s.url, sharing: $sharingURL).tint(.blue)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            SourceURLButtons(stored: s.url, sharing: $sharingURL).tint(.blue)
                         }
                         .contextMenu {
+                            SourceURLButtons(stored: s.url, sharing: $sharingURL)
                             Button { store.hiddenURLs.insert(s.url) } label: {
                                 Label(tr("Hide source", "إخفاء السورس"), systemImage: "eye.slash")
                             }
@@ -328,6 +368,7 @@ struct SourcesTab: View {
                 }
             }
             .sheet(isPresented: $finding) { DiscoveryView() }
+            .sheet(item: Binding(get: { sharingURL.map { SharedSourceURL(url: $0) } }, set: { if $0 == nil { sharingURL = nil } })) { SourceShareSheet(url: $0.url).presentationDetents([.medium, .large]) }
             .alert(tr("Add Source", "أضف سورس"), isPresented: $adding) {
                 TextField("https://…/source.json", text: $input)
                     .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
