@@ -257,7 +257,8 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
     // library does not discover. Parent envelopes then hash their final bytes.
     // Frameworks/PlugIns may be signed again recursively with identical maps.
     nodes.sort_by_key(|n| std::cmp::Reverse(n.path.components().count()));
-    for node in &nodes {
+    crate::signing_progress::report(0, nodes.len())?;
+    for (completed, node) in nodes.iter().enumerate() {
         let id = mapping.get(&node.id).unwrap_or(&node.id);
         let empty = plist::Dictionary::new();
         let mut settings = BundleSigningSettings::new(team, entitlements.get(id).unwrap_or(&empty).clone(), Some(&signer));
@@ -268,6 +269,7 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
         // Framework/dylib code receives neither app entitlements nor profile.
         if !node.framework { settings.embedded_mobileprovision = assignments.get(id).map(|i| profiles[*i].data.as_slice()); }
         apple_codesign_quick::sign_bundle(&node.path, &settings).map_err(|_| format!("تعذّر توقيع التطبيق {id}."))?;
+        crate::signing_progress::report(completed + 1, nodes.len())?;
     }
     status.device_authorization = "checked".into();
     Ok(status)

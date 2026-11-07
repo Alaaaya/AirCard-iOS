@@ -5,6 +5,19 @@ import AirliftFFI
 
 @_silgen_name("al_ipa_editor_run")
 private func personalEditorRun(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+@_silgen_name("al_ipa_editor_run_progress")
+private func personalEditorRunProgress(_ request: UnsafePointer<CChar>,
+    _ callback: @convention(c) (UnsafeMutableRawPointer?, UInt64, UInt64) -> Int32,
+    _ context: UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>?
+
+private final class PersonalSigningCallback {
+    let control: PersonalSigningControl
+    let report: (PersonalSigningEvent) -> Void
+    init(control: PersonalSigningControl, report: @escaping (PersonalSigningEvent) -> Void) {
+        self.control = control; self.report = report
+    }
+}
+
 
 @_silgen_name("al_personal_p12_import")
 private func personalP12Import(_ request: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
@@ -299,7 +312,11 @@ enum PersonalCertificateSigner {
         try data.write(to: url, options: [.atomic, .completeFileProtection])
         return url.path
     }
-    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init(), install: Bool = false) throws -> Result {
+    static func sign(ipa: URL, material: PersonalIdentityVault.Material, pairingPath: String, options: PersonalProjectOptions = .init(), install: Bool = false,
+                     control: PersonalSigningControl = PersonalSigningControl(),
+                     progress: @escaping (PersonalSigningEvent) -> Void = { _ in }) throws -> Result {
+        try control.checkpoint()
+        progress(PersonalSigningEvent(stage: .preparing))
         let fm = FileManager.default
         let stage = fm.temporaryDirectory.appendingPathComponent("personal-sign-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: stage, withIntermediateDirectories: true,
@@ -325,9 +342,21 @@ enum PersonalCertificateSigner {
                                           try data.write(to: url, options: [.atomic, .completeFileProtection])
                                           return url.path
                                       }]
+        try control.checkpoint()
+        let callback = PersonalSigningCallback(control: control, report: progress)
+        let context = Unmanaged.passRetained(callback).toOpaque()
+        defer { Unmanaged<PersonalSigningCallback>.fromOpaque(context).release() }
         let bytes = try JSONSerialization.data(withJSONObject: request)
         guard let text = String(data: bytes, encoding: .utf8),
-              let response = text.withCString({ personalEditorRun($0) }) else {
+              let response = text.withCString({ request in
+                  personalEditorRunProgress(request, { context, completed, total in
+                      guard let context else { return 0 }
+                      let box = Unmanaged<PersonalSigningCallback>.fromOpaque(context).takeUnretainedValue()
+                      guard !box.control.isCancelled else { return 0 }
+                      box.report(.signing(completed: completed, total: total))
+                      return 1
+                  }, context)
+              }) else {
             throw SideloadError.message("Personal signer did not respond.")
         }
         defer { al_string_free(response) }
@@ -338,6 +367,8 @@ enum PersonalCertificateSigner {
         }
         // Export artifact contains signed application and public profile only,
         // never P12, password or private key.
+        try control.checkpoint()
+        progress(PersonalSigningEvent(stage: .packaging))
         let output = try pack(root: root, options: options)
         let signedInfo = try IPAEditorService.info(in: app)
         var r = Result(url: output, bundleIdentifierChanged:
@@ -345,7 +376,15 @@ enum PersonalCertificateSigner {
             verification: PersonalProfileVerification.parse(result ?? [:]))
         if install {
             // Real device install of the just-signed bundle. The packed IPA is kept on failure.
-            do { _ = try SideloadService.installSigned(appPath: app.path, progress: { _, _ in }); r.installed = true }
+            do {
+                try control.checkpoint()
+                progress(PersonalSigningEvent(stage: .connecting))
+                _ = try SideloadService.installSigned(appPath: app.path) { fraction, stage in
+                    // Callback 100 can precede the backend's final success/error response.
+                    if let event = PersonalSigningEvent.installation(fraction, stage: stage) { progress(event) }
+                }
+                r.installed = true
+            }
             catch { r.installError = error.localizedDescription }
         }
         return r

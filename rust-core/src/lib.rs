@@ -17,6 +17,7 @@ pub mod pairing;
 pub mod container;
 mod ipa_editor;
 mod personal_sign;
+mod signing_progress;
 mod discovery_transport;
 pub mod sideload;
 

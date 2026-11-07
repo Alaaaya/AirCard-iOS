@@ -12,7 +12,10 @@ struct PersonalProjectDetailView: View {
     @State private var selectedID: String?
     @State private var showCertificates = false
     @State private var pickingTweak = false
-    @State private var busy = false
+    @State private var configBusy = false
+    @ObservedObject var signing = PersonalSigningOperation.shared
+    @State private var consumedResult: UUID?
+    private var busy: Bool { configBusy || signing.running }
     @State private var message: String?
     @State private var output: URL?
     @State private var sharing = false
@@ -60,8 +63,12 @@ struct PersonalProjectDetailView: View {
         .safeAreaInset(edge: .bottom) {
             Button { sign() } label: {
                 HStack(spacing: 8) {
-                    if busy { ProgressView() } else { Image(systemName: "hammer.fill") }
-                    Text(configOnly ? personalText("Export configuration only", "تصدير الإعدادات فقط") : personalText("Sign & Install", "توقيع وتثبيت")).fontWeight(.semibold)
+                    if let state = signing.state, state.projectID == app.id, state.running {
+                        PersonalSigningProgressView(state: state)
+                    } else {
+                        if configBusy { ProgressView() } else { Image(systemName: "hammer.fill") }
+                        Text(configOnly ? personalText("Export configuration only", "تصدير الإعدادات فقط") : personalText("Sign & Install", "توقيع وتثبيت")).fontWeight(.semibold)
+                    }
                 }.frame(maxWidth: .infinity).padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent).tint(.green)
@@ -95,7 +102,8 @@ struct PersonalProjectDetailView: View {
         .sheet(isPresented: $sharing, onDismiss: cleanOutput) {
             if let output { PersonalSignedShare(url: output) }
         }
-        .task { await load(); await inspect() }
+        .task { await load(); await inspect(); consumeSigningResult() }
+        .onChange(of: signing.state?.running) { _ in consumeSigningResult() }
         .onChange(of: draft) { _ in if loaded { saveDraft() } }
         .onDisappear { if !sharing { cleanOutput() } }
     }
@@ -338,7 +346,7 @@ struct PersonalProjectDetailView: View {
         } catch { message = error.localizedDescription }
     }
     private func cleanOutput() {
-        if let output { try? FileManager.default.removeItem(at: output.deletingLastPathComponent()) }
+        if let output, output != signing.state?.result?.url { try? FileManager.default.removeItem(at: output.deletingLastPathComponent()) }
         output = nil
     }
 
@@ -369,47 +377,39 @@ struct PersonalProjectDetailView: View {
         } catch { message = error.localizedDescription; return }
         let input = library.url(app)
         let signingOptions = options
-        busy = true
-        let operation = MirsaOperationProgress.shared.begin(appID: app.id.uuidString, phase: .signing)
+        if let material {
+            signing.start(projectID: app.id, title: app.name, input: input, material: material,
+                          pairingPath: PairingController.pairingFilePath(), options: signingOptions)
+            return
+        }
+        configBusy = true
         Task {
             do {
-                let pairingPath = await MainActor.run { PairingController.pairingFilePath() }
-                guard let material else {
-                    let url = try await Task.detached(priority: .userInitiated) {
-                        try PersonalCertificateSigner.exportConfigurationOnly(ipa: input, options: signingOptions)
-                    }.value
-                    output = url; draft.appliedTweakIDs = draft.tweakIDs
-                    message = personalText("Configuration applied. This IPA is NOT signed.", "انطبقت الإعدادات. هاد الـ IPA غير موقّع.")
-                    sharing = true
-                    MirsaOperationProgress.shared.finish(operation)
-                    busy = false
-                    return
-                }
-                let result = try await Task.detached(priority: .userInitiated) {
-                    try PersonalCertificateSigner.sign(ipa: input, material: material, pairingPath: pairingPath, options: signingOptions, install: true)
+                output = try await Task.detached(priority: .userInitiated) {
+                    try PersonalCertificateSigner.exportConfigurationOnly(ipa: input, options: signingOptions)
                 }.value
-                output = result.url
                 draft.appliedTweakIDs = draft.tweakIDs
-                if result.installed { message = personalText("Signed and installed.", "تم التوقيع والتثبيت.") }
-                else {
-                    message = personalText("Signed locally but install failed: ", "تم التوقيع بس التثبيت فشل: ") + (result.installError ?? "")
-                        + "\n" + personalText("The signed IPA was kept for sharing.", "الـ IPA الموقّع انحفظ للمشاركة.")
-                }
-                if result.bundleIdentifierChanged {
-                    message = (message ?? "") + "\n" + "تم تغيير المعرّف ليطابق البروفايل"
-                }
-                if !result.verification.isVerified {
-                    message = (message ?? "") + "\n" + result.verification.warningText
-                }
-                sharing = !result.installed
-                MirsaOperationProgress.shared.finish(operation)
-                MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: .success)
-            } catch {
-                message = error.localizedDescription
-                MirsaOperationProgress.shared.finish(operation)
-                MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: MirsaCompletionFeedback.outcome(for: error))
-            }
-            busy = false
+                message = personalText("Configuration applied. This IPA is NOT signed.", "انطبقت الإعدادات. هاد الـ IPA غير موقّع.")
+                sharing = true
+            } catch { message = error.localizedDescription }
+            configBusy = false
         }
+    }
+
+    private func consumeSigningResult() {
+        guard let state = signing.state, state.projectID == app.id, !state.running,
+              consumedResult != state.id else { return }
+        consumedResult = state.id
+        guard let result = state.result else { message = state.error; return }
+        output = result.url
+        draft.appliedTweakIDs = draft.tweakIDs
+        if result.installed { message = personalText("Signed and installed.", "تم التوقيع والتثبيت.") }
+        else {
+            message = personalText("Signed locally but install failed: ", "تم التوقيع بس التثبيت فشل: ") + (result.installError ?? "")
+                + "\n" + personalText("The signed IPA was kept for sharing.", "الـ IPA الموقّع انحفظ للمشاركة.")
+        }
+        if result.bundleIdentifierChanged { message = (message ?? "") + "\nتم تغيير المعرّف ليطابق البروفايل" }
+        if !result.verification.isVerified { message = (message ?? "") + "\n" + result.verification.warningText }
+        sharing = !result.installed
     }
 }

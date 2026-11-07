@@ -951,13 +951,26 @@ fn editor_worker<T: Send + 'static>(work: impl FnOnce() -> Result<T> + Send + 's
 /// request must point to a valid NUL-terminated UTF-8 JSON string.
 #[no_mangle]
 pub unsafe extern "C" fn al_ipa_editor_run(request: *const c_char) -> *mut c_char {
+    editor_run_with_progress(request, None)
+}
+/// Callback and context remain valid until this synchronous call returns.
+/// A zero callback return cancels safely at the next signed-bundle boundary.
+#[no_mangle]
+pub unsafe extern "C" fn al_ipa_editor_run_progress(
+    request: *const c_char,
+    callback: crate::signing_progress::Callback,
+    context: *mut std::ffi::c_void,
+) -> *mut c_char {
+    editor_run_with_progress(request, Some(crate::signing_progress::Sink { callback, context: context as usize }))
+}
+unsafe fn editor_run_with_progress(request: *const c_char, sink: Option<crate::signing_progress::Sink>) -> *mut c_char {
     let result = std::panic::catch_unwind(|| {
         if request.is_null() { return Err("Missing request".into()); }
         let text = CStr::from_ptr(request).to_str().map_err(err)?;
         if text.len() > 1024 * 1024 { return Err("Request too large".into()); }
         // Own all input before crossing threads. No borrowed C pointer escapes.
         let owned = text.to_owned();
-        editor_worker(move || run(serde_json::from_str(&owned).map_err(err)?))
+        editor_worker(move || crate::signing_progress::scope(sink, || run(serde_json::from_str(&owned).map_err(err)?)))
     }).unwrap_or_else(|_| Err("تعذّر قراءة طلب التوقيع.".into()));
     let json = match result {
         Ok(status) => serde_json::json!({"ok":true,"profile_verification":status.profile_verification,"warnings":status.warnings,"device_authorization":status.device_authorization}),
