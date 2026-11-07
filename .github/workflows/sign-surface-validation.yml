@@ -1,0 +1,40 @@
+name: Sign failure surface validation
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XC" ]; then sudo xcode-select -s "$XC"; fi
+          xcodebuild -version
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust-core
+          key: simulator
+      - name: Rust tests
+        run: cargo test --manifest-path rust-core/Cargo.toml --lib 2>&1 | tail -15
+      - name: Build simulator FFI
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        run: |
+          cargo build --release --manifest-path rust-core/Cargo.toml --target aarch64-apple-ios-sim
+          rm -rf AirliftFFI.xcframework
+          xcodebuild -create-xcframework -library rust-core/target/aarch64-apple-ios-sim/release/libairlift_ffi.a -headers rust-core/include -output AirliftFFI.xcframework
+      - name: Run signing failure XCTests
+        run: |
+          set -o pipefail
+          brew install xcodegen
+          xcodegen generate
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; print(next(d["udid"] for g in json.load(sys.stdin)["devices"].values() for d in g if d["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE" || true
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcodebuild test -project Mirsa.xcodeproj -scheme Mirsa -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -only-testing:MirsaTests/PersonalSigningFailureSurfaceTests -only-testing:MirsaTests/PersonalSigningProgressTests/testOutOfOrderCallbacksDoNotRegressOrRepublishIdenticalProgress 2>&1 | tee build.log | grep -E "Test Case|error:|TEST |Executed" | head -40
