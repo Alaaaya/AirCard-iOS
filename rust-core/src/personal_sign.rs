@@ -13,7 +13,7 @@ pub fn matches_id(pattern: &str, id: &str) -> bool {
         !prefix.contains('*') && id.starts_with(prefix)
     } else { pattern == id }
 }
-// Explicit profiles can sign exactly one bundle ID. Wildcards never rewrite.
+// Profiles authorize identities; they never supply a replacement identity.
 fn resolved_bundle_id(pattern: &str, original: &str) -> Result<String, String> {
     let (prefix, allowed) = pattern.split_once('.')
         .ok_or("معرّف التطبيق في البروفايل غير صالح.")?;
@@ -32,11 +32,19 @@ fn resolved_bundle_id(pattern: &str, original: &str) -> Result<String, String> {
             return Err("البروفايل ما بيسمح بمعرّف هالتطبيق.".into());
         }
         Ok(original.to_owned())
-    } else if valid(allowed) {
-        Ok(allowed.to_owned())
+    } else if valid(allowed) && allowed == original {
+        Ok(original.to_owned())
     } else {
-        Err("معرّف التطبيق في البروفايل غير صالح.".into())
+        Err("البروفايل ما بيسمح بمعرّف هالتطبيق. استخدم بروفايل مطابق أو غيّر المعرّف صراحةً.".into())
     }
+}
+
+// Shared by signing and regressions: no fallback to a different app's exact ID.
+fn main_identity(patterns: &[&str], original: &str, custom: &str) -> Result<(usize, String), String> {
+    let requested = if custom.is_empty() { original } else { custom };
+    let chosen = nested::select_profile(patterns, requested)
+        .ok_or("البروفايل ما بيسمح بمعرّف هالتطبيق. استخدم بروفايل مطابق أو غيّر المعرّف صراحةً.")?;
+    Ok((chosen, resolved_bundle_id(patterns[chosen], requested)?))
 }
 
 // CMS authenticity is best effort per owner policy. Authorization is checked
@@ -70,6 +78,8 @@ pub(crate) fn profile_with_verification(bytes: &[u8], index: usize) -> Result<(P
 #[derive(Default, serde::Deserialize)]
 pub(crate) struct Options {
     #[serde(default)] pub profiles: Vec<String>,
+    /// Explicit user override only. Empty preserves the IPA identity.
+    #[serde(default)] pub bundle_id: String,
     #[serde(default)] pub pairing_path: String,
     #[serde(default)] pub remove_extensions: bool,
     #[serde(default)] pub remove_watch: bool,
@@ -220,8 +230,7 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
     let main = nodes.iter().position(|n| n.path == app).ok_or("التطبيق الرئيسي مو موجود.")?;
     let main_original = nodes[main].id.clone();
     let main_patterns: Vec<_> = profiles.iter().map(|p| p.parsed.entitlements().get("application-identifier").and_then(plist::Value::as_string).unwrap_or("")).collect();
-    let chosen = nested::select_profile(&main_patterns,&main_original).unwrap_or(0);
-    let new_main = resolved_bundle_id(main_patterns[chosen], &main_original)?;
+    let (chosen, new_main) = main_identity(&main_patterns, &main_original, &opts.bundle_id)?;
     let mapping = nested::id_map(&nodes, &main_original, &new_main)?;
     let team = profiles[chosen].parsed.team_id();
     let mut assignments = BTreeMap::new();
@@ -339,8 +348,8 @@ mod tests {
         assert!(custom_entitlements(p.to_str().unwrap()).is_err());
         std::fs::remove_dir_all(dir).unwrap();
     }
-    #[test] fn explicit_profile_rewrites_only_bundle_suffix() {
-        assert_eq!(resolved_bundle_id("OLDPREFIX.com.profile.app", "com.original.app").unwrap(), "com.profile.app");
+    #[test] fn explicit_profile_requires_matching_identity() {
+        assert!(resolved_bundle_id("OLDPREFIX.com.profile.app", "com.original.app").is_err());
         assert_eq!(resolved_bundle_id("TEAM.com.same", "com.same").unwrap(), "com.same");
     }
     #[test] fn wildcard_profile_preserves_original_and_scope() {
@@ -410,6 +419,87 @@ mod key_binding_tests {
         assert!(result.err().unwrap().contains("ما بيطابق"));
         assert_eq!(std::fs::read(root.join("sentinel")).unwrap(),b"unchanged");
         assert_eq!(std::fs::read_dir(&root).unwrap().count(),1);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+
+#[cfg(test)]
+mod coexistence_tests {
+    use super::*;
+    fn node(root: &Path, id: &str, companion: Option<&str>) -> nested::Node {
+        std::fs::create_dir_all(root).unwrap();
+        let mut info = plist::Dictionary::new();
+        info.insert("CFBundleIdentifier".into(), id.into());
+        info.insert("CFBundleExecutable".into(), "Fixture".into());
+        if let Some(parent) = companion {
+            info.insert("WKCompanionAppBundleIdentifier".into(), parent.into());
+        }
+        nested::Node { path: root.to_owned(), id: id.into(), framework: false, info: info.into() }
+    }
+    #[test]
+    fn two_apps_same_wildcard_keep_distinct_install_identities() {
+        // These are the same selection/mapping/rewrite/constrain functions used
+        // by sign_with_options after device/certificate authorization.
+        let root = std::env::temp_dir().join(format!("mirsa-coexist-{}", std::process::id()));
+        for id in ["com.fixture.joker", "com.fixture.zeus"] {
+            let (_, target) = main_identity(&["LEGACYPREFIX.*"], id, "").unwrap();
+            assert_eq!(target, id);
+            let mut n = node(&root.join(id), id, None);
+            let map = nested::id_map(std::slice::from_ref(&n), id, &target).unwrap();
+            nested::rewrite(&mut n, &map).unwrap();
+            let info = plist::Value::from_file(n.path.join("Info.plist")).unwrap();
+            assert_eq!(info.as_dictionary().unwrap()["CFBundleIdentifier"].as_string(), Some(id));
+            let allowed = plist::Dictionary::new();
+            let e = nested::constrain(&plist::Dictionary::new(), &allowed, "LEGACYPREFIX", id, "DIFFERENTTEAM", &map).unwrap();
+            assert_eq!(e["application-identifier"].as_string(), Some(format!("LEGACYPREFIX.{id}").as_str()));
+            assert_eq!(e["com.apple.developer.team-identifier"].as_string(), Some("DIFFERENTTEAM"));
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn signing_request_keeps_explicit_custom_identity_separate_from_profile() {
+        let request: serde_json::Value = serde_json::json!({
+            "bundle_id": "com.fixture.custom", "profiles": [], "pairing_path": ""
+        });
+        let opts: Options = serde_json::from_value(request).unwrap();
+        assert_eq!(main_identity(&["PREFIX.*"], "com.fixture.original", &opts.bundle_id).unwrap().1,
+            "com.fixture.custom");
+        let default: Options = serde_json::from_str("{}").unwrap();
+        assert_eq!(main_identity(&["PREFIX.*"], "com.fixture.original", &default.bundle_id).unwrap().1,
+            "com.fixture.original");
+    }
+    #[test]
+    fn exact_profile_never_silently_replaces_another_app() {
+        assert!(main_identity(&["PREFIX.com.only.app"], "com.fixture.joker", "").is_err());
+        assert!(main_identity(&["PREFIX.com.only.app"], "com.fixture.zeus", "").is_err());
+        assert_eq!(main_identity(&["PREFIX.com.only.app"], "com.only.app", "").unwrap().1, "com.only.app");
+        assert_eq!(main_identity(&["PREFIX.com.only.app"], "com.fixture.joker", "com.only.app").unwrap().1, "com.only.app");
+        assert!(main_identity(&["PREFIX.com.only.app"], "com.fixture.joker", "com.other.app").is_err());
+    }
+    #[test]
+    fn explicit_custom_id_rewrites_nested_references_and_entitlements_together() {
+        let root = std::env::temp_dir().join(format!("mirsa-custom-{}", std::process::id()));
+        let old = "com.fixture.old"; let new = "com.fixture.new";
+        let (_, target) = main_identity(&["PREFIX.com.fixture.*"], old, new).unwrap();
+        let mut nodes = vec![node(&root.join("Main.app"), old, None),
+            node(&root.join("Main.app/PlugIns/Widget.appex"), "com.fixture.old.widget", Some(old))];
+        let map = nested::id_map(&nodes, old, &target).unwrap();
+        for n in &mut nodes {
+            nested::rewrite(n, &map).unwrap();
+            let id = &map[&n.id];
+            assert!(nested::select_profile(&["PREFIX.com.fixture.*"], id).is_some());
+            let mut requested = plist::Dictionary::new();
+            requested.insert("keychain-access-groups".into(), vec![plist::Value::String(format!("OLDPREFIX.{}", n.id))].into());
+            let mut allowed = plist::Dictionary::new();
+            allowed.insert("keychain-access-groups".into(), vec![plist::Value::String("PREFIX.*".into())].into());
+            let e = nested::constrain(&requested, &allowed, "PREFIX", id, "TEAM", &map).unwrap();
+            assert_eq!(e["application-identifier"].as_string(), Some(format!("PREFIX.{id}").as_str()));
+            assert_eq!(e["keychain-access-groups"].as_array().unwrap()[0].as_string(), Some(format!("PREFIX.{id}").as_str()));
+        }
+        assert_eq!(nodes[1].info.as_dictionary().unwrap()["WKCompanionAppBundleIdentifier"].as_string(), Some(new));
+        assert!(main_identity(&["PREFIX.com.fixture.*"], old, "com.outside.app").is_err());
+        assert!(main_identity(&["PREFIX.*"], old, "../bad").is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

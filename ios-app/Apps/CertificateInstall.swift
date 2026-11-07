@@ -20,13 +20,6 @@ enum CertificateInstall {
         }
     }
 
-    /// A concrete (non-wildcard) bundle ID from the profile, if any.
-    static func profileBundleID(_ identity: PersonalIdentityVault.SavedIdentity) -> String? {
-        let id = identity.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !id.isEmpty, !id.contains("*"), IPAEditorService.validBundleID(id) else { return nil }
-        return id
-    }
-
     /// Returns a .app folder inside a staging folder this call created.
     /// `stage` is the only thing the caller may delete afterwards.
     static func stageSignedApp(ipa: URL, in parent: URL) throws -> (stage: URL, app: URL) {
@@ -66,8 +59,7 @@ enum CertificateInstall {
             MirsaOperationProgress.shared.finish(operation)
             MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: outcome)
         }
-        var options = PersonalProjectOptions()
-        options.bundleID = profileBundleID(identity)
+        let options = PersonalProjectOptions()
         let material = identity.material
         let pairingPath = PairingController.pairingFilePath()
         let signed = try await Task.detached(priority: .userInitiated) {
