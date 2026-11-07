@@ -10,12 +10,16 @@ enum IPAEditorService {
     static let maximumFileSize: Int64 = 512 * 1024 * 1024
 
     static func run(_ operation: String, input: URL, output: URL? = nil,
-                    executable: String? = nil, libraries: [URL] = [], newFirst: Bool = false) throws {
+                    executable: String? = nil, libraries: [URL] = [], newFirst: Bool = false,
+                    injections: [[String: String]]? = nil, order: [String]? = nil, useLoader: Bool = false) throws {
         var request: [String: Any] = ["operation": operation, "input": input.path]
         if let output { request["output"] = output.path }
         if let executable { request["executable"] = executable }
         request["libraries"] = libraries.map(\.path)
         if newFirst { request["new_first"] = true }
+        if let injections { request["injections"] = injections }
+        if let order { request["order"] = order }
+        if useLoader { request["use_loader"] = true }
         let data = try JSONSerialization.data(withJSONObject: request)
         guard let text = String(data: data, encoding: .utf8),
               let response = text.withCString({ al_ipa_editor_run($0) }) else {
@@ -27,6 +31,18 @@ enum IPAEditorService {
               result["ok"] as? Bool == true else {
             let result = try? JSONSerialization.jsonObject(with: resultData) as? [String: Any]
             throw SideloadError.message(result?["error"] as? String ?? "IPA editor failed.")
+        }
+    }
+
+    /// Lists injection targets of an extracted .app (main, frameworks, extensions); thin arm64 only.
+    static func targets(app: URL, scratch: URL) throws -> [(id: String, kind: String, label: String)] {
+        let out = scratch.appendingPathComponent("targets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: out) }
+        try run("targets", input: app, output: out)
+        guard let list = try JSONSerialization.jsonObject(with: Data(contentsOf: out)) as? [[String: Any]] else { return [] }
+        return list.compactMap { d in
+            guard let id = d["id"] as? String, let kind = d["kind"] as? String else { return nil }
+            return (id, kind, d["label"] as? String ?? id)
         }
     }
 

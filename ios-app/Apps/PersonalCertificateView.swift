@@ -272,7 +272,9 @@ enum PersonalCertificateSigner {
                 try PropertyListSerialization.data(fromPropertyList: localized, format: .binary, options: 0).write(to: strings, options: .atomic)
             }
         }
-        if !options.libraries.isEmpty {
+        if !options.injections.isEmpty {
+            try IPAEditorService.run("inject_plan", input: app, newFirst: options.newTweaksFirst, injections: options.injections, order: options.injectionOrder, useLoader: options.useLoader)
+        } else if !options.libraries.isEmpty {
             try IPAEditorService.run(options.useLoader ? "inject_loader" : "inject", input: app, executable: info["CFBundleExecutable"] as? String, libraries: options.libraries, newFirst: options.newTweaksFirst)
         }
         return (root, app, info)

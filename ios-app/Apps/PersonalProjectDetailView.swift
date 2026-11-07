@@ -199,10 +199,10 @@ struct PersonalProjectDetailView: View {
                         Menu {
                             Button { draft.directInjection = true } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: loaderOn ? "circle" : "checkmark") }
                             Button { draft.directInjection = false } label: { Label(personalText("Via LoadControl", "عبر LoadControl"), systemImage: loaderOn ? "checkmark" : "circle") }
-                            Button { } label: { Text(personalText("Specific framework / extension (unavailable)", "إطار أو إضافة محددة (غير متاح)")) }.disabled(true)
                         } label: {
                             Text((loaderOn ? personalText("Via LoadControl", "عبر LoadControl") : personalText("Via main executable", "عبر الملف التنفيذي الرئيسي")) + " ▾").font(.caption2).foregroundStyle(.secondary)
                         }
+                        targetMenu(comp)
                     }
                     Spacer()
                     ShareLink(item: comp.url) { Image(systemName: "square.and.arrow.up") }
@@ -247,6 +247,45 @@ struct PersonalProjectDetailView: View {
         if !components().contains(where: { $0.tweakID == comp.tweakID }) {
             draft.tweakIDs.removeAll { $0 == comp.tweakID }
             draft.excludedRoots = (draft.excludedRoots ?? []).filter { !$0.hasPrefix(comp.tweakID.uuidString + ":") }
+        }
+    }
+    @State private var targetList: [(id: String, kind: String, label: String)] = []
+    @State private var targetsLoading = false
+    private func mainTarget() -> String? { targetList.first { $0.kind == "main" }?.id }
+    @ViewBuilder private func targetMenu(_ comp: TweakComponent) -> some View {
+        let current = draft.tweakTargets?[comp.id]
+        let shown = targetList.first { $0.id == current }?.label ?? personalText("Main app", "التطبيق الرئيسي")
+        Menu {
+            if targetList.isEmpty {
+                Button { loadTargets() } label: { Label(targetsLoading ? personalText("Reading app…", "عم أقرأ التطبيق…") : personalText("Load targets", "تحميل الأهداف"), systemImage: "arrow.down.circle") }
+            }
+            ForEach(targetList, id: \.id) { t in
+                Button { setTarget(comp.id, t) } label: {
+                    Label(t.label + " (" + t.kind + ")", systemImage: (current == t.id || (current == nil && t.kind == "main")) ? "checkmark" : "circle")
+                }.disabled(loaderOn && t.kind != "main")
+            }
+        } label: { Text(personalText("Target: ", "الهدف: ") + shown + " ▾").font(.caption2).foregroundStyle(.secondary) }
+    }
+    private func setTarget(_ cid: String, _ t: (id: String, kind: String, label: String)) {
+        var m = draft.tweakTargets ?? [:]
+        if t.kind == "main" { m.removeValue(forKey: cid) } else { m[cid] = t.id }
+        draft.tweakTargets = m
+    }
+    private func loadTargets() {
+        guard !targetsLoading else { return }
+        targetsLoading = true
+        let input = library.url(app)
+        Task {
+            let result: [(id: String, kind: String, label: String)]? = await Task.detached(priority: .userInitiated) {
+                let stage = FileManager.default.temporaryDirectory.appendingPathComponent("targets-\(UUID().uuidString)", isDirectory: true)
+                defer { try? FileManager.default.removeItem(at: stage) }
+                do {
+                    try IPAEditorService.run("extract", input: input, output: stage)
+                    return try IPAEditorService.targets(app: IPAEditorService.app(in: stage), scratch: stage)
+                } catch { return nil }
+            }.value
+            targetsLoading = false
+            if let result { targetList = result } else { message = personalText("Could not read the app targets.", "ما قدرت أقرأ أهداف التطبيق.") }
         }
     }
     private var loaderOn: Bool { draft.directInjection == false }
@@ -420,7 +459,14 @@ struct PersonalProjectDetailView: View {
         let minimum = draft.minimumOS.trimmingCharacters(in: .whitespacesAndNewlines)
         options.minimumOS = minimum.isEmpty ? nil : minimum
         do {
-            options.libraries = components().map(\.url)
+            let comps = components()
+            options.libraries = comps.map(\.url)
+            let targets = draft.tweakTargets ?? [:]
+            if comps.contains(where: { targets[$0.id] != nil }) {
+                guard let main = mainTarget() else { message = personalText("Load targets first.", "حمّل الأهداف أولاً."); return }
+                options.injections = comps.map { ["id": $0.id, "library": $0.url.path, "target": targets[$0.id] ?? main] }
+                options.injectionOrder = comps.map(\.id)
+            }
         } catch { message = error.localizedDescription; return }
         let input = library.url(app)
         let signingOptions = options

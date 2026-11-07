@@ -12,6 +12,9 @@ struct PersonalProjectOptions: Sendable {
     var removeWatchApp = false
     var minimumOS: String? = nil
     var libraries: [URL] = []
+    /// When non-empty, per-component target plan (inject_plan) replaces plain library injection.
+    var injections: [[String: String]] = []
+    var injectionOrder: [String] = []
     var additionalProfiles: [Data] = []
     var removeExtensions = false
     var removeAppClips = false
