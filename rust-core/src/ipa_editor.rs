@@ -1014,6 +1014,20 @@ unsafe fn editor_run_with_progress(request: *const c_char, sink: Option<crate::s
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn extract_requires_nonexistent_child_of_owned_parent() {
+        let root = std::env::temp_dir().join(format!("extract-owned-{}",std::process::id()));
+        let _=fs::remove_dir_all(&root);fs::create_dir_all(&root).unwrap();
+        let ipa=root.join("F.ipa");
+        fs::write(&ipa,include_bytes!("../tests/fixtures/incoming/SignedFixture.ipa")).unwrap();
+        // Pre-created destination (the 1.3.111 bug) is rejected.
+        assert_eq!(extract_zip(&ipa,&root).unwrap_err(), "Extraction destination must not exist");
+        // Two independent nonexistent children of the same owned parent succeed.
+        let a=root.join("payload-a");let b=root.join("payload-b");
+        extract_zip(&ipa,&a).unwrap();extract_zip(&ipa,&b).unwrap();
+        assert!(a.join("Payload/Fixture.app").is_dir()&&b.join("Payload/Fixture.app").is_dir());
+        let _=fs::remove_dir_all(&root);
+    }
     use super::*;
 
     #[test]

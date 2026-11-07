@@ -31,8 +31,10 @@ enum CertificateInstall {
         try fm.createDirectory(at: stage, withIntermediateDirectories: true,
                                attributes: [.protectionKey: FileProtectionType.complete])
         do {
-            try IPAEditorService.run("extract", input: ipa, output: stage)
-            return (stage, try IPAEditorService.app(in: stage))
+            // Rust extraction requires a NONEXISTENT destination: use a fresh child of the owned stage.
+            let payload = stage.appendingPathComponent("payload", isDirectory: true)
+            try IPAEditorService.run("extract", input: ipa, output: payload)
+            return (stage, try IPAEditorService.app(in: payload))
         } catch {
             try? fm.removeItem(at: stage)
             throw error
