@@ -27,6 +27,7 @@ struct PersonalProjectDetailView: View {
     @State private var showDeps = false
     @State private var pickingEntitlements = false
     @StateObject private var draftWriter = PersonalProjectDraftWriter()
+    @State private var draftDestination: URL?
     @State private var scrolling = false
     @State private var workspace: ProjectFolderLocation?
 
@@ -116,7 +117,7 @@ struct PersonalProjectDetailView: View {
         }
         .task { await load(); await inspect(); consumeSigningResult() }
         .onChange(of: signing.state?.running) { _ in consumeSigningResult() }
-        .onChange(of: draft) { _ in if loaded { draftWriter.schedule(draft, to: library.draftURL(app)) } }
+        .onChange(of: draft) { _ in if loaded, let destination = draftDestination { draftWriter.schedule(draft, to: destination) } }
         .onChange(of: scenePhase) { phase in if phase != .active { draftWriter.flush() } }
         .onDisappear { draftWriter.flush(); if !sharing { cleanOutput() } }
     }
@@ -277,8 +278,10 @@ struct PersonalProjectDetailView: View {
         }.padding(16).frame(maxWidth: .infinity, alignment: .leading).appsGlass(cornerRadius: 24)
     }
     private func openWorkspace() {
+        draftWriter.flush()
         do {
             workspace = ProjectFolderLocation(url: try library.browseDirectory(app))
+            draftDestination = library.draftURL(app)
         } catch {
             message = personalText("Could not open this project folder.", "ما قدرنا نفتح مجلد هالمشروع.")
         }
@@ -341,6 +344,7 @@ struct PersonalProjectDetailView: View {
                                      outputFilename: app.name.replacingOccurrences(of: "/", with: "-") + "-signed")
         if let data = try? Data(contentsOf: library.draftURL(app)),
            let saved = try? JSONDecoder().decode(PersonalProjectDraft.self, from: data) { d = saved }
+        draftDestination = library.draftURL(app)
         draft = d; loaded = true
     }
     private func reloadIdentities() {
