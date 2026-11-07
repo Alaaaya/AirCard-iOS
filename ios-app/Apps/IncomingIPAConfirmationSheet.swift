@@ -37,7 +37,7 @@ struct IncomingIPAConfirmationSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .top) {
-                        Button { guard !submitted else { return }; onCancel() } { Image(systemName: "xmark").font(.headline).padding(12).appsGlass(cornerRadius: 14) }
+                        Button { guard !submitted else { return }; onCancel() } label: { Image(systemName: "xmark").font(.headline).padding(12).appsGlass(cornerRadius: 14) }
                             .accessibilityLabel(tr("Cancel", "إلغاء"))
                         Spacer()
                         VStack(alignment: .trailing, spacing: 5) {
