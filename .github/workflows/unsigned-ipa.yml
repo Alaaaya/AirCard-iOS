@@ -64,7 +64,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git log -1 --pretty=%B > notes.txt
+          python3 scripts/curated_release_notes.py docs/release-notes.json "1.3.${{ github.run_number }}" > notes.txt
           gh release create "build-${{ github.run_number }}" build/Mirsa.ipa \
             --title "Mirsa build ${{ github.run_number }}" --notes-file notes.txt \
             --target "${{ github.sha }}" --latest
@@ -97,7 +97,7 @@ jobs:
                   raise SystemExit("Extension identifier is not prefixed by its parent")
               data["CFBundleIdentifier"] = "com.alaa.mirsa.setup" + bundle_id[len(old_id):]
               data["CFBundleShortVersionString"] = sys.argv[2]
-              data["CFBundleVersion"] = sys.argv[2]
+              data["CFBundleVersion"] = plistlib.loads(parent.read_bytes())["CFBundleVersion"]
               info.write_bytes(plistlib.dumps(data))
           PYSETUP
           $PB -c "Set :CFBundleIdentifier com.alaa.mirsa.setup" "$P"
@@ -106,16 +106,15 @@ jobs:
           $PB -c "Delete :MirsaSetupMode" "$P" 2>/dev/null || true
           $PB -c "Add :MirsaSetupMode bool true" "$P"
           $PB -c "Set :CFBundleShortVersionString $VER" "$P"
-          $PB -c "Set :CFBundleVersion $VER" "$P"
           zip -qry ../build/Mirsa-Setup.ipa Payload
           cd ..
           SIZE=$(stat -f%z build/Mirsa-Setup.ipa)
           DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/setup/Mirsa-Setup.ipa"
           ICON="https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/ios-app/Assets.xcassets/AppIcon.appiconset/AppIcon-60@3x.png"
-          NOTES=$(git log -1 --pretty=%s)
+          NOTES=$(python3 scripts/curated_release_notes.py docs/release-notes.json "$VER")
           python3 - "$VER" "$DATE" "$URL" "$SIZE" "$ICON" "$NOTES" <<'PY'
-          import json, sys
+          import json, sys, plistlib, pathlib, glob
           ver, date, url, size, icon, notes = sys.argv[1:7]
           src = {
             "name": "Mirsa", "identifier": "com.alaa.mirsa.source",
@@ -124,9 +123,9 @@ jobs:
               "developerName": "Alaa", "iconURL": icon,
               "localizedDescription": "Installs Mirsa with your Apple ID.",
               "version": ver, "versionDate": date, "downloadURL": url, "size": int(size),
-              "versions": [{"version": ver, "buildVersion": ver, "date": date,
+              "versions": [{"version": ver, "buildVersion": plistlib.loads(pathlib.Path(glob.glob("setup/Payload/*.app/Info.plist")[0]).read_bytes())["CFBundleVersion"], "date": date,
                             "downloadURL": url, "size": int(size),
-                            "localizedDescription": notes, "minOSVersion": "18.0"}]
+                            "releaseNotes": json.loads(notes)["releaseNotes"], "localizedDescription": json.loads(notes)["releaseNotes"].get("en", "Release notes are not available for this version."), "minOSVersion": "18.0"}]
             }],
             "news": []
           }

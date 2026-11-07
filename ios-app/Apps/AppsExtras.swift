@@ -531,15 +531,41 @@ final class MirsaUpdater: ObservableObject {
         let body: String?
         let assets: [Asset]
         var id: String { tag_name }
-        var build: Int { Int(tag_name.filter(\.isNumber)) ?? 0 }
+        var build: String { tag_name }
         var ipa: URL? { (assets.first(where: { $0.name == "Mirsa.ipa" }) ?? assets.first(where: { $0.name.lowercased().hasSuffix(".ipa") && !$0.name.contains("Setup") }))?.browser_download_url }
     }
 
     @Published var available: Release?
     @Published var installing = false
 
-    static var currentBuild: Int {
-        Int((Bundle.main.object(forInfoDictionaryKey: "MirsaBuild") as? String ?? "").filter(\.isNumber)) ?? 0
+    static var currentBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+    }
+
+    /// Legacy GitHub tags and feed marketing versions are not actual IPA builds.
+    /// Inspect the shipped plist before offering an update, without cached installed state.
+    private func actualBuild(_ rel: Release) async -> String? {
+        guard let url = rel.ipa else { return nil }
+        let fm = FileManager.default
+        let work = fm.temporaryDirectory.appendingPathComponent("update-check-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: work) }
+        do {
+            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
+            request.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
+            let (temporary, response) = try await URLSession.shared.download(for: request)
+            defer { try? fm.removeItem(at: temporary) }
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
+            try fm.createDirectory(at: work, withIntermediateDirectories: true)
+            let path = temporary.path
+            let output = work.path
+            guard await Task.detached(operation: { SideloadService.unzip(path, to: output) }).value else { return nil }
+            let payload = work.appendingPathComponent("Payload")
+            let apps = try fm.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil).filter { $0.pathExtension == "app" }
+            guard apps.count == 1,
+                  let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: apps[0].appendingPathComponent("Info.plist")), format: nil) as? [String: Any],
+                  plist["CFBundleIdentifier"] as? String == "com.alaa.mirsa" else { return nil }
+            return plist["CFBundleVersion"] as? String
+        } catch { return nil }
     }
     /// "Later" only hides the prompt until Mirsa is opened again.
     private var snoozedUntil: Date?
@@ -554,7 +580,8 @@ final class MirsaUpdater: ObservableObject {
         guard let (d, r) = try? await URLSession.shared.data(for: req),
               (r as? HTTPURLResponse)?.statusCode == 200,
               let rel = try? JSONDecoder().decode(Release.self, from: d),
-              rel.ipa != nil, rel.build > Self.currentBuild else { return }
+              rel.ipa != nil else { return }
+        guard UpdaterMetadata.isNewer(remote: await actualBuild(rel), installed: Self.currentBuild) else { return }
         available = rel
     }
 
@@ -576,7 +603,11 @@ final class MirsaUpdater: ObservableObject {
             store.error = tr("Couldn't check for updates. Check your internet.", "ما قدرت أفحص التحديثات. تأكد من الإنترنت.")
             return
         }
-        guard rel.build > Self.currentBuild else {
+        guard let remoteBuild = await actualBuild(rel) else {
+            store.error = tr("Could not verify the update build.", "ما قدرت أتأكد من رقم نسخة التحديث.")
+            return
+        }
+        guard UpdaterMetadata.isNewer(remote: remoteBuild, installed: Self.currentBuild) else {
             store.error = tr("Mirsa is up to date (build \(Self.currentBuild)).", "مرسى محدّث، معك آخر نسخة (\(Self.currentBuild)).")
             return
         }
@@ -584,7 +615,8 @@ final class MirsaUpdater: ObservableObject {
     }
 
     func install(_ rel: Release, vm: AppViewModel) async {
-        guard let url = rel.ipa else { return }
+        guard let url = rel.ipa,
+              UpdaterMetadata.isNewer(remote: await actualBuild(rel), installed: Self.currentBuild) else { return }
         let store = AppsStore.shared
         installing = true; defer { installing = false }
         available = nil
@@ -604,6 +636,11 @@ final class MirsaUpdater: ObservableObject {
             guard ok, let app = (try? fm.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil))?
                     .first(where: { $0.pathExtension == "app" }) else {
                 throw NSError(domain: "Mirsa", code: 1, userInfo: [NSLocalizedDescriptionKey: "The update file is not a valid IPA"])
+            }
+            let info = try PropertyListSerialization.propertyList(from: Data(contentsOf: app.appendingPathComponent("Info.plist")), format: nil) as? [String: Any]
+            guard info?["CFBundleIdentifier"] as? String == "com.alaa.mirsa",
+                  UpdaterMetadata.isNewer(remote: info?["CFBundleVersion"] as? String, installed: Self.currentBuild) else {
+                throw NSError(domain: "Mirsa", code: 2, userInfo: [NSLocalizedDescriptionKey: tr("The downloaded update is not newer than this copy.", "التحديث اللي نزل مو أحدث من نسختك.")])
             }
             store.busy = nil
             await store.installSelf(vm: vm, from: app)
@@ -636,15 +673,15 @@ struct MirsaUpdateSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(tr("What's new", "شو الجديد")).font(.headline)
-                    Text((release.body?.isEmpty == false ? release.body! : (release.name ?? release.tag_name)))
+                    Text(UpdaterMetadata.notes(body: release.body, language: L.isArabic ? "ar" : "en") ?? tr("Release notes are not available for this version.", "تفاصيل التغييرات مو متوفرة لهالنسخة."))
                         .font(.subheadline).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding()
             }
             .background(RoundedRectangle(cornerRadius: 16).fill(.white.opacity(0.06)))
-            Text(tr("Mirsa closes for a moment while it installs, then it's updated. Wi-Fi and LocalDevVPN need to be on.",
-                    "Mirsa رح يسكّر لحظة وهو عم يتثبّت، وبعدين بيكون محدّث. لازم يكون الواي فاي و LocalDevVPN شغّالين."))
+            Text(tr("Enable LocalDevVPN and check your pairing file.",
+                    "فعّل LocalDevVPN وتأكد من صحة ملف الاقتران."))
                 .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
             Button(action: onUpdate) {
                 Text(tr("Update now", "حدّث هلّق")).font(.headline).frame(maxWidth: .infinity).padding()

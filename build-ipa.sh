@@ -27,6 +27,11 @@ fi
 echo "==> Packaging IPA..."
 cp -R "$APP_PATH" build/Mirsa.app
 
+# CI stamps the actual packaged parent and extensions, independently of marketing versions.
+if [ -n "${GITHUB_RUN_NUMBER:-}" ]; then
+    python3 scripts/stamp_ci_build.py build/Mirsa.app
+fi
+
 # Clean any existing signature
 rm -rf build/Mirsa.app/_CodeSignature
 rm -rf build/Mirsa.app/embedded.mobileprovision
@@ -45,3 +50,4 @@ rm -rf Payload Mirsa.app
 
 echo "==> Done! IPA generated at: $ROOT/build/Mirsa.ipa"
 ls -lh "$ROOT/build/Mirsa.ipa"
+python3 "$ROOT/scripts/verify_mirsa_ipa.py" "$ROOT/build/Mirsa.ipa"

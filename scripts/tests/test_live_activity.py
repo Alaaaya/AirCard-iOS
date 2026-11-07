@@ -55,7 +55,7 @@ class LiveActivityPackagingTests(unittest.TestCase):
             parent = pathlib.Path(tmp) / "Mirsa.app/Info.plist"
             child = parent.parent / "PlugIns/MirsaLiveActivity.appex/Info.plist"
             child.parent.mkdir(parents=True)
-            parent.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.alaa.mirsa"}))
+            parent.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.alaa.mirsa", "CFBundleVersion": "2.99.1"}))
             child.write_bytes(plistlib.dumps({"CFBundleIdentifier": bundle_id}))
             result = subprocess.run([sys.executable, "-c", self.setup_script(), str(parent), version],
                                     capture_output=True, text=True)
@@ -66,7 +66,7 @@ class LiveActivityPackagingTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(child["CFBundleIdentifier"], "com.alaa.mirsa.setup.liveactivity")
         self.assertEqual(child["CFBundleShortVersionString"], "1.3.99")
-        self.assertEqual(child["CFBundleVersion"], "1.3.99")
+        self.assertEqual(child["CFBundleVersion"], "2.99.1")
         # Parent change remains in the existing PlistBuddy commands.
         self.assertEqual(parent["CFBundleIdentifier"], "com.alaa.mirsa")
 
@@ -83,7 +83,7 @@ class LiveActivityPackagingTests(unittest.TestCase):
             parent = pathlib.Path(tmp) / "Mirsa.app/Info.plist"
             child = parent.parent / "PlugIns/MirsaLiveActivity.appex/Info.plist"
             child.parent.mkdir(parents=True)
-            parent.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.alaa.mirsa.setup"}))
+            parent.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.alaa.mirsa.setup", "CFBundleVersion": "2.99.1"}))
             child.write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.alaa.mirsa.setup.liveactivity"}))
             subprocess.run([sys.executable, "-c", script, str(parent), "1.3.99"], check=True)
             self.assertEqual(plistlib.loads(child.read_bytes())["CFBundleIdentifier"], "com.alaa.mirsa.setup.liveactivity")
