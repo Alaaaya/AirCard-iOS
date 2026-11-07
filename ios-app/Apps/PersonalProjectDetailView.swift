@@ -58,6 +58,12 @@ struct PersonalProjectDetailView: View {
                     settingsCard
                     depsCard
                     certificateCard
+                    Button { openBundleFiles() } label: {
+                        Label(bundleLoading ? personalText("Reading app…", "عم أقرأ التطبيق…") : personalText("Bundle files", "ملفات التطبيق"), systemImage: "doc.on.doc")
+                    }.buttonStyle(.bordered).disabled(bundleLoading)
+                    NavigationLink { MirsaTelemetryView(bundleID: app.bundleID) } label: {
+                        Label(personalText("Launches & crash logs", "التشغيل وسجلات الأعطال"), systemImage: "waveform.path.ecg")
+                    }.buttonStyle(.bordered)
                     Button { openWorkspace() } label: {
                         Label(personalText("Browse workspace folder", "تصفّح مجلد المشروع"), systemImage: "folder")
                     }.buttonStyle(.bordered)
@@ -111,6 +117,13 @@ struct PersonalProjectDetailView: View {
         }
         .sheet(isPresented: $sharing, onDismiss: cleanOutput) {
             if let output { PersonalSignedShare(url: output) }
+        }
+        .sheet(isPresented: Binding(get: { bundleManager != nil }, set: { if !$0 { bundleManager = nil } })) {
+            if let manager = bundleManager {
+                NavigationStack {
+                    BundleFileBrowserView(manager: manager, onChange: { draft.bundleOverlay = manager.overlay.isEmpty ? nil : manager.overlay })
+                }
+            }
         }
         .sheet(item: $workspace) { location in
             PersonalProjectFolderBrowser(root: location.url, title: draft.name)
@@ -247,6 +260,37 @@ struct PersonalProjectDetailView: View {
         if !components().contains(where: { $0.tweakID == comp.tweakID }) {
             draft.tweakIDs.removeAll { $0 == comp.tweakID }
             draft.excludedRoots = (draft.excludedRoots ?? []).filter { !$0.hasPrefix(comp.tweakID.uuidString + ":") }
+        }
+    }
+    @State private var bundleManager: BundleFileManager?
+    @State private var bundleLoading = false
+    private var bundleDirs: (original: URL, staging: URL) {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MirsaBundleFiles/\(app.id.uuidString)", isDirectory: true)
+        return (base.appendingPathComponent("original", isDirectory: true), base.appendingPathComponent("staging", isDirectory: true))
+    }
+    /// Extracts the project's IPA once (original stays untouched) and opens the staged file manager.
+    private func openBundleFiles() {
+        guard !bundleLoading else { return }
+        bundleLoading = true
+        let input = library.url(app); let dirs = bundleDirs; let overlay = draft.bundleOverlay ?? BundleOverlay()
+        Task {
+            let result: BundleFileManager? = await Task.detached(priority: .userInitiated) {
+                let fm = FileManager.default
+                do {
+                    if !fm.fileExists(atPath: dirs.original.path) {
+                        let tmp = dirs.original.deletingLastPathComponent().appendingPathComponent("extract-\(UUID().uuidString)", isDirectory: true)
+                        try fm.createDirectory(at: tmp.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try IPAEditorService.run("extract", input: input, output: tmp)
+                        try fm.moveItem(at: try IPAEditorService.app(in: tmp), to: dirs.original)
+                        try? fm.removeItem(at: tmp)
+                    }
+                    try fm.createDirectory(at: dirs.staging, withIntermediateDirectories: true)
+                    return try BundleFileManager(root: dirs.original, stagingDirectory: dirs.staging, overlay: overlay)
+                } catch { return nil }
+            }.value
+            bundleLoading = false
+            if let result { bundleManager = result } else { message = personalText("Could not read the app files.", "ما قدرت أقرأ ملفات التطبيق.") }
         }
     }
     @State private var targetList: [(id: String, kind: String, label: String)] = []
@@ -459,6 +503,9 @@ struct PersonalProjectDetailView: View {
         let minimum = draft.minimumOS.trimmingCharacters(in: .whitespacesAndNewlines)
         options.minimumOS = minimum.isEmpty ? nil : minimum
         do {
+            if let overlay = draft.bundleOverlay, !overlay.isEmpty {
+                options.bundleOverlay = overlay; options.bundleBlobs = bundleDirs.staging; options.bundleOriginal = bundleDirs.original
+            }
             let comps = components()
             options.libraries = comps.map(\.url)
             let targets = draft.tweakTargets ?? [:]

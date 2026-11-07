@@ -911,6 +911,7 @@ final class AppsStore: ObservableObject {
 
     func confirmLaunch(_ app: ManagedApp) {
         launchCandidate = nil
+        MirsaTelemetryStore.shared.recordLaunchAttempt(bundleID: app.id)
         let d = UserDefaults.standard
         d.set(Self.appDir(app.id).path, forKey: "aircard.guest.bundlePath")
         d.set(Self.dataDir(app.id).path, forKey: "aircard.guest.dataPath")

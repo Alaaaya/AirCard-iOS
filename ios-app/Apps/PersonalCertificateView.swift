@@ -222,6 +222,9 @@ enum PersonalCertificateSigner {
         let root = stage.appendingPathComponent("archive", isDirectory: true)
         try IPAEditorService.run("extract", input: ipa, output: root)
         let app = try IPAEditorService.app(in: root)
+        if let overlay = options.bundleOverlay, !overlay.isEmpty, let blobs = options.bundleBlobs, let original = options.bundleOriginal {
+            try BundleStagingApplier.apply(overlay, blobs: blobs, original: original, to: app)
+        }
         let originalInfo = try IPAEditorService.info(in: app)
         var info = originalInfo
         if let name = options.displayName {

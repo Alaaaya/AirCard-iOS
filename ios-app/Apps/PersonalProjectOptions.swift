@@ -14,6 +14,10 @@ struct PersonalProjectOptions: Sendable {
     var libraries: [URL] = []
     /// When non-empty, per-component target plan (inject_plan) replaces plain library injection.
     var injections: [[String: String]] = []
+    /// Staged file-manager edits applied to the workspace copy right after extraction (before every other edit).
+    var bundleOverlay: BundleOverlay? = nil
+    var bundleBlobs: URL? = nil
+    var bundleOriginal: URL? = nil
     var injectionOrder: [String] = []
     var additionalProfiles: [Data] = []
     var removeExtensions = false
@@ -61,5 +65,7 @@ struct PersonalProjectDraft: Codable, Equatable {
     var excludedRoots: [String]? = nil
     /// Ordered stable component ids (uuid:path). Drives per-component load order.
     var componentOrder: [String]? = nil
+    /// Staged bundle file edits (rename/delete/import/plist) made in the file manager.
+    var bundleOverlay: BundleOverlay? = nil
     var appliedTweakIDs: [UUID]? = nil
 }
