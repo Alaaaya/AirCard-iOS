@@ -24,9 +24,26 @@ struct MirsaKeyboardDismissal: UIViewRepresentable {
             attachedWindow?.removeGestureRecognizer(outsideTap)
             attachedWindow = window
             window?.addGestureRecognizer(outsideTap)
+            applyExplicitDismissMode()
             isUserInteractionEnabled = false
             accessibilityElementsHidden = true
         }
+
+        /// Raw value 4: interactive drag-to-dismiss, and any inputAccessoryView follows the
+        /// keyboard. With no accessory it behaves exactly like .interactive (raw 2).
+        /// SwiftUI's .interactively does not promise which UIKit mode it maps to, so set it.
+        func applyExplicitDismissMode() {
+            DispatchQueue.main.async { [weak self] in
+                guard let root = self?.window else { return }
+                func walk(_ v: UIView) {
+                    if let s = v as? UIScrollView { s.keyboardDismissMode = .interactiveWithAccessory }
+                    v.subviews.forEach(walk)
+                }
+                walk(root)
+            }
+        }
+
+        override func layoutSubviews() { super.layoutSubviews(); applyExplicitDismissMode() }
 
         @objc private func dismissKeyboard() {
             attachedWindow?.endEditing(false)
@@ -60,14 +77,29 @@ struct MirsaKeyboardDismissal: UIViewRepresentable {
 final class MirsaKeyboardVisibility: ObservableObject {
     @Published private(set) var isVisible = false
     private var tokens: [NSObjectProtocol] = []
+    private var hideGeneration = 0
 
     init(center: NotificationCenter = .default) {
         self.center = center
         tokens = [
             center.addObserver(forName: UIResponder.keyboardWillShowNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.hideGeneration += 1
                 self?.isVisible = true
             },
+            center.addObserver(forName: UIResponder.keyboardWillHideNotification, object: nil, queue: .main) { [weak self] note in
+                // DidHide can be late or skipped when the hosting window/sheet changes
+                // during dismissal; restore after the hide animation if no Show intervened.
+                guard let self else { return }
+                self.hideGeneration += 1
+                let generation = self.hideGeneration
+                let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double) ?? 0.35
+                DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.15) { [weak self] in
+                    guard let self, self.hideGeneration == generation else { return }
+                    self.isVisible = false
+                }
+            },
             center.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.hideGeneration += 1
                 self?.isVisible = false
             }
         ]

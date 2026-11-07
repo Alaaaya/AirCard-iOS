@@ -206,9 +206,9 @@ final class PersonalProjectIntegrationTests: XCTestCase {
 
     /// Offline simulator fixture, validated through the same IPA verifier as real sources.
     /// This does not claim a live host download or a device run.
-    /// OCR-only normalisation: whitespace, case and the capital-I/lowercase-l glyph ambiguity (Vision reads "UI" as "Ul").
+    /// OCR-only normalisation: just the capital-I/lowercase-l glyph ambiguity (Vision reads "UI" as "Ul").
     static func ocrFold(_ s: String) -> String {
-        s.lowercased().filter { !$0.isWhitespace }.replacingOccurrences(of: "l", with: "i").replacingOccurrences(of: "1", with: "i")
+        s.replacingOccurrences(of: "l", with: "I") // only observed Vision ambiguity: "UI" read as "Ul"; case and spacing stay exact
     }
 
     func testDiscoveryValidatedIPAAndEmptyArabicSnapshots() async throws {

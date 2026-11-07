@@ -6,7 +6,7 @@ seen=set()
 while True:
     try:
         text=open(log).read()
-        for name in re.findall(r'MIRSA_SCREENSHOT_REQUEST (project-real-keyboard-[a-z-]+)',text):
+        for name in re.findall(r'MIRSA_SCREENSHOT_REQUEST (project-real-keyboard-[A-Za-z-]+)',text):
             if name in seen: continue
             subprocess.run(['xcrun','simctl','io',device,'screenshot',os.path.join(out,name+'.png')],check=True)
             seen.add(name)

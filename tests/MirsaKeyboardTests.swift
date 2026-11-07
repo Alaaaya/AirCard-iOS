@@ -77,13 +77,15 @@ final class MirsaKeyboardTests: XCTestCase {
         XCTAssertLessThanOrEqual(visibleField.maxY, keyboardTop, "Focused project field remains above keyboard")
         XCTAssertGreaterThan(visibleField.height, 0)
         let scroll = try XCTUnwrap(descendants(host.view).compactMap { $0 as? UIScrollView }.first)
-        XCTAssertTrue([UIScrollView.KeyboardDismissMode.interactive, .interactiveWithAccessory].contains(scroll.keyboardDismissMode),
-                      "Must use interactive keyboard dismissal, with or without the accessory")
+        XCTAssertEqual(scroll.keyboardDismissMode, UIScrollView.KeyboardDismissMode.interactiveWithAccessory)
+        XCTAssertEqual(scroll.keyboardDismissMode.rawValue, 4, "interactiveWithAccessory raw value")
         XCTAssertFalse(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
                        "CTA must not be exposed or cover the page while software keyboard is visible")
         try await attach("project-real-keyboard-visible-focused-field")
         window.endEditing(false)
-        try await Task.sleep(nanoseconds: 800_000_000)
+        for _ in 0..<50 where accessibilityContains(host.view, identifier: "mirsa.project.sign") == false {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
         XCTAssertFalse(field.isFirstResponder)
         XCTAssertTrue(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
                       "CTA must return after keyboard fully dismisses")
