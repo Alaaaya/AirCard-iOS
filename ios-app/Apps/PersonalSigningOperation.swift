@@ -23,6 +23,7 @@ final class PersonalSigningOperation: ObservableObject {
     init(initialState: State? = nil) { state = initialState }
     private var backgroundID: UIBackgroundTaskIdentifier = .invalid
     private var control: PersonalSigningControl?
+    private var activityID: String?
     var running: Bool { state?.running == true }
 
     func start(projectID: UUID, title: String, input: URL, material: PersonalIdentityVault.Material,
@@ -37,7 +38,7 @@ final class PersonalSigningOperation: ObservableObject {
         lastActivityStage = nil
         state = State(id: id, projectID: projectID)
         let operation = MirsaOperationProgress.shared.begin(appID: projectID.uuidString, phase: .preparing)
-        MirsaInstallActivity.shared.begin(title: title, phase: .preparing)
+        activityID = MirsaInstallActivity.shared.begin(title: title, phase: .preparing)
         backgroundID = UIApplication.shared.beginBackgroundTask(withName: "Mirsa signing and installation") { [weak self] in
             Task { @MainActor in self?.expire(id: id) }
         }
@@ -56,7 +57,7 @@ final class PersonalSigningOperation: ObservableObject {
                 self.state?.fraction = result.installed ? 1 : nil
                 self.state?.error = result.installError
                 self.state?.running = false
-                MirsaInstallActivity.shared.finish(success: result.installed)
+                self.finishActivity(success: result.installed)
                 MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: result.installed ? .success : .failure)
             } catch {
                 guard self.state?.id == id else { return }
@@ -64,7 +65,7 @@ final class PersonalSigningOperation: ObservableObject {
                 self.state?.fraction = nil
                 self.state?.error = error.localizedDescription
                 self.state?.running = false
-                MirsaInstallActivity.shared.finish(success: false)
+                self.finishActivity(success: false)
                 MirsaCompletionFeedback.shared.finish(operationID: operation, outcome: MirsaCompletionFeedback.outcome(for: error))
             }
             MirsaOperationProgress.shared.finish(operation)
@@ -87,12 +88,20 @@ final class PersonalSigningOperation: ObservableObject {
         default: phase = .preparing; activity = .preparing
         }
         MirsaOperationProgress.shared.update(operation, phase: phase, fraction: event.fraction)
+        // Do not overwrite another download's activity if that operation replaced ours.
+        guard let activityID, MirsaInstallActivity.shared.operationID == activityID else { return }
         // Reset percentage only at a real stage transition.
         if lastActivityStage != event.stage {
             lastActivityStage = event.stage
             MirsaInstallActivity.shared.setPhase(activity)
         }
         if let fraction = event.fraction { MirsaInstallActivity.shared.updateProgress(fraction) }
+    }
+    private func finishActivity(success: Bool) {
+        if let activityID, MirsaInstallActivity.shared.operationID == activityID {
+            MirsaInstallActivity.shared.finish(success: success)
+        }
+        activityID = nil
     }
     private var lastActivityStage: Stage?
     private func expire(id: UUID) {
