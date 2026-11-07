@@ -196,6 +196,7 @@ struct PersonalProjectDetailView: View {
                         Text(tweak(id)?.name ?? "").font(.subheadline).lineLimit(1)
                         Menu {
                             Button { draft.directInjection = true } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: loaderOn ? "circle" : "checkmark") }
+                            Button { } label: { Text(personalText("Specific framework / extension (unavailable)", "إطار أو إضافة محددة (غير متاح)")) }.disabled(true)
                             Button { draft.directInjection = false } label: { Label(personalText("Via LoadControl", "عبر LoadControl"), systemImage: loaderOn ? "checkmark" : "circle") }
                         } label: {
                             Text((loaderOn ? personalText("Via LoadControl", "عبر LoadControl") : personalText("Via main executable", "عبر الملف التنفيذي الرئيسي")) + " ▾").font(.caption2).foregroundStyle(.secondary)

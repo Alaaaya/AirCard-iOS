@@ -52,5 +52,7 @@ struct PersonalProjectDraft: Codable, Equatable {
     var customEntitlements: Data? = nil
     var customEntitlementsName: String? = nil
     var directInjection: Bool? = nil
+    /// tweak id -> target id. nil/absent = main executable. Specific framework/extension targets stay disabled until the backend enumerates real Mach-O targets.
+    var tweakTargets: [String: String]? = nil
     var appliedTweakIDs: [UUID]? = nil
 }
