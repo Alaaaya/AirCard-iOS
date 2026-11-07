@@ -27,7 +27,10 @@ fn targets(app:&Path)->Result<Vec<Target>>{
 }
 pub(super) fn list_targets(app:&Path,out:&Path)->Result<()> {json(out,&targets(app)?)}
 pub(super) fn package_roots(root:&Path,out:&Path)->Result<()> {
+ if fs::symlink_metadata(root).map_err(err)?.file_type().is_symlink(){return Err("Package root cannot be a symlink".into())}
  let mut files=Vec::new();walk(root,&mut files)?;
+ let mut total=0u64;
+ for p in &files {let m=fs::symlink_metadata(p).map_err(err)?;if m.is_file(){total=total.checked_add(m.len()).ok_or("Package size overflow")?;if m.len()>FILE_LIMIT||total>TOTAL_LIMIT{return Err("Package root size limit exceeded".into())}}}
  let mut result=Vec::new();let mut names=HashSet::new();
  for p in files {
   let rel=p.strip_prefix(root).map_err(err)?;

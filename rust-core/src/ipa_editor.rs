@@ -275,6 +275,7 @@ fn extract_deb(input: &Path, dest: &Path) -> Result<()> {
         let mut total = 0u64;
         let mut count = 0;
         let mut seen = HashSet::new();
+        let mut path_spellings = BTreeMap::new();
         for entry in archive.entries().map_err(err)? {
             count += 1;
             if count > ENTRY_LIMIT {
@@ -289,6 +290,15 @@ fn extract_deb(input: &Path, dest: &Path) -> Result<()> {
             let rel = relative(&raw)?;
             if !seen.insert(rel.to_string_lossy().to_lowercase()) {
                 return Err("Duplicate tar path".into());
+            }
+            // Reject differently cased implicit parent directories too. iOS
+            // extraction must not merge A/x and a/y on case-insensitive volumes.
+            for prefix in rel.ancestors().filter(|p| !p.as_os_str().is_empty()) {
+                let spelling=prefix.to_str().ok_or("Non UTF8 Debian path")?.to_owned();
+                let folded=spelling.to_lowercase();
+                if let Some(old)=path_spellings.insert(folded,spelling.clone()) {
+                    if old!=spelling {return Err("Case-colliding tar path component".into())}
+                }
             }
             let kind = entry.header().entry_type();
             if !kind.is_dir() && !kind.is_file() {
@@ -1415,7 +1425,7 @@ mod integration_tests {
     #[test]
     fn deb_duplicate_paths_and_scripts_are_data_only() {
         let t=temporary();let deb=t.join("test.deb");
-        for names in [vec!["a/T.dylib","a/T.dylib"],vec!["a/T.dylib","A/t.dylib"],vec!["parent","parent/child"]] {
+        for names in [vec!["a/T.dylib","a/T.dylib"],vec!["a/T.dylib","A/t.dylib"],vec!["parent","parent/child"],vec!["A/x","a/y"]] {
             let mut archive=tar::Builder::new(Vec::new());
             for n in names {let mut h=tar::Header::new_gnu();h.set_size(4);h.set_mode(0o755);h.set_cksum();archive.append_data(&mut h,n,Cursor::new(b"test")).unwrap();}
             fs::write(&deb,ar_data("data.tar/",&archive.into_inner().unwrap())).unwrap();
