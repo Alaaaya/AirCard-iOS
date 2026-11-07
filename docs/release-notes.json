@@ -10,5 +10,9 @@
   "1.3.116": {
     "en": "Fixed the \"Extraction destination must not exist\" error that broke self-update and Sign & Install with your own certificate. Updates and signing now extract into a fresh folder, and sign results show clearly in an alert.",
     "ar": "صلّحنا خطأ «Extraction destination must not exist» اللي كان بيعطّل التحديث الذاتي والتوقيع والتثبيت بشهادتك. هلق الاستخراج بيصير بمجلد جديد، ونتيجة التوقيع بتظهر بوضوح بتنبيه."
+  },
+  "1.3.118": {
+    "en": "Signing with your own certificate now works with apps whose ID your profile doesn't list (for example Joker). Each app keeps its original bundle ID and is signed with your selected profile. A new \"Strict profile match\" switch in project settings (off by default) restores the old rejection. Whether iOS accepts the install depends on your profile.",
+    "ar": "التوقيع بشهادتك صار يشتغل مع تطبيقات معرّفها مو مكتوب ببروفايلك (مثل جوكر). كل تطبيق بيحافظ على معرّفه الأصلي وبينوقّع ببروفايلك المختار. وفي خيار جديد «مطابقة صارمة للبروفايل» بإعدادات المشروع (طافي افتراضياً) بيرجّع الرفض القديم. قبول iOS للتثبيت بيعتمد على بروفايلك."
   }
 }
