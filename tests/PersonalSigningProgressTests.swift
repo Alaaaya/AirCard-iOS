@@ -4,6 +4,24 @@ import SwiftUI
 
 @MainActor
 final class PersonalSigningProgressTests: XCTestCase {
+    func testOutOfOrderCallbacksDoNotRegressOrRepublishIdenticalProgress() {
+        var state = PersonalSigningOperation.State(id: UUID(), projectID: UUID())
+        XCTAssertTrue(state.apply(.signing(completed: 2, total: 4)))
+        XCTAssertEqual(state.fraction, 0.5)
+        XCTAssertFalse(state.apply(.signing(completed: 1, total: 4)))
+        XCTAssertEqual(state.completedUnits, 2)
+        XCTAssertFalse(state.apply(.signing(completed: 2, total: 4)))
+        XCTAssertTrue(state.apply(PersonalSigningEvent(stage: .packaging)))
+        XCTAssertNil(state.fraction)
+        XCTAssertFalse(state.apply(.signing(completed: 4, total: 4)))
+        XCTAssertEqual(state.stage, .packaging)
+        XCTAssertTrue(state.apply(PersonalSigningEvent(stage: .installing, fraction: 0.63)))
+        XCTAssertFalse(state.apply(PersonalSigningEvent(stage: .connecting)))
+        XCTAssertEqual(state.fraction, 0.63)
+        state.running = false
+        XCTAssertFalse(state.apply(PersonalSigningEvent(stage: .installing, fraction: 0.99)))
+    }
+
     func testMeasuredBundleProgressAndUnknownTotals() {
         XCTAssertNil(PersonalSigningEvent.signing(completed: 0, total: 0).fraction)
         XCTAssertEqual(PersonalSigningEvent.signing(completed: 1, total: 4).fraction, 0.25)

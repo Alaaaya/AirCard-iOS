@@ -6,7 +6,19 @@ import UIKit
 @MainActor
 final class PersonalSigningOperation: ObservableObject {
     static let shared = PersonalSigningOperation()
-    enum Stage: String { case preparing, signing, packaging, connecting, installing, completed, failed }
+    enum Stage: String {
+        case preparing, signing, packaging, connecting, installing, completed, failed
+        var order: Int {
+            switch self {
+            case .preparing: return 0
+            case .signing: return 1
+            case .packaging: return 2
+            case .connecting: return 3
+            case .installing: return 4
+            case .completed, .failed: return 5
+            }
+        }
+    }
     struct State {
         let id: UUID
         let projectID: UUID
@@ -18,6 +30,23 @@ final class PersonalSigningOperation: ObservableObject {
         var backgroundExpired = false
         var result: PersonalCertificateSigner.Result?
         var error: String?
+        /// Main-actor callbacks can be enqueued out of order. Do not regress a
+        /// measured stage or republish unchanged progress on every backend tick.
+        @discardableResult
+        mutating func apply(_ event: PersonalSigningEvent) -> Bool {
+            guard running, event.stage.order >= stage.order else { return false }
+            let sameStage = stage == event.stage
+            let nextFraction: Double?
+            if sameStage, let current = fraction {
+                nextFraction = max(current, event.fraction ?? current)
+            } else { nextFraction = event.fraction }
+            let nextCompleted = sameStage ? max(completedUnits, event.completed) : event.completed
+            guard stage != event.stage || fraction != nextFraction ||
+                    completedUnits != nextCompleted || totalUnits != event.total else { return false }
+            stage = event.stage; fraction = nextFraction
+            completedUnits = nextCompleted; totalUnits = event.total
+            return true
+        }
     }
     @Published private(set) var state: State?
     init(initialState: State? = nil) { state = initialState }
@@ -40,7 +69,9 @@ final class PersonalSigningOperation: ObservableObject {
         let operation = MirsaOperationProgress.shared.begin(appID: projectID.uuidString, phase: .preparing)
         activityID = MirsaInstallActivity.shared.begin(title: title, phase: .preparing)
         backgroundID = UIApplication.shared.beginBackgroundTask(withName: "Mirsa signing and installation") { [weak self] in
-            Task { @MainActor in self?.expire(id: id) }
+            // UIKit invokes this handler on the main thread. End the grant
+            // before the expiration handler returns, not in a later queued task.
+            MainActor.assumeIsolated { self?.expire(id: id) }
         }
         // Deliberately NOT attached to SwiftUI .task; leaving the screen cannot cancel it.
         Task {
@@ -75,11 +106,8 @@ final class PersonalSigningOperation: ObservableObject {
     }
 
     private func receive(_ event: PersonalSigningEvent, id: UUID, operation: UUID) {
-        guard state?.id == id, state?.running == true else { return }
-        state?.stage = event.stage
-        state?.fraction = event.fraction
-        state?.completedUnits = event.completed
-        state?.totalUnits = event.total
+        guard var next = state, next.id == id, next.apply(event) else { return }
+        state = next
         let phase: MirsaOperationProgress.Phase
         let activity: MirsaInstallActivity.Phase
         switch event.stage {
@@ -87,7 +115,7 @@ final class PersonalSigningOperation: ObservableObject {
         case .installing, .connecting: phase = .installing; activity = .installing
         default: phase = .preparing; activity = .preparing
         }
-        MirsaOperationProgress.shared.update(operation, phase: phase, fraction: event.fraction)
+        MirsaOperationProgress.shared.update(operation, phase: phase, fraction: next.fraction)
         // Do not overwrite another download's activity if that operation replaced ours.
         guard let activityID, MirsaInstallActivity.shared.operationID == activityID else { return }
         // Reset percentage only at a real stage transition.
@@ -95,7 +123,7 @@ final class PersonalSigningOperation: ObservableObject {
             lastActivityStage = event.stage
             MirsaInstallActivity.shared.setPhase(activity)
         }
-        if let fraction = event.fraction { MirsaInstallActivity.shared.updateProgress(fraction) }
+        if let fraction = next.fraction { MirsaInstallActivity.shared.updateProgress(fraction) }
     }
     private func finishActivity(success: Bool) {
         if let activityID, MirsaInstallActivity.shared.operationID == activityID {
