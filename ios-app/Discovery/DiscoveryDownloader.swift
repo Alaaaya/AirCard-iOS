@@ -47,7 +47,7 @@ final class DiscoveryDownloader {
         #endif
     }
 
-    func download(_ url: URL, progress: @escaping (Double) -> Void) async throws -> URL {
+    func download(_ url: URL, expectedBytes: Int64? = nil, progress: @escaping (Double) -> Void) async throws -> URL {
         if let v = DiscoveryURLPolicy.check(url) { throw Failure.unsafe(v.description) }
         #if canImport(AirliftFFI)
         let dest = FileManager.default.temporaryDirectory.appendingPathComponent("discovery-\(UUID().uuidString).ipa")
@@ -56,6 +56,16 @@ final class DiscoveryDownloader {
         let seconds = UInt64(max(1, min(1800, limits.totalTimeout)))
         let source = url.absoluteString
         progress(0)
+        // Optional real progress: poll the growing destination file against a known size.
+        let poller: Task<Void, Never>? = (expectedBytes ?? 0) > 0 ? Task.detached {
+            let total = Double(expectedBytes ?? 1)
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                let size = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? NSNumber)?.doubleValue ?? 0
+                progress(min(0.99, size / total))
+            }
+        } : nil
+        defer { poller?.cancel() }
         return try await withTaskCancellationHandler(operation: {
             let result = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
                 // Dedicated GCD worker, not a Tokio thread or a MainActor task.
