@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Security
 import SwiftUI
 import UIKit
@@ -71,7 +72,15 @@ final class AppsStore: ObservableObject {
     var downloadOperationID: UUID?
     @Published var pending: PendingImport? = nil
     @Published var prompt: SideloadPrompt? = nil
-    @Published var error: String? = nil
+    @Published var error: String? = nil {
+        didSet {
+            if let error {
+                let safe = InstallErrorText.sanitize(error, arabic: L.isArabic)
+                if safe != error { self.error = safe }
+            }
+        }
+    }
+    private var renewals: [String: Task<Bool, Never>] = [:]
     @Published var toast: String? = nil
     /// Bundle id of the Mirsa that installSelf just installed (to open it).
     @Published var installedSelfBundleID: String? = nil
@@ -470,8 +479,15 @@ final class AppsStore: ObservableObject {
 
         // Keep the original IPA: needed for refresh and for moving between locations.
         let orig = Self.originalIPA(p.bundleID)
-        try? fm.removeItem(at: orig)
-        do { try fm.moveItem(at: p.originalIPA, to: orig) } catch {
+        let publication = orig.deletingLastPathComponent().appendingPathComponent(".original-\(UUID().uuidString).ipa")
+        defer { try? fm.removeItem(at: publication) }
+        do {
+            try fm.copyItem(at: p.originalIPA, to: publication)
+            // Same-directory POSIX rename is atomic and preserves open readers.
+            guard rename(publication.path, orig.path) == 0 else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+        } catch {
             self.error = error.localizedDescription
             MirsaInstallActivity.shared.finish(success: false)
             MirsaCompletionFeedback.shared.finish(operationID: p.id, outcome: MirsaCompletionFeedback.outcome(for: error))
@@ -723,9 +739,26 @@ final class AppsStore: ObservableObject {
         }
     }
 
+    /// Foreground, background and intents join the same per-app renewal.
+    /// Resolve the current record and canonical original inside the operation.
+    private func renewCurrent(_ id: String, vm: AppViewModel?, feedback: Bool) async -> Bool {
+        if let existing = renewals[id] { return await existing.value }
+        let task = Task { @MainActor [weak self] in
+            guard let self, var current = self.apps.first(where: { $0.id == id && $0.location == .real }) else { return false }
+            if await self.installAsReal(&current, vm: vm, feedback: feedback) {
+                self.upsert(current)
+                return true
+            }
+            return false
+        }
+        renewals[id] = task
+        let succeeded = await task.value
+        renewals[id] = nil
+        return succeeded
+    }
+
     func refresh(_ app: ManagedApp, vm: AppViewModel?) async {
-        var a = app
-        if await installAsReal(&a, vm: vm) { upsert(a) }
+        _ = await renewCurrent(app.id, vm: vm, feedback: true)
     }
 
     /// Re-install every real app (new 7-day profile). Used by the button,
@@ -740,8 +773,7 @@ final class AppsStore: ObservableObject {
             return exp.timeIntervalSinceNow <= Double(w) * 86_400
         }
         for app in realApps where due(app.expires) {
-            var a = app
-            if await installAsReal(&a, vm: vm, feedback: false) { upsert(a); n += 1 }
+            if await renewCurrent(app.id, vm: vm, feedback: false) { n += 1 }
         }
         await resignContainerIfCertChanged()
         if n > 0 { toast = L.f("toast.refreshed", n) }
@@ -872,7 +904,7 @@ final class AppsStore: ObservableObject {
         if raw.contains("Device connection failed") || raw.contains("RemoteXPC") || raw.contains("timed out") {
             return L.t("err.device")
         }
-        return raw
+        return InstallErrorText.sanitize(raw, arabic: L.isArabic)
     }
 
     // MARK: Launch

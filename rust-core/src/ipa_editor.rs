@@ -80,7 +80,7 @@ fn checked_write<R: Read>(mut reader: R, path: &Path, size: u64, mode: u32) -> R
     }
     Ok(())
 }
-fn extract_zip(input: &Path, dest: &Path) -> Result<()> {
+pub(crate) fn extract_zip(input: &Path, dest: &Path) -> Result<()> {
     let mut zip = ZipArchive::new(File::open(input).map_err(err)?).map_err(err)?;
     if zip.len() > ENTRY_LIMIT {
         return Err("Too many archive entries".into());

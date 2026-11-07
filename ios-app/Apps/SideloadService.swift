@@ -133,7 +133,7 @@ enum SideloadError: LocalizedError {
             if let failure = DeviceConnectionFailure(m) {
                 return L.t("err.device") + "\n\n" + failure.message(arabic: L.isArabic)
             }
-            return m
+            return InstallErrorText.sanitize(m, arabic: L.isArabic)
         }
         return nil
     }
@@ -231,7 +231,7 @@ enum SideloadService {
             DispatchQueue.main.async { b.f(f, s) }
         }, { _, msg in
             guard let msg else { return }
-            let line = String(cString: msg)
+            let line = InstallErrorText.sanitize(String(cString: msg), arabic: L.isArabic)
             UserDefaults.standard.set(line, forKey: "mirsa.install.lastLog")
             DispatchQueue.main.async { AppViewModel.sharedLogSink?(line) }
         }, ctx, &out, &err)
@@ -256,7 +256,7 @@ enum SideloadService {
             DispatchQueue.main.async { b.f(f, s) }
         }, { _, msg in
             guard let msg else { return }
-            let line = String(cString: msg)
+            let line = InstallErrorText.sanitize(String(cString: msg), arabic: L.isArabic)
             DispatchQueue.main.async { AppViewModel.sharedLogSink?(line) }
         }, ctx, &out, &err)
         let o = take(out), e = take(err)

@@ -21,6 +21,7 @@ mod ipa_editor;
 mod personal_sign;
 mod signing_progress;
 mod discovery_transport;
+mod install_workspace;
 pub mod sideload;
 
 // Re-export idevice-ffi's symbols into our staticlib (tunnel_create_rppairing,

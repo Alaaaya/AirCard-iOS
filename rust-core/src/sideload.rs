@@ -43,6 +43,12 @@ use crate::ffi_util::{cstr, opt_str};
 
 const MACHINE_NAME: &str = "Mirsa";
 
+// AFC PublicStaging and Apple session signing must not overlap between callers.
+fn install_lock() -> &'static AsyncMutex<()> {
+    static LOCK: OnceLock<AsyncMutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| AsyncMutex::new(()))
+}
+
 // ---------------------------------------------------------------------------
 // FFI types
 
@@ -400,6 +406,39 @@ fn read_info(bundle_dir: &Path) -> plist::Dictionary {
         .unwrap_or_default()
 }
 
+/// Copy already-extracted inputs too. The caller may close its sheet, but this
+/// operation owns all bytes AFC will read. Existing walk rejects links/special
+/// files and bounds count/depth, avoiding a second archive parser.
+fn snapshot_app(workspace: &crate::install_workspace::InstallWorkspace, source: &Path) -> Result<PathBuf, String> {
+    let metadata = std::fs::symlink_metadata(source)
+        .map_err(|e| format!("Preparing extracted app: {e}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("Preparing extracted app: expected a real app directory".into());
+    }
+    let mut paths = Vec::new();
+    crate::ipa_editor::walk(source, &mut paths)
+        .map_err(|e| format!("Preparing extracted app: {e}"))?;
+    let target = workspace.root().join("Owned.app");
+    std::fs::create_dir(&target).map_err(|e| format!("Preparing extracted app: {e}"))?;
+    let mut total = 0u64;
+    for path in paths {
+        let relative = path.strip_prefix(source).map_err(|_| "Preparing extracted app: invalid relative path")?;
+        let output = target.join(relative);
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("Preparing extracted app: {e}"))?;
+        if meta.is_dir() {
+            std::fs::create_dir_all(output).map_err(|e| format!("Preparing extracted app: {e}"))?;
+        } else {
+            if !meta.is_file() || meta.file_type().is_symlink() || meta.len() > 512 * 1024 * 1024 {
+                return Err("Preparing extracted app: invalid file type or size".into());
+            }
+            total = total.checked_add(meta.len()).ok_or("Preparing extracted app: size limit exceeded")?;
+            if total > 4 * 1024 * 1024 * 1024 { return Err("Preparing extracted app: size limit exceeded".into()); }
+            std::fs::copy(&path, output).map_err(|e| format!("Preparing extracted app: {e}"))?;
+        }
+    }
+    Ok(target)
+}
+
 async fn install(
     pairing_path: String,
     app_path: String,
@@ -407,6 +446,17 @@ async fn install(
     logger: &Logger,
     progress: impl Fn(f64, &str) + Send + Sync + Clone + 'static,
 ) -> Result<serde_json::Value, String> {
+    let _install_guard = install_lock().lock().await;
+    let workspace = crate::install_workspace::InstallWorkspace::new()?;
+    let prepared = if Path::new(&app_path).extension().and_then(|e| e.to_str()) == Some("app") {
+        snapshot_app(&workspace, Path::new(&app_path))?
+    } else {
+        let source = workspace.snapshot(Path::new(&app_path))?;
+        let extraction = workspace.root().join("unpacked");
+        crate::ipa_editor::extract_zip(&source, &extraction)
+            .map_err(|e| format!("Preparing app archive: {e}"))?;
+        workspace.single_app(&extraction)?
+    };
     let pairing = std::fs::read(&pairing_path).map_err(|e| format!("Read pairing file: {e}"))?;
     progress(0.02, "Connecting to device");
     let tunnel = exploit::connect_tunnel(&pairing, logger).await?;
@@ -451,7 +501,7 @@ async fn install(
     let (signed, _special) = s
         .sideloader
         .sign_app(
-            PathBuf::from(&app_path),
+            prepared,
             Some(team.clone()),
             false,
             Some(move |f: f32| {
@@ -480,12 +530,7 @@ async fn install(
             isideload::sideload::install::install_app(&provider, &signed, cb).await
         }
     };
-    // Clean the temp extraction folder isideload created for an .ipa input.
-    if let Some(extracted) = signed.ancestors().find(|p| {
-        p.file_name().map(|n| n.to_string_lossy().ends_with("_extracted")).unwrap_or(false)
-    }) {
-        let _ = std::fs::remove_dir_all(extracted);
-    }
+    // workspace owns only this operation; retained through the complete AFC upload.
     res.map_err(|e| format!("Install failed: {e}"))?;
     progress(1.0, "Done");
 
@@ -835,7 +880,10 @@ async fn install_signed(
     logger: &Logger,
     progress: impl Fn(f64, &str) + Send + Sync + Clone + 'static,
 ) -> Result<serde_json::Value, String> {
-    let signed = validate_signed_app(&app_path)?;
+    let _install_guard = install_lock().lock().await;
+    let source = validate_signed_app(&app_path)?;
+    let workspace = crate::install_workspace::InstallWorkspace::new()?;
+    let signed = snapshot_app(&workspace, &source)?;
     let pairing = std::fs::read(&pairing_path).map_err(|e| format!("Read pairing file: {e}"))?;
     let info = read_info(&signed);
     let bundle_id = info.get("CFBundleIdentifier").and_then(|v| v.as_string()).unwrap_or_default().to_string();
@@ -1218,5 +1266,55 @@ mod install_signed_tests {
         fs::write(app.join("Info.plist"), b"").unwrap();
         assert!(validate_signed_app(app.to_str().unwrap()).is_err());
         let _ = fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod install_serialization_tests {
+    #[test]
+    fn manual_and_background_install_share_one_exclusive_gate() {
+        let runtime = tokio::runtime::Runtime::new().unwrap();
+        runtime.block_on(async {
+            let active = super::install_lock().lock().await;
+            assert!(super::install_lock().try_lock().is_err());
+            drop(active);
+            assert!(super::install_lock().try_lock().is_ok());
+        });
+    }
+}
+
+#[cfg(test)]
+mod owned_install_input_tests {
+    use super::*;
+    use crate::install_workspace::InstallWorkspace;
+    use std::{fs, io::Write};
+    #[test]
+    fn shared_quick_install_basename_has_independent_hardened_extractions() {
+        let source_owner = InstallWorkspace::new().unwrap();
+        let ipa = source_owner.root().join("original.ipa");
+        let file = fs::File::create(&ipa).unwrap();
+        let mut zip = zip::ZipWriter::new(file);
+        zip.start_file("Payload/T.app/Info.plist", zip::write::SimpleFileOptions::default()).unwrap();
+        zip.write_all(b"fixture").unwrap(); zip.finish().unwrap();
+        let first=InstallWorkspace::new().unwrap(); let next=InstallWorkspace::new().unwrap();
+        let a=first.snapshot(&ipa).unwrap(); let b=next.snapshot(&ipa).unwrap();
+        crate::ipa_editor::extract_zip(&a,&first.root().join("unpacked")).unwrap();
+        crate::ipa_editor::extract_zip(&b,&next.root().join("unpacked")).unwrap();
+        let current=next.single_app(&next.root().join("unpacked")).unwrap();
+        drop(first);
+        assert_eq!(fs::read(current.join("Info.plist")).unwrap(),b"fixture");
+        assert!(ipa.exists());
+    }
+    #[test]
+    fn signed_app_snapshot_survives_caller_cleanup_and_preserves_source() {
+        let caller=InstallWorkspace::new().unwrap();
+        let app=caller.root().join("Signed.app");
+        fs::create_dir_all(app.join("_CodeSignature")).unwrap();
+        fs::write(app.join("Info.plist"),b"metadata").unwrap();
+        fs::write(app.join("_CodeSignature/CodeResources"),b"seal").unwrap();
+        let install=InstallWorkspace::new().unwrap();
+        let owned=snapshot_app(&install,&app).unwrap();
+        assert!(app.exists()); drop(caller);
+        assert_eq!(fs::read(owned.join("_CodeSignature/CodeResources")).unwrap(),b"seal");
     }
 }
