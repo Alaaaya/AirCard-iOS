@@ -316,6 +316,8 @@ struct AppsTab: View {
                     .foregroundStyle(.white)
             }
             Spacer()
+            LanguageGlobeMenu()
+                .appsGlassCapsule()
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 17, weight: .semibold))
@@ -790,8 +792,8 @@ struct InstallChoiceSheet: View {
                         HStack(spacing: 12) {
                             Image(systemName: "slider.horizontal.3").font(.title3)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text(L.isArabic ? "تعديل التطبيق والتويكس" : "Edit IPA & inject tweaks").font(.headline)
-                                Text(L.isArabic ? "الاسم، الأيقونة، الإصدار وملفاتك الخاصة" : "Name, icon, version and your own code")
+                                Text(tr("Edit IPA & inject tweaks", "تعديل التطبيق والتويكس")).font(.headline)
+                                Text(tr("Name, icon, version and your own code", "الاسم، الأيقونة، الإصدار وملفاتك الخاصة"))
                                     .font(.caption).foregroundStyle(.white.opacity(0.6))
                             }
                             Spacer()

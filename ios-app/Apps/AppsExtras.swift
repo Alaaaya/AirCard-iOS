@@ -6,7 +6,10 @@ import UserNotifications
 import UIKit
 
 /// Bilingual helper for the extras below.
-@inline(__always) func tr(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
+func tr(_ en: String, _ ar: String) -> String { MirsaTr.pick(en, ar) }
+func tr(_ en: String, _ ar: String, ckb: String, kmr: String) -> String {
+    switch L.lang { case .english: return en; case .arabic: return ar; case .sorani: return ckb; case .kurmanji: return kmr }
+}
 
 extension AppsStore {
     func cancelDownload() {

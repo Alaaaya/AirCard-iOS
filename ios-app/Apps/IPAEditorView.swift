@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import ImageIO
 
-private func editorText(_ english: String, _ arabic: String) -> String { L.isArabic ? arabic : english }
+private func editorText(_ english: String, _ arabic: String) -> String { MirsaTr.pick(english, arabic) }
 
 struct IPAEditorView: View {
     let pending: PendingImport

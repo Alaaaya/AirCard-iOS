@@ -32,7 +32,7 @@ struct PersonalProjectOptions: Sendable {
 
 enum PersonalGameMode: String, Codable, CaseIterable, Sendable { case keep, on, off }
 
-func personalText(_ en: String, _ ar: String) -> String { L.isArabic ? ar : en }
+func personalText(_ en: String, _ ar: String) -> String { MirsaTr.pick(en, ar) }
 
 /// Editable values persisted per library app. Library files are referenced by id,
 /// never by absolute path.

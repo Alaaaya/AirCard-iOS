@@ -410,7 +410,7 @@ final class AppsStore: ObservableObject {
     /// Payload *and* the saved refresh IPA are ready.
     func editPending(_ options: IPAEditOptions, libraries: [URL]) async throws {
         guard let p = pending, busy == nil else { throw SideloadError.message("No editable IPA is ready.") }
-        busy = L.isArabic ? "عم نجهز التعديلات" : "Preparing edits"
+        busy = tr("Preparing edits", "عم نجهز التعديلات")
         MirsaInstallActivity.shared.setPhase(.preparing, title: p.name)
         defer { busy = nil }
         do {
