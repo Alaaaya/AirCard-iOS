@@ -19,6 +19,7 @@ struct PersonalProjectDetailView: View {
     @State private var consumedResult: UUID?
     private var busy: Bool { configBusy || signing.running }
     @State private var message: String?
+    @State private var resultAlert: String?
     @State private var output: URL?
     @State private var sharing = false
     @State private var icon: UIImage?
@@ -128,6 +129,9 @@ struct PersonalProjectDetailView: View {
         .sheet(item: $workspace) { location in
             PersonalProjectFolderBrowser(root: location.url, title: draft.name)
         }
+        .alert(personalText("Result", "النتيجة"), isPresented: Binding(get: { resultAlert != nil }, set: { if !$0 { resultAlert = nil } })) {
+            Button(personalText("OK", "تمام")) { resultAlert = nil }
+        } message: { Text(resultAlert ?? "") }
         .task { await load(); await inspect(); consumeSigningResult() }
         .onChange(of: signing.state?.running) { _ in consumeSigningResult() }
         .onChange(of: draft) { _ in if loaded, let destination = draftDestination { draftWriter.schedule(draft, to: destination) } }
@@ -540,7 +544,11 @@ struct PersonalProjectDetailView: View {
         guard let state = signing.state, state.projectID == app.id, !state.running,
               consumedResult != state.id else { return }
         consumedResult = state.id
-        guard let result = state.result else { message = state.error; return }
+        guard let result = state.result else {
+            let text = state.error?.trimmingCharacters(in: .whitespacesAndNewlines)
+            message = (text?.isEmpty == false) ? text : personalText("Signing stopped before it finished. Try again.", "توقف التوقيع قبل ما يكتمل. جرّب من جديد.")
+            resultAlert = message; return
+        }
         output = result.url
         draft.appliedTweakIDs = draft.tweakIDs
         if result.installed { message = personalText("Signed and installed.", "تم التوقيع والتثبيت.") }
@@ -551,5 +559,6 @@ struct PersonalProjectDetailView: View {
         if result.bundleIdentifierChanged { message = (message ?? "") + "\nتم تغيير المعرّف ليطابق البروفايل" }
         if !result.verification.isVerified { message = (message ?? "") + "\n" + result.verification.warningText }
         sharing = !result.installed
+        resultAlert = message
     }
 }
