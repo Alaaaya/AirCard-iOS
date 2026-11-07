@@ -661,6 +661,17 @@ struct ContentView: View {
                 } catch { vm.errorMessage = error.localizedDescription }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mirsaIncomingIPA)) { note in
+            guard let file = note.object as? URL else { return }
+            Task {
+                do {
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    let snapshot = try await Task.detached(priority: .userInitiated) { try OpenInIPA.snapshot(file) }.value
+                    incomingQueue.append(IncomingItem(url: snapshot, filename: file.lastPathComponent))
+                    presentNextIncoming()
+                } catch { vm.errorMessage = error.localizedDescription }
+            }
+        }
         .sheet(item: $incoming, onDismiss: {
             // Swipe-dismiss or cancel: only an unconsumed snapshot is removed.
             if let leftover = presentedURL { OpenInIPA.remove(leftover); presentedURL = nil }

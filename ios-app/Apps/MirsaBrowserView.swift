@@ -183,7 +183,7 @@ private struct BrowserBody: View {
                     case .added(let bid, let ver):
                         icon("arrow.down.app", label: tr("Install", "تثبيت")) {
                             let item = DownloadsLibrary.shared.items.first { $0.bundleID == bid && $0.version == ver }
-                            if let item { Task { await AppsStore.shared.importIPA(from: DownloadsLibrary.ipaURL(item)) } }
+                            if let item { NotificationCenter.default.post(name: .mirsaIncomingIPA, object: DownloadsLibrary.ipaURL(item)) }
                             router.dismiss(it.id)
                         }
                     case .failed: icon("xmark", label: tr("Dismiss", "إخفاء")) { router.dismiss(it.id) }
@@ -196,4 +196,10 @@ private struct BrowserBody: View {
         }
         .padding(.horizontal, 12).padding(.bottom, 8)
     }
+}
+
+
+extension Notification.Name {
+    /// Posted with an IPA file URL; ContentView routes it through the single confirmation sheet.
+    static let mirsaIncomingIPA = Notification.Name("mirsa.incomingIPA")
 }

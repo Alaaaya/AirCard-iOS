@@ -257,6 +257,7 @@ struct PersonalAppsHub: View {
     @StateObject private var library = PersonalAppsLibrary.shared
     @State private var importing = false
     @State private var importingURL = false
+    @State private var showBrowser = false
     @State private var busy = false
     @State private var message: String?
     @State private var detail: PersonalLibraryApp?
@@ -372,6 +373,7 @@ struct PersonalAppsHub: View {
                         Menu {
                             Button { importing = true } label: { Label(personalText("From Files", "من الملفات"), systemImage: "folder") }
                             Button { importingURL = true } label: { Label(personalText("From link", "من رابط"), systemImage: "link") }
+                            Button { showBrowser = true } label: { Label(personalText("Browser", "المتصفح"), systemImage: "safari") }
                         } label: {
                             Image(systemName: "plus").font(.title3.weight(.semibold)).frame(width: 42, height: 42).appsGlass(cornerRadius: 21)
                         }.disabled(busy || library.loadError != nil)
@@ -449,6 +451,8 @@ struct PersonalAppsHub: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: $showBrowser) { MirsaBrowserView(initialURL: nil) { showBrowser = false } }
+        .onReceive(NotificationCenter.default.publisher(for: .mirsaIncomingIPA)) { _ in showBrowser = false }
         .sheet(isPresented: $importingURL) { PersonalURLImportSheet(disabled: library.loadError != nil) { try await library.add($0, signed: false) } }
         .sheet(isPresented: $showCertificates) {
             PersonalCertificateManagerView()
