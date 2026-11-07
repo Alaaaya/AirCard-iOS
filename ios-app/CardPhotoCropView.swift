@@ -30,20 +30,20 @@ struct CardPhotoCropView: View {
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel("Photo crop")
                         .accessibilityHint("Move the photo to choose the part shown on your card. Use the Zoom slider to resize it.")
-                        .accessibilityAction(named: Text("Move photo left")) { editor.pan(x: 0.1, y: 0) }
-                        .accessibilityAction(named: Text("Move photo right")) { editor.pan(x: -0.1, y: 0) }
-                        .accessibilityAction(named: Text("Move photo up")) { editor.pan(x: 0, y: 0.1) }
-                        .accessibilityAction(named: Text("Move photo down")) { editor.pan(x: 0, y: -0.1) }
+                        .accessibilityAction(named: Text(MirsaTr.lit("Move photo left"))) { editor.pan(x: 0.1, y: 0) }
+                        .accessibilityAction(named: Text(MirsaTr.lit("Move photo right"))) { editor.pan(x: -0.1, y: 0) }
+                        .accessibilityAction(named: Text(MirsaTr.lit("Move photo up"))) { editor.pan(x: 0, y: 0.1) }
+                        .accessibilityAction(named: Text(MirsaTr.lit("Move photo down"))) { editor.pan(x: 0, y: -0.1) }
                 }
 
-                Text("Drag to position. Pinch to zoom.")
+                Text(MirsaTr.lit("Drag to position. Pinch to zoom."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: 12) {
                     Slider(value: Binding(get: { editor.zoom }, set: { editor.setZoom($0) }), in: 1...5) {
-                        Text("Zoom")
+                        Text(MirsaTr.lit("Zoom"))
                     }
                     .accessibilityValue("\(Int((editor.zoom * 100).rounded())) percent")
 
@@ -51,20 +51,20 @@ struct CardPhotoCropView: View {
                         .font(.subheadline.monospacedDigit())
                         .fixedSize()
 
-                    Button("Reset") { editor.reset() }
+                    Button(MirsaTr.lit("Reset")) { editor.reset() }
                         .fixedSize()
                 }
             }
             .padding()
             .background(Color(uiColor: .systemGroupedBackground))
-            .navigationTitle("Adjust Photo")
+            .navigationTitle(MirsaTr.lit("Adjust Photo"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Back") { dismiss() }
+                    Button(MirsaTr.lit("Back")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Use Photo") {
+                    Button(MirsaTr.lit("Use Photo")) {
                         guard let cropped = editor.canvas?.croppedImage() else { return }
                         onUse(cropped)
                         dismiss()
