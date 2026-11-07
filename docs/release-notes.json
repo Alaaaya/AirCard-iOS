@@ -14,5 +14,9 @@
   "1.3.118": {
     "en": "Signing with your own certificate now works with apps whose ID your profile doesn't list (for example Joker). Each app keeps its original bundle ID and is signed with your selected profile. A new \"Strict profile match\" switch in project settings (off by default) restores the old rejection. Whether iOS accepts the install depends on your profile.",
     "ar": "التوقيع بشهادتك صار يشتغل مع تطبيقات معرّفها مو مكتوب ببروفايلك (مثل جوكر). كل تطبيق بيحافظ على معرّفه الأصلي وبينوقّع ببروفايلك المختار. وفي خيار جديد «مطابقة صارمة للبروفايل» بإعدادات المشروع (طافي افتراضياً) بيرجّع الرفض القديم. قبول iOS للتثبيت بيعتمد على بروفايلك."
+  },
+  "1.3.128": {
+    "en": "New language button with Arabic, Kurdish Sorani, Kurdish Kurmanji and English. Certificate details now show capabilities, registered devices and expiry. The My Certificate install mode signs locally and installs through a temporary HTTPS link without an active VPN, using your securely cached real device ID. A one-time VPN/pairing setup is required to read that ID first. Apple ID remains the default install mode. Fixed a startup crash in translations.",
+    "ar": "زر لغات جديد للعربية والكوردي السوراني والكوردي الكرمانجي والإنكليزية. تفاصيل الشهادة صارت تعرض الصلاحيات والأجهزة المسجلة وتاريخ الانتهاء. وضع «شهادتي» بيوقّع محلياً وبيثبّت برابط HTTPS مؤقت بدون VPN شغّال، باستخدام معرّف جهازك الحقيقي المحفوظ بأمان. لازم تعمل إعداد VPN والاقتران مرة واحدة أولاً لقراءة المعرّف. وضع Apple ID بيضل الافتراضي. وصلّحنا مشكلة بالترجمات كانت بتسكّر التطبيق عند التشغيل."
   }
 }
