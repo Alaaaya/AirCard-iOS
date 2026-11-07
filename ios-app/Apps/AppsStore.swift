@@ -212,7 +212,7 @@ final class AppsStore: ObservableObject {
         let s = NetworkStatus.summarize(deviceIP: ip)
         let hasPairing = FileManager.default.fileExists(atPath: PairingController.pairingFilePath())
         vm?.syncTargetHostsToRust()
-        return s.vpn && s.wifi && hasPairing
+        return DeviceConnectionPolicy.mayAttempt(tunnelRoute: s.vpn, hasPairing: hasPairing)
     }
 
     // MARK: Account
@@ -866,8 +866,11 @@ final class AppsStore: ObservableObject {
     /// Turn the raw connection error into something readable, keeping the detail.
     static func friendly(_ error: Error) -> String {
         let raw = error.localizedDescription
+        if let failure = DeviceConnectionFailure(raw) {
+            return L.t("err.device") + "\n\n" + tr(failure.message(arabic: false), failure.message(arabic: true))
+        }
         if raw.contains("Device connection failed") || raw.contains("RemoteXPC") || raw.contains("timed out") {
-            return L.t("err.device") + "\n\n" + raw
+            return L.t("err.device")
         }
         return raw
     }

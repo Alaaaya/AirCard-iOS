@@ -3,7 +3,7 @@ import UserNotifications
 
 /// "Refresh Apps" — for a Shortcuts personal automation (e.g. daily, or when
 /// joining home Wi-Fi) so sideloaded real apps never hit their 7-day expiry.
-/// Needs Wi-Fi + the loopback VPN, the same as refreshing from the Apps tab.
+/// Needs the loopback VPN and a valid pairing record, the same as refreshing from the Apps tab.
 struct RefreshAppsIntent: AppIntent {
     static var title: LocalizedStringResource = "Refresh Mirsa Apps"
     static var description = IntentDescription("Re-signs and reinstalls every app Mirsa installed as a real app, and re-signs Container apps when the certificate changed.")
@@ -64,8 +64,8 @@ struct RefreshAllAppsIntent: AppIntent {
         let vm = AppViewModel.shared ?? AppViewModel()
         vm.refreshNetworkStatus()
         var succeeded = false
-        var message = tr("Connect LocalDevVPN and Wi-Fi first.", "شغّل LocalDevVPN والواي فاي أولاً.")
-        if vm.vpnUp && vm.wifiUp {
+        var message = tr("Enable LocalDevVPN and check your pairing file.", "فعّل LocalDevVPN وتأكد من صحة ملف الاقتران.")
+        if vm.vpnUp {
             if store.busy != nil {
                 message = tr("Mirsa is busy. Try again later.", "Mirsa مشغول. جرّب بعد شوي.")
             } else if await store.ensureSession() {

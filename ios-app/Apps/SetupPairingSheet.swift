@@ -8,7 +8,7 @@ struct SetupPairingSheet: View {
     @State private var showFilePicker = false
     var showsClose = true
 
-    private var networkOK: Bool { vm.vpnUp && vm.wifiUp }
+    private var networkOK: Bool { vm.vpnUp }
 
     var body: some View {
         ZStack {

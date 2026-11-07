@@ -333,7 +333,7 @@ mod tests {
         let logger = crate::exploit::Logger { cb: None, ctx: std::ptr::null_mut() };
         let bytes = vec![0; PAIRING_LIMIT as usize + 1];
         let result = rt.block_on(crate::exploit::connect_tunnel(&bytes, &logger));
-        assert!(matches!(result, Err(e) if e.contains("حجم")));
+        assert!(matches!(result, Err(e) if e.starts_with("MIRSA_CONNECTION|pairing|pairing_rejected|")));
     }
     #[test] fn custom_entitlements_bounded_and_strips_identity() {
         let dir = std::env::temp_dir().join(format!("mirsa-ent-{}", std::process::id()));

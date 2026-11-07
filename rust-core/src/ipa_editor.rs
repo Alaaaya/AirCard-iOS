@@ -1072,7 +1072,7 @@ mod tests {
             rt.block_on(async { ffi_json(request) })
         }).unwrap().join().unwrap();
         assert_eq!(result["ok"], false);
-        assert!(result["error"].as_str().unwrap().contains("neither a valid Lockdown"), "{result}");
+        assert!(result["error"].as_str().unwrap().contains("MIRSA_CONNECTION|pairing|pairing_rejected|"), "{result}");
         fs::remove_dir_all(dir).unwrap();
     }
     #[test]

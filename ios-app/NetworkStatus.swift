@@ -53,13 +53,16 @@ enum NetworkStatus {
     }
 
     private static func isLoopbackTunnelUp(in ifs: [Interface], deviceIP: String) -> Bool {
-        if ifs.contains(where: { isTunnelInterface($0.name) }) {
-            return true
-        }
-        guard let target = ipv4Value(deviceIP) else {
-            return false
-        }
-        if tunnelCarriesRoute(to: deviceIP, in: ifs) == true { return true }
+        routeAvailable(in: ifs, deviceIP: deviceIP,
+                       selectedTunnelRoute: tunnelCarriesRoute(to: deviceIP, in: ifs))
+    }
+
+    // Pure policy used by production detection and fixture tests.
+    static func routeAvailable(in ifs: [Interface], deviceIP: String,
+                               selectedTunnelRoute: Bool?) -> Bool {
+        guard let target = ipv4Value(deviceIP) else { return false }
+        // Prefer the kernel-selected route. An unrelated VPN is not enough.
+        if let routed = selectedTunnelRoute { return routed }
         return ifs.contains { isTunnelInterface($0.name) && subnet($0, contains: target) }
     }
 
@@ -126,7 +129,7 @@ enum NetworkStatus {
     private static func subnet(_ interface: Interface, contains target: UInt32) -> Bool {
         guard let address = ipv4Value(interface.ipv4) else { return false }
         guard let mask = interface.netmask.flatMap(ipv4Value), mask != 0 else {
-            return (address & 0xFFFF_FF00) == (target & 0xFFFF_FF00)
+            return false
         }
         return (address & mask) == (target & mask)
     }

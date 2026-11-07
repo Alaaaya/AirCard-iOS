@@ -9,7 +9,7 @@ struct SetupView: View {
     @State private var showPairing = false
     @State private var showLogin = false
 
-    private var networkOK: Bool { vm.vpnUp && vm.wifiUp }
+    private var networkOK: Bool { vm.vpnUp }
     private var pairingOK: Bool { vm.hasPairingFile }
     private var accountOK: Bool { store.account != nil }
     private var ready: Bool { networkOK && pairingOK && accountOK }

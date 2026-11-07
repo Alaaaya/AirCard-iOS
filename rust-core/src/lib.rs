@@ -10,6 +10,8 @@
 use std::ffi::{c_char, c_void};
 
 pub mod exploit;
+mod connection_failure;
+mod connection_route;
 pub mod ffi_util;
 pub mod grappa;
 pub mod logging;

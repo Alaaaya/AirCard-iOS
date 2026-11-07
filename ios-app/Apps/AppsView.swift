@@ -333,8 +333,6 @@ struct AppsTab: View {
         if segment == .real || store.pending != nil {
             if !vm.vpnUp {
                 WarningPill(icon: "lock.shield", text: L.t("hero.vpnOff"))
-            } else if !vm.wifiUp {
-                WarningPill(icon: "wifi.slash", text: L.t("hero.wifiOff"))
             }
         }
     }

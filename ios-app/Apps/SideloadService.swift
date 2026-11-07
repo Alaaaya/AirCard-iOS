@@ -128,7 +128,15 @@ final class PromptBridge {
 
 enum SideloadError: LocalizedError {
     case message(String)
-    var errorDescription: String? { if case .message(let m) = self { return m }; return nil }
+    var errorDescription: String? {
+        if case .message(let m) = self {
+            if let failure = DeviceConnectionFailure(m) {
+                return L.t("err.device") + "\n\n" + failure.message(arabic: L.isArabic)
+            }
+            return m
+        }
+        return nil
+    }
 }
 
 /// Thin, thread-safe wrapper over the `al_sl_*` / `al_container_*` FFI.
