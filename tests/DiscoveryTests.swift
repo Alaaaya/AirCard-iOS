@@ -65,6 +65,28 @@ private func ipa(bundle: String = "com.example.app", version: String = "1.2", mi
 // MARK: - tests
 
 final class DiscoveryTests: XCTestCase {
+    func testUpdaterArchiveBoundsAndSymlinks() throws {
+        var limits = IPALimits()
+        limits.maxPathDepth = 3
+        limits.rejectSymlinks = true
+        XCTAssertThrowsError(try ZipReader(data: makeZip([("a/b/c/d", Data())]), limits: limits))
+        XCTAssertThrowsError(try ZipReader(data: makeZip([("../Info.plist", Data())]), limits: limits))
+        var link = makeZip([("link", Data("target".utf8))])
+        let end = link.count - 22
+        let central = Int(ZipReader.le32(link, end + 16))
+        link.replaceSubrange((central + 38)..<(central + 42), with: le32(0xA1FF0000))
+        XCTAssertThrowsError(try ZipReader(data: link, limits: limits))
+        let ordinary = makeZip([("safe", Data([1, 2, 3]))])
+        XCTAssertNoThrow(try ZipReader(data: ordinary, limits: limits))
+        limits.maxEntries = 0
+        XCTAssertThrowsError(try ZipReader(data: ordinary, limits: limits))
+        limits.maxEntries = 10
+        limits.maxTotalUncompressed = 2
+        XCTAssertThrowsError(try ZipReader(data: ordinary, limits: limits))
+        limits.maxFileSize = 22
+        XCTAssertThrowsError(try ZipReader(data: ordinary, limits: limits))
+    }
+
     func u(_ s: String) -> URL { URL(string: s)! }
 
     func testURLPolicyAccepts() {

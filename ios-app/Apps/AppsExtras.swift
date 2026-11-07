@@ -546,27 +546,40 @@ final class MirsaUpdater: ObservableObject {
     /// Inspect the shipped plist before offering an update, without cached installed state.
     private func actualBuild(_ rel: Release) async -> String? {
         guard let url = rel.ipa else { return nil }
-        let fm = FileManager.default
-        let work = fm.temporaryDirectory.appendingPathComponent("update-check-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: work) }
         do {
-            var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
-            request.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
-            let (temporary, response) = try await URLSession.shared.download(for: request)
-            defer { try? fm.removeItem(at: temporary) }
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
-            try fm.createDirectory(at: work, withIntermediateDirectories: true)
-            let path = temporary.path
-            let output = work.path
-            guard await Task.detached(operation: { SideloadService.unzip(path, to: output) }).value else { return nil }
-            let payload = work.appendingPathComponent("Payload")
-            let apps = try fm.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil).filter { $0.pathExtension == "app" }
-            guard apps.count == 1,
-                  let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: apps[0].appendingPathComponent("Info.plist")), format: nil) as? [String: Any],
-                  plist["CFBundleIdentifier"] as? String == "com.alaa.mirsa" else { return nil }
-            return plist["CFBundleVersion"] as? String
+            let file = try await updaterDownload(url)
+            defer { try? FileManager.default.removeItem(at: file) }
+            let facts = try await Self.verifiedUpdate(file)
+            return facts.build
         } catch { return nil }
     }
+
+    private func updaterDownload(_ url: URL) async throws -> URL {
+        let downloader = DiscoveryDownloader(limits: .init(maxBytes: 128 * 1024 * 1024,
+            maxRedirects: 5, requestTimeout: 30, totalTimeout: 120))
+        return try await downloader.download(url, progress: { _ in })
+    }
+
+    private static func verifiedUpdate(_ file: URL) async throws -> IPAFacts {
+        try Task.checkCancellation()
+        let facts = try await Task.detached {
+            var limits = IPALimits()
+            limits.maxFileSize = 128 * 1024 * 1024
+            limits.maxTotalUncompressed = 512 * 1024 * 1024
+            limits.maxEntries = 10_000
+            limits.maxExecutable = 128 * 1024 * 1024
+            limits.maxPlist = 1024 * 1024
+            limits.maxCompressionRatio = 200
+            limits.maxPathDepth = 32
+            limits.rejectSymlinks = true
+            // Existing bounded, memory-mapped archive reader, no extraction to disk.
+            return try IPAValidator.validate(file: file, expectedBundleID: "com.alaa.mirsa",
+                expectedVersion: nil, deviceOS: nil, limits: limits)
+        }.value
+        try Task.checkCancellation()
+        return facts
+    }
+
     /// "Later" only hides the prompt until Mirsa is opened again.
     private var snoozedUntil: Date?
     @Published var checking = false
@@ -574,7 +587,7 @@ final class MirsaUpdater: ObservableObject {
     func check(force: Bool = false) async {
         guard !AppsStore.isSetupMode, available == nil, !installing else { return }
         if !force, let u = snoozedUntil, u > Date() { return }
-        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
         guard let (d, r) = try? await URLSession.shared.data(for: req),
@@ -594,7 +607,7 @@ final class MirsaUpdater: ObservableObject {
         checking = true; defer { checking = false }
         available = nil
         snoozedUntil = nil
-        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!)
+        var req = URLRequest(url: URL(string: "https://api.github.com/repos/\(Self.repo)/releases/latest")!, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
         req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         req.setValue("Mirsa", forHTTPHeaderField: "User-Agent")
         guard let (d, r) = try? await URLSession.shared.data(for: req),
@@ -626,14 +639,20 @@ final class MirsaUpdater: ObservableObject {
         defer { try? fm.removeItem(at: work) }
         do {
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
-            let ipa = try await store.downloadIPA(from: url, message: tr("Downloading update…", "عم ينزّل التحديث…"))
+            let ipa = try await updaterDownload(url)
             defer { try? fm.removeItem(at: ipa) }
+            let verified = try await Self.verifiedUpdate(ipa)
+            guard UpdaterMetadata.isNewer(remote: verified.build, installed: Self.currentBuild) else {
+                throw NSError(domain: "Mirsa", code: 2, userInfo: [NSLocalizedDescriptionKey: "Update build is not newer"])
+            }
+            try Task.checkCancellation()
             store.busy = tr("Importing…", "عم يجهّز الملف…")
             let out = work.appendingPathComponent("x", isDirectory: true)
             try fm.createDirectory(at: out, withIntermediateDirectories: true)
-            let ok = await Task.detached { SideloadService.unzip(ipa.path, to: out.path) }.value
+            try await Task.detached { try IPAEditorService.run("extract", input: ipa, output: out) }.value
+            try Task.checkCancellation()
             let payload = out.appendingPathComponent("Payload", isDirectory: true)
-            guard ok, let app = (try? fm.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil))?
+            guard let app = (try? fm.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil))?
                     .first(where: { $0.pathExtension == "app" }) else {
                 throw NSError(domain: "Mirsa", code: 1, userInfo: [NSLocalizedDescriptionKey: "The update file is not a valid IPA"])
             }

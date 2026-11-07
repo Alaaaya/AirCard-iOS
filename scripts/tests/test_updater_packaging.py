@@ -39,6 +39,21 @@ class UpdaterPackagingTests(unittest.TestCase):
             p.write_text(json.dumps({'1.3.89': {'ar':'تحسين التثبيت', 'en':'Installation improvements'}}))
             self.assertEqual(module.metadata(p, '1.3.90'), {'releaseNotes':{}})
             self.assertEqual(module.metadata(p, '1.3.89')['releaseNotes']['ar'], 'تحسين التثبيت')
+    def test_bounded_pinned_verification_wiring(self):
+        source = (ROOT / 'ios-app/Apps/AppsExtras.swift').read_text().split('// MARK: - Mirsa updates itself')[1]
+        verification = source.split('private func actualBuild')[1].split('/// "Later"')[0]
+        self.assertNotIn('SideloadService.unzip', verification)
+        self.assertNotIn('URLSession.shared.download', verification)
+        self.assertIn('DiscoveryDownloader(limits:', verification)
+        self.assertIn('maxBytes: 128 * 1024 * 1024', verification)
+        self.assertIn('totalTimeout: 120', verification)
+        for bound in ['maxTotalUncompressed = 512 * 1024 * 1024', 'maxEntries = 10_000',
+                      'maxPathDepth = 32', 'rejectSymlinks = true', 'maxPlist = 1024 * 1024']:
+            self.assertIn(bound, verification)
+        self.assertIn('defer { try? FileManager.default.removeItem(at: file) }', verification)
+        self.assertEqual(source.count('cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30'), 2)
+        self.assertIn('let verified = try await Self.verifiedUpdate(ipa)', source)
+
     def test_no_commit_fallback_or_wifi_requirement(self):
         workflow = (ROOT / '.github/workflows/unsigned-ipa.yml').read_text()
         self.assertNotIn('git log', workflow)

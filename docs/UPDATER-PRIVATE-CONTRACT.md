@@ -40,3 +40,24 @@ UpdaterMetadataTests.swift awaits native XCTest and Swift compilation in CI.
 Full Python suite has one pre-existing pairing-alert source-expectation failure
 against AppsStore.friendly (the cellular fix now uses a classified message).
 Do not claim that unrelated test passed. No device-runtime validation yet.
+
+Follow-up hardening supersedes the full-unzip check described above. Both check
+and final install download now reuse DiscoveryDownloader's Rust DNS-pinned,
+HTTPS-only public-address transport, no proxy/credentials, manually rechecked
+redirects (five), 15-second connect timeout, 120-second total deadline,
+128 MiB streamed compressed-byte limit and cancellation token. GitHub public
+asset CDN redirects remain allowed. No URLSession fallback. Failed download
+files are removed by DiscoveryDownloader; successful files have caller defers.
+Metadata API requests bypass local cache and have a 30-second request timeout;
+this does not promise upstream/CDN freshness.
+
+Actual-build inspection reuses existing memory-mapped IPAValidator/ZipReader;
+no archive extraction occurs for checks. Updater limits are 128 MiB archive,
+512 MiB declared expanded sum, 10,000 entries, 32 path components, 1 MiB plist,
+128 MiB executable and 200 compression ratio for read entries. Existing unsafe
+path rules remain, plus opt-in symlink rejection from ZIP Unix attributes.
+Cancellation is checked before/after bounded archive inspection. Final install
+revalidates with those same limits then uses the existing maintained Rust zip
+crate via IPAEditorService.extract, not the older generic unzip bridge. Its
+actual byte budgets, safe-path/link checks remain defense in depth. Temporary
+extraction directory is always removed. Swift/native execution still pending.

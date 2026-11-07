@@ -12,6 +12,8 @@ struct IPALimits {
     var maxPlist: UInt64 = 2 * 1024 * 1024
     var maxCompressionRatio: UInt64 = 1000      // per entry that we actually decompress
     var maxFileSize: UInt64 = 4 * 1024 * 1024 * 1024
+    var maxPathDepth = 128
+    var rejectSymlinks = false
     static let standard = IPALimits()
 }
 
@@ -106,7 +108,9 @@ struct ZipReader {
             if csize == 0xFFFF_FFFF || usize == 0xFFFF_FFFF || off == 0xFFFF_FFFF { throw IPAValidationError.zip64Unsupported }
             let nameData = data.subdata(in: (data.startIndex + p + 46)..<(data.startIndex + p + 46 + nlen))
             guard let name = String(data: nameData, encoding: .utf8) else { throw IPAValidationError.unsafePath("<non-utf8>") }
-            guard Self.isSafePath(name) else { throw IPAValidationError.unsafePath(name) }
+            guard Self.isSafePath(name), name.split(separator: "/").count <= limits.maxPathDepth else { throw IPAValidationError.unsafePath(name) }
+            let unixMode = Self.le32(data, p + 38) >> 16
+            if limits.rejectSymlinks && (unixMode & 0xF000) == 0xA000 { throw IPAValidationError.unsafePath(name) }
             sum += usize
             guard sum <= limits.maxTotalUncompressed else { throw IPAValidationError.tooLarge }
             out.append(ZipEntry(name: name, method: method, compressedSize: csize, uncompressedSize: usize, localHeaderOffset: off))

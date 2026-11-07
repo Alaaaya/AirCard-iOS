@@ -34,7 +34,9 @@ class PairingAlertLocalizationTests(unittest.TestCase):
     def test_alert_call_sites_use_localized_entries(self):
         store = (ROOT / "ios-app/Apps/AppsStore.swift").read_text(encoding="utf-8")
         self.assertIn('error = L.t("err.vpn")', store)
-        self.assertIn('return L.t("err.device") + "\\n\\n" + raw', store)
+        self.assertIn('if let failure = DeviceConnectionFailure(raw)', store)
+        self.assertIn('return L.t("err.device") + "\\n\\n" + tr(failure.message(arabic: false), failure.message(arabic: true))', store)
+        self.assertNotIn('return L.t("err.device") + "\\n\\n" + raw', store)
 
 
 if __name__ == "__main__":
