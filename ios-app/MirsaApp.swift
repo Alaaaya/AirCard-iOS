@@ -10,6 +10,7 @@ public func mirsaSwiftMain() {
 struct MirsaApp: App {
     @UIApplicationDelegateAdaptor(MirsaDownloadAppDelegate.self) private var downloadDelegate
     @StateObject private var vm = AppViewModel()
+    @StateObject private var language = AppLanguageStore.shared
 
     init() {
         // Route Rust tracing/idevice logs into the app's vm log array.
@@ -37,6 +38,9 @@ struct MirsaApp: App {
                 if AppsStore.isSetupMode { SetupView() } else { ContentView() }
             }
             .environmentObject(vm)
+            .environment(\.layoutDirection, .leftToRight)
+            .environment(\.locale, language.current.locale)
+            .id(language.current)
             .mirsaKeyboardDismissal()
         }
     }

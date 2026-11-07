@@ -86,6 +86,7 @@ struct MirsaHomeScreen<Menu: View>: View {
                     }
                     Button(action: onImport) { Image(systemName: "plus").frame(width: 44, height: 44) }
                         .accessibilityLabel(L.t("empty.import"))
+                    LanguageGlobeMenu(size: 44)
                     Button(action: onSettings) { Image(systemName: "gearshape").frame(width: 44, height: 44) }
                         .accessibilityLabel(L.t("settings.title"))
                 }

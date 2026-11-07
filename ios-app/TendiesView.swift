@@ -16,7 +16,7 @@ struct TendiesView: View {
     @State private var preparingVideo = false
     @State private var videoProgress: Double = 0
 
-    private var arabic: Bool { Locale.preferredLanguages.first?.hasPrefix("ar") == true }
+    private var arabic: Bool { L.isArabic }
     private func videoPicked(_ result: Result<URL, Error>?) {
         showVideoPicker = false
         guard let result = result else { return }

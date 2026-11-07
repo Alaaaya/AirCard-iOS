@@ -175,7 +175,7 @@ enum PersonalIdentityVault {
                 "invalid": ("P12 is damaged or has an unsupported structure.", "ملف P12 تالف أو تركيبته مو مدعومة.")
             ]
             let message = messages[result?["code"] as? String ?? "invalid"] ?? messages["invalid"]!
-            throw SideloadError.message(L.isArabic ? message.1 : message.0)
+            throw SideloadError.message(MirsaTr.pick(message.0, message.1))
         }
         _ = key; _ = cert
         return result!

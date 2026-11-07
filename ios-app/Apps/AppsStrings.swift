@@ -3,17 +3,21 @@ import Foundation
 /// English + Arabic strings for the Apps tab. Picks Arabic when it is the
 /// device's first preferred language; SwiftUI mirrors the layout for RTL.
 enum L {
-    static var isArabic: Bool {
-        (Locale.preferredLanguages.first ?? "en").hasPrefix("ar")
-    }
+    static var lang: AppLanguage { AppLanguageStore.snapshot }
+    /// True for every language that falls back to Arabic text (Arabic, Sorani, Kurmanji).
+    static var isArabic: Bool { lang != .english }
 
     static func t(_ key: String) -> String {
-        let table = isArabic ? ar : en
-        return table[key] ?? en[key] ?? key
+        switch lang {
+        case .english: return en[key] ?? key
+        case .arabic: return ar[key] ?? en[key] ?? key
+        case .sorani: return MirsaTr.ckbKeys[key] ?? ar[key] ?? en[key] ?? key
+        case .kurmanji: return MirsaTr.kmrKeys[key] ?? ar[key] ?? en[key] ?? key
+        }
     }
 
     static func f(_ key: String, _ args: CVarArg...) -> String {
-        String(format: t(key), locale: Locale.current, arguments: args)
+        String(format: t(key), locale: lang.locale, arguments: args)
     }
 
     private static let en: [String: String] = [
