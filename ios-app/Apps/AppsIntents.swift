@@ -1,11 +1,11 @@
 import AppIntents
 import UserNotifications
 
-/// "Refresh Apps" — for a Shortcuts personal automation (e.g. daily, or when
+/// "Renew Apps" — for a Shortcuts personal automation (e.g. daily, or when
 /// joining home Wi-Fi) so sideloaded real apps never hit their 7-day expiry.
 /// Needs the loopback VPN and a valid pairing record, the same as refreshing from the Apps tab.
 struct RefreshAppsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Refresh Mirsa Apps"
+    static var title: LocalizedStringResource = "Renew Mirsa Apps"
     static var description = IntentDescription("Re-signs and reinstalls every app Mirsa installed as a real app, and re-signs Container apps when the certificate changed.")
     static var openAppWhenRun: Bool = false
 
@@ -32,15 +32,15 @@ struct MirsaAppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: RefreshAppsIntent(),
             phrases: [
-                "Refresh apps in \(.applicationName)",
-                "Refresh \(.applicationName) apps",
+                "Renew apps in \(.applicationName)",
+                "Renew \(.applicationName) apps",
             ],
-            shortTitle: "Refresh Apps",
+            shortTitle: "Renew Apps",
             systemImageName: "arrow.clockwise.circle"
         )
         AppShortcut(intent: RefreshAllAppsIntent(),
-                    phrases: ["Refresh all apps with \(.applicationName)"],
-                    shortTitle: "Refresh All Apps", systemImageName: "arrow.clockwise")
+                    phrases: ["Renew all apps with \(.applicationName)"],
+                    shortTitle: "Renew All Apps", systemImageName: "arrow.clockwise")
         AppShortcut(intent: OpenAppInMirsaIntent(),
                     phrases: ["Open an app in \(.applicationName)"],
                     shortTitle: "Open App in Mirsa", systemImageName: "app")
@@ -54,8 +54,8 @@ struct MirsaAppShortcuts: AppShortcutsProvider {
 }
 
 struct RefreshAllAppsIntent: AppIntent {
-    static var title: LocalizedStringResource = "Refresh All Apps"
-    static var description = IntentDescription("Refresh all installed apps. Connect LocalDevVPN first.")
+    static var title: LocalizedStringResource = "Renew All Apps"
+    static var description = IntentDescription("Renew all installed apps. Connect LocalDevVPN first.")
     static var openAppWhenRun = false
 
     @MainActor
@@ -78,8 +78,8 @@ struct RefreshAllAppsIntent: AppIntent {
                     if store.error != nil { break }
                 }
                 succeeded = count == expected && store.error == nil
-                message = succeeded ? tr("All apps refreshed.", "تجدّدت كل التطبيقات.") :
-                    (store.error ?? tr("Some apps could not be refreshed.", "ما قدر يجدّد كل التطبيقات."))
+                message = succeeded ? tr("All apps renewed.", "تجدّدت كل التطبيقات.") :
+                    (store.error ?? tr("Some apps could not be renewed.", "ما قدر يجدّد كل التطبيقات."))
             } else {
                 message = tr("Sign in to Mirsa first.", "سجّل دخولك بـMirsa أولاً.")
             }
