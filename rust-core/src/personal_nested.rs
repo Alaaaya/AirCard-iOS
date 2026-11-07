@@ -39,7 +39,7 @@ pub(super) fn inventory(root: &Path, o: &Options) -> Result<Vec<Node>> {
     }
     Ok(nodes)
 }
-fn valid_id(id: &str) -> bool { !id.is_empty() && id.len() <= 255 && id.split('.').all(|s|
+pub(super) fn valid_id(id: &str) -> bool { !id.is_empty() && id.len() <= 255 && id.split('.').all(|s|
     !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')) }
 pub(super) fn id_map(nodes: &[Node], old: &str, new: &str) -> Result<BTreeMap<String,String>> {
     let mut map = BTreeMap::new(); let mut seen = BTreeSet::new();

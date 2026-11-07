@@ -49,6 +49,23 @@ fn main_identity(patterns: &[&str], original: &str, custom: &str) -> Result<(usi
     Ok((chosen, resolved_bundle_id(patterns[chosen], requested)?))
 }
 
+// Compatibility: keep the app's own ID; fall back to the first (selected) profile when none covers it.
+// Never rewrites the ID, never widens entitlements (they are still checked against the profile).
+fn compat_main_identity(patterns: &[&str], original: &str, custom: &str, strict: bool) -> Result<(usize, String, bool), String> {
+    match main_identity(patterns, original, custom) {
+        Ok((i, id)) => Ok((i, id, false)),
+        Err(e) if strict || patterns.is_empty() => Err(e),
+        Err(e) => {
+            let requested = if custom.is_empty() { original } else { custom };
+            if !nested::valid_id(requested) { return Err(e); }
+            Ok((0, requested.to_owned(), true))
+        }
+    }
+}
+fn compat_app_identifier(pattern: &str, prefix: &str, id: &str) -> String {
+    if pattern.contains('*') { format!("{prefix}.{id}") } else { pattern.to_owned() }
+}
+
 // CMS authenticity is best effort per owner policy. Authorization is checked
 // separately and remains mandatory. No request flag can fabricate verification.
 #[derive(Default, serde::Serialize)]
@@ -83,6 +100,10 @@ pub(crate) struct Options {
     /// Explicit user override only. Empty preserves the IPA identity.
     #[serde(default)] pub bundle_id: String,
     #[serde(default)] pub pairing_path: String,
+    /// Off by default. When true, a profile that does not cover an app's ID is rejected
+    /// (old behavior). When false (compatibility), the app keeps its own CFBundleIdentifier and
+    /// the selected profile's authorized identity/entitlements are used.
+    #[serde(default)] pub strict_profile: bool,
     #[serde(default)] pub remove_extensions: bool,
     #[serde(default)] pub remove_watch: bool,
     #[serde(default)] pub remove_app_clips: bool,
@@ -232,7 +253,10 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
     let main = nodes.iter().position(|n| n.path == app).ok_or("التطبيق الرئيسي مو موجود.")?;
     let main_original = nodes[main].id.clone();
     let main_patterns: Vec<_> = profiles.iter().map(|p| p.parsed.entitlements().get("application-identifier").and_then(plist::Value::as_string).unwrap_or("")).collect();
-    let (chosen, new_main) = main_identity(&main_patterns, &main_original, &opts.bundle_id)?;
+    let (chosen, new_main, main_compat) = compat_main_identity(&main_patterns, &main_original, &opts.bundle_id, opts.strict_profile)?;
+    if main_compat {
+        status.warnings.push(serde_json::json!({"code":"profile_id_compat","message":"وضع التوافق: البروفايل ما بيغطّي معرّف التطبيق، فضل المعرّف الأصلي وانوقّع بصلاحيات البروفايل. قبول iOS للتثبيت غير مضمون."}));
+    }
     let mapping = nested::id_map(&nodes, &main_original, &new_main)?;
     let team = profiles[chosen].parsed.team_id();
     let mut assignments = BTreeMap::new();
@@ -242,8 +266,11 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
         let id = mapping.get(&node.id).ok_or("معرّف تطبيق غير موجود.")?;
         let patterns: Vec<_> = profiles.iter().map(|p| p.parsed.entitlements().get("application-identifier")
             .and_then(plist::Value::as_string).unwrap_or("")).collect();
-        let index = nested::select_profile(&patterns, id)
-            .ok_or_else(|| format!("ما في بروفايل صالح للتطبيق {id}. استورد بروفايله أو احذف الإضافة من الخيارات."))?;
+        let (index, fallback) = match nested::select_profile(&patterns, id) {
+            Some(i) => (i, false),
+            None if !opts.strict_profile => (chosen, true),
+            None => return Err(format!("ما في بروفايل صالح للتطبيق {id}. استورد بروفايله أو احذف الإضافة من الخيارات.")),
+        };
         let p = &profiles[index].parsed;
         if p.team_id() != team { return Err(format!("فريق البروفايل مختلف للتطبيق {id}.")); }
         let prefix = patterns[index].split_once('.').ok_or("معرّف البروفايل غير صالح.")?.0;
@@ -253,6 +280,10 @@ pub(crate) fn sign_with_options(app: &Path, profile_path: &Path, key: &str, cert
         }
         let constrained = nested::constrain(&requested, p.entitlements(), prefix, id, team, &mapping)
             .map_err(|e| format!("{id} - {e}"))?;
+        let mut constrained = constrained;
+        if fallback {
+            constrained.insert("application-identifier".into(), compat_app_identifier(patterns[index], prefix, id).into());
+        }
         assignments.insert(id.clone(), index);
         entitlements.insert(id.clone(), constrained);
     }
@@ -426,6 +457,41 @@ mod key_binding_tests {
 }
 
 
+#[cfg(test)]
+mod compat_tests {
+    use super::*;
+    const PROFILE: &str = "U4Q689E4A3.app.cranberry7680.uva1336";
+    #[test]
+    fn compat_keeps_each_original_id_with_one_exact_profile() {
+        for id in ["jokersport.app", "jokersport.app5"] {
+            let (i, target, compat) = compat_main_identity(&[PROFILE], id, "", false).unwrap();
+            assert_eq!((i, target.as_str(), compat), (0, id, true));
+            assert_eq!(compat_app_identifier(PROFILE, "U4Q689E4A3", id), PROFILE);
+        }
+        assert_eq!(compat_main_identity(&[PROFILE], "app.cranberry7680.uva1336", "", false).unwrap().2, false);
+    }
+    #[test]
+    fn strict_keeps_old_rejection() {
+        assert!(compat_main_identity(&[PROFILE], "jokersport.app", "", true).is_err());
+        assert!(compat_main_identity(&["TEAM.com.x.*"], "com.y.app", "", true).is_err());
+        let strict: Options = serde_json::from_str("{}").unwrap();
+        assert!(!strict.strict_profile);
+    }
+    #[test]
+    fn wildcards_still_match_normally_and_scoped_mismatch_uses_compat() {
+        assert_eq!(compat_main_identity(&["TEAM.*"], "any.app", "", false).unwrap(), (0, "any.app".into(), false));
+        assert_eq!(compat_main_identity(&["A.*", "TEAM.*"], "any.app", "", false).unwrap().0, 0);
+        let c = compat_main_identity(&["TEAM.com.x.*"], "com.y.app", "", false).unwrap();
+        assert!(c.2 && c.1 == "com.y.app");
+        assert_eq!(compat_app_identifier("TEAM.com.x.*", "TEAM", "com.y.app"), "TEAM.com.y.app");
+    }
+    #[test]
+    fn compat_rejects_invalid_ids_and_does_not_widen_entitlements() {
+        assert!(compat_main_identity(&[PROFILE], "../bad", "", false).is_err());
+        let mut r = plist::Dictionary::new(); r.insert("com.apple.developer.healthkit".into(), true.into());
+        assert!(nested::constrain(&r, &plist::Dictionary::new(), "T", "jokersport.app", "T", &BTreeMap::new()).is_err());
+    }
+}
 #[cfg(test)]
 mod coexistence_tests {
     use super::*;

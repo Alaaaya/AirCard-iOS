@@ -22,6 +22,7 @@ struct PersonalProjectOptions: Sendable {
     var additionalProfiles: [Data] = []
     var removeExtensions = false
     var removeAppClips = false
+    var strictProfile = false
     var gameMode: PersonalGameMode = .keep
     var fixWhiteIcon = false
     var newTweaksFirst = false
@@ -49,6 +50,7 @@ struct PersonalProjectDraft: Codable, Equatable {
     var tweakIDs: [UUID] = []
     var removeExtensions: Bool? = nil
     var removeAppClips: Bool? = nil
+    var strictProfile: Bool? = nil
     var additionalProfileIDs: [String]? = nil
     var gameMode: PersonalGameMode? = nil
     var fixWhiteIcon: Bool? = nil
