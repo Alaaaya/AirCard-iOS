@@ -139,4 +139,30 @@ final class BundleFileManagerTests: XCTestCase {
         m.unstage(at: 0) // rename removed => dependent edit dropped
         XCTAssertTrue(m.overlay.isEmpty)
     }
+
+    func testProtectedDestinationsAndCaseAliasesRejected() throws {
+        let m = try manager(try makeBundle())
+        try Data("x".utf8).write(to: tmp.appendingPathComponent("i.txt"))
+        XCTAssertThrowsError(try m.stageRename("Assets/a.txt", to: "Info.plist"))
+        XCTAssertThrowsError(try m.stageImport(from: tmp.appendingPathComponent("i.txt"), intoDirectory: "", name: "info.plist"))
+        XCTAssertThrowsError(try m.stageImport(from: tmp.appendingPathComponent("i.txt"), intoDirectory: "", name: "main"))
+        XCTAssertThrowsError(try m.stageImport(from: tmp.appendingPathComponent("i.txt"), intoDirectory: "", name: "_CodeSignature"))
+    }
+    func testDepthPreflightRejectsDeepXMLAndBinaryBeforeParsing() throws {
+        var s = "<string>x</string>"
+        for _ in 0..<(BundleLimits.maxPlistDepth + 5) { s = "<array>\(s)</array>" }
+        XCTAssertThrowsError(try PlistDocument.preflightDepth(Data(s.utf8)))
+        var obj: Any = "x"
+        for _ in 0..<(BundleLimits.maxPlistDepth + 5) { obj = [obj] }
+        if let bin = try? PropertyListSerialization.data(fromPropertyList: obj, format: .binary, options: 0) {
+            XCTAssertThrowsError(try PlistDocument.preflightDepth(bin))
+        }
+        let ok = try PropertyListSerialization.data(fromPropertyList: ["a": [1, 2]], format: .binary, options: 0)
+        XCTAssertNoThrow(try PlistDocument.preflightDepth(ok))
+    }
+    func testInfoPlistWarningsReturnedAndOversizeImportRejected() throws {
+        let app = try makeBundle(); let m = try manager(app)
+        let doc = try PlistDocument(data: Data(contentsOf: app.appendingPathComponent("Info.plist")))
+        XCTAssertFalse(try m.stageWrite("Info.plist", plist: doc).isEmpty)
+    }
 }

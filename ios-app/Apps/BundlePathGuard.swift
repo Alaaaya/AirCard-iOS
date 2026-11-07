@@ -74,4 +74,26 @@ struct BundleGuard {
         if comps.last?.hasSuffix(".dylib") == true, first == "Frameworks" { return "Embedded libraries are linked by the executable." }
         return nil
     }
+
+    /// Case-insensitive + ancestor-aware check for DESTINATIONS (rename target, import, edited names).
+    func destinationReason(_ path: String) -> String? {
+        let comps = (try? BundlePath.components(path)) ?? []
+        guard !comps.isEmpty else { return "The bundle root cannot be changed." }
+        for i in 1...comps.count {
+            let prefix = comps[0..<i].joined(separator: "/")
+            if let r = protectedReason(prefix) { return i == comps.count ? r : "Inside protected item \(prefix): \(r)" }
+        }
+        let lower = comps.map { $0.lowercased() }
+        let flat = lower.joined(separator: "/")
+        if flat == "info.plist" || flat == "pkginfo" || flat == "embedded.mobileprovision" || lower[0] == "_codesignature" {
+            return "This name is reserved (case-insensitive): \(path)"
+        }
+        if let e = executableName?.lowercased(), flat == e { return "This name is the main executable (case-insensitive)." }
+        let canon = ["frameworks": "Frameworks", "plugins": "PlugIns", "extensions": "Extensions", "appclips": "AppClips", "watch": "Watch"]
+        if let c = canon[lower[0]], c != comps[0] {
+            var alias = comps; alias[0] = c
+            if let r = protectedReason(alias.joined(separator: "/")) { return "Case alias of a protected item: \(r)" }
+        }
+        return nil
+    }
 }

@@ -8,6 +8,7 @@ struct PlistDocument {
 
     init(data: Data) throws {
         guard data.count <= BundleLimits.maxPlistBytes else { throw BundleFileError.tooLarge(data.count) }
+        try Self.preflightDepth(data)
         var fmt = PropertyListSerialization.PropertyListFormat.xml
         do { root = try PropertyListSerialization.propertyList(from: data, options: [.mutableContainersAndLeaves], format: &fmt) }
         catch { throw BundleFileError.invalidPlist(error.localizedDescription) }
@@ -19,11 +20,70 @@ struct PlistDocument {
     init(xmlText: String, preserving format: PropertyListSerialization.PropertyListFormat) throws {
         let d = Data(xmlText.utf8)
         guard d.count <= BundleLimits.maxPlistBytes else { throw BundleFileError.tooLarge(d.count) }
+        try Self.preflightDepth(d)
         var f = PropertyListSerialization.PropertyListFormat.xml
         do { root = try PropertyListSerialization.propertyList(from: d, options: [.mutableContainersAndLeaves], format: &f) }
         catch { throw BundleFileError.invalidPlist(error.localizedDescription) }
         self.format = format
         try Self.checkDepth(root, 0)
+    }
+    /// Bounds nesting and object count on the RAW bytes, before PropertyListSerialization parses anything.
+    static func preflightDepth(_ d: Data) throws {
+        let bytes = [UInt8](d)
+        if bytes.starts(with: Array("bplist00".utf8)) { try preflightBinary(bytes); return }
+        guard bytes.starts(with: Array("bplist".utf8)) == false else { throw BundleFileError.invalidPlist("unsupported binary version") }
+        // XML: count <array>/<dict> opens and closes without building anything.
+        var depth = 0, i = 0
+        let n = bytes.count
+        func matches(_ s: String, at j: Int) -> Bool {
+            let u = Array(s.utf8); guard j + u.count <= n else { return false }
+            for k in 0..<u.count where bytes[j + k] != u[k] { return false }
+            return true
+        }
+        while i < n {
+            if bytes[i] == 0x3C { // <
+                if matches("</array>", at: i) || matches("</dict>", at: i) { depth -= 1; if depth < 0 { throw BundleFileError.invalidPlist("unbalanced") } }
+                else if matches("<array>", at: i) || matches("<dict>", at: i) {
+                    depth += 1; if depth > BundleLimits.maxPlistDepth { throw BundleFileError.invalidPlist("nesting too deep") }
+                }
+            }
+            i += 1
+        }
+    }
+    private static func preflightBinary(_ b: [UInt8]) throws {
+        guard b.count >= 8 + 32 else { throw BundleFileError.invalidPlist("truncated") }
+        let t = b.count - 32
+        func uint(_ at: Int, _ size: Int) -> Int { var v = 0; for k in 0..<size { v = (v << 8) | Int(b[at + k]) }; return v }
+        let offSize = Int(b[t + 6]), refSize = Int(b[t + 7])
+        let numObjects = uint(t + 8, 8), top = uint(t + 16, 8), tableOff = uint(t + 24, 8)
+        guard (1...8).contains(offSize), (1...8).contains(refSize), numObjects > 0, numObjects <= 200_000,
+              top < numObjects, tableOff >= 8, tableOff + numObjects * offSize <= t else { throw BundleFileError.invalidPlist("bad trailer") }
+        var visited = 0
+        func offset(_ obj: Int) throws -> Int {
+            let o = uint(tableOff + obj * offSize, offSize)
+            guard o >= 8, o < tableOff else { throw BundleFileError.invalidPlist("bad offset") }; return o
+        }
+        func walk(_ obj: Int, _ depth: Int) throws {
+            guard depth <= BundleLimits.maxPlistDepth else { throw BundleFileError.invalidPlist("nesting too deep") }
+            visited += 1; guard visited <= 400_000 else { throw BundleFileError.invalidPlist("too many objects") }
+            var o = try offset(obj)
+            let marker = b[o]; let hi = marker >> 4; var count = Int(marker & 0x0F)
+            guard hi == 0xA || hi == 0xD else { return }
+            o += 1
+            if count == 0x0F {
+                guard o < tableOff, b[o] >> 4 == 0x1 else { throw BundleFileError.invalidPlist("bad count") }
+                let sz = 1 << Int(b[o] & 0x0F); guard sz <= 8, o + 1 + sz <= tableOff else { throw BundleFileError.invalidPlist("bad count") }
+                count = uint(o + 1, sz); o += 1 + sz
+            }
+            let refs = hi == 0xD ? count * 2 : count
+            guard count <= numObjects * 2, o + refs * refSize <= tableOff else { throw BundleFileError.invalidPlist("bad container") }
+            for r in 0..<refs {
+                let child = uint(o + r * refSize, refSize)
+                guard child < numObjects else { throw BundleFileError.invalidPlist("bad ref") }
+                try walk(child, depth + 1)
+            }
+        }
+        try walk(top, 1)
     }
     static func checkDepth(_ v: Any, _ depth: Int) throws {
         if depth > BundleLimits.maxPlistDepth { throw BundleFileError.invalidPlist("nesting too deep") }

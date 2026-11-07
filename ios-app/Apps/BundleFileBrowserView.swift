@@ -84,6 +84,8 @@ struct BundleFileEditorView: View {
     @State private var text = ""
     @State private var format: PropertyListSerialization.PropertyListFormat = .xml
     @State private var message: String?
+    @State private var warnings: [String] = []
+    @State private var showWarnings = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -94,6 +96,9 @@ struct BundleFileEditorView: View {
         }
         .navigationTitle(entry.name)
         .toolbar { Button("Stage") { save() } }
+        .alert("Staged with warnings", isPresented: $showWarnings) {
+            Button("OK") { dismiss() }
+        } message: { Text(warnings.joined(separator: "\n")) }
         .onAppear(perform: load)
     }
     private func load() {
@@ -107,9 +112,11 @@ struct BundleFileEditorView: View {
     }
     private func save() {
         do {
-            if entry.kind == .plist { try manager.stageWrite(entry.path, plist: try PlistDocument(xmlText: text, preserving: format)) }
-            else { try manager.stageWrite(entry.path, text: text) }
-            onChange(); dismiss()
+            let w = entry.kind == .plist
+                ? try manager.stageWrite(entry.path, plist: try PlistDocument(xmlText: text, preserving: format))
+                : try manager.stageWrite(entry.path, text: text)
+            onChange()
+            if w.isEmpty { dismiss() } else { warnings = w; showWarnings = true }
         } catch { message = String(describing: error) }
     }
 }

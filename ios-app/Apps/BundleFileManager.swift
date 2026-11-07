@@ -122,9 +122,10 @@ final class BundleFileManager {
         }
     }
     static func readLimited(_ url: URL, _ limit: Int) throws -> Data {
-        let size = (try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
-        guard size <= limit else { throw BundleFileError.tooLarge(size) }
-        return try Data(contentsOf: url)
+        let h = try FileHandle(forReadingFrom: url); defer { try? h.close() }
+        let d = try h.read(upToCount: limit + 1) ?? Data()   // never allocates beyond limit+1
+        guard d.count <= limit else { throw BundleFileError.tooLarge(d.count) }
+        return d
     }
 
     // MARK: staging
@@ -143,7 +144,7 @@ final class BundleFileManager {
         let target = BundlePath.join(BundlePath.parent(path), newName)
         if target == path { return }
         guard !exists(target) else { throw BundleFileError.alreadyExists(target) }
-        if let r = guardrails.protectedReason(target), case .original = source(of: path) { _ = r } // names are re-checked at apply
+        if let r = guardrails.destinationReason(target) { throw BundleFileError.protectedPath(target, r) }
         overlay.ops.append(.rename(path: path, newName: newName))
     }
     func stageDelete(_ path: String) throws {
@@ -169,11 +170,13 @@ final class BundleFileManager {
         guard exists(dir), try entry(dir).kind == .directory || dir.isEmpty else { throw BundleFileError.notFound(dir) }
         let dest = BundlePath.join(dir, n)
         guard !exists(dest) else { throw BundleFileError.alreadyExists(dest) }
-        if let r = guardrails.protectedReason(dest) { throw BundleFileError.protectedPath(dest, r) }
+        if let r = guardrails.destinationReason(dest) { throw BundleFileError.protectedPath(dest, r) }
         let blob = try copyBlob(from: source)
         overlay.ops.append(.importFile(directory: dir, name: n, blob: blob))
     }
-    func stageWrite(_ path: String, data: Data) throws {
+    @discardableResult
+    func stageWrite(_ path: String, data: Data) throws -> [String] {
+        var warnings: [String] = []
         guard exists(path) else { throw BundleFileError.notFound(path) }
         let e = try entry(path)
         guard e.kind == .plist || e.kind == .text else { throw BundleFileError.notText }
@@ -183,15 +186,19 @@ final class BundleFileManager {
             if case .original(let o) = source(of: path), o == "Info.plist" || path == "Info.plist" {
                 let r = InfoPlistGuard.check(doc, originalExecutable: guardrails.executableName)
                 if let first = r.errors.first { throw BundleFileError.protectedPath(path, first) }
+                warnings = r.warnings
             }
         } else { guard String(data: data, encoding: .utf8) != nil else { throw BundleFileError.notText } }
         let blob = "blob-\(UUID().uuidString)"
         try data.write(to: stagingDirectory.appendingPathComponent(blob), options: .atomic)
         overlay.ops.append(.writeFile(path: path, blob: blob))
+        return warnings
     }
-    /// Convenience: stage an edited plist document in its original format.
-    func stageWrite(_ path: String, plist: PlistDocument) throws { try stageWrite(path, data: try plist.serialized()) }
-    func stageWrite(_ path: String, text: String) throws { try stageWrite(path, data: Data(text.utf8)) }
+    /// Convenience: stage an edited plist document in its original format. Returns Info.plist warnings.
+    @discardableResult
+    func stageWrite(_ path: String, plist: PlistDocument) throws -> [String] { try stageWrite(path, data: try plist.serialized()) }
+    @discardableResult
+    func stageWrite(_ path: String, text: String) throws -> [String] { try stageWrite(path, data: Data(text.utf8)) }
 
     func unstage(at index: Int) {
         guard overlay.ops.indices.contains(index) else { return }
@@ -221,17 +228,22 @@ final class BundleFileManager {
         if BundlePath.isSymlink(source) { throw BundleFileError.symlinkNotAllowed(source.lastPathComponent) }
         let a = try fm.attributesOfItem(atPath: source.path)
         guard a[.type] as? FileAttributeType == .typeRegular else { throw BundleFileError.invalidPath(source.lastPathComponent) }
-        let size = (a[.size] as? NSNumber)?.intValue ?? 0
-        guard size <= BundleLimits.maxImportBytes else { throw BundleFileError.importTooLarge(size) }
+        if let declared = (a[.size] as? NSNumber)?.intValue, declared > BundleLimits.maxImportBytes { throw BundleFileError.importTooLarge(declared) }
         let blob = "blob-\(UUID().uuidString)"
         let tmp = stagingDirectory.appendingPathComponent(blob + ".part")
-        try fm.copyItem(at: source, to: tmp)
-        // revalidate after copy (race): still regular and same size
-        let b = try fm.attributesOfItem(atPath: tmp.path)
-        guard b[.type] as? FileAttributeType == .typeRegular, (b[.size] as? NSNumber)?.intValue == size || size == 0 else {
-            try? fm.removeItem(at: tmp); throw BundleFileError.conflict("source changed during import")
-        }
-        try fm.moveItem(at: tmp, to: stagingDirectory.appendingPathComponent(blob))
+        guard fm.createFile(atPath: tmp.path, contents: nil) else { throw BundleFileError.conflict("cannot create staging file") }
+        do {
+            let input = try FileHandle(forReadingFrom: source); defer { try? input.close() }
+            let output = try FileHandle(forWritingTo: tmp); defer { try? output.close() }
+            var total = 0
+            while let chunk = try input.read(upToCount: 1 << 20), !chunk.isEmpty {
+                total += chunk.count   // actual bytes, not declared size (file may grow)
+                guard total <= BundleLimits.maxImportBytes else { throw BundleFileError.importTooLarge(total) }
+                try output.write(contentsOf: chunk)
+            }
+            try output.synchronize()
+            try fm.moveItem(at: tmp, to: stagingDirectory.appendingPathComponent(blob))
+        } catch { try? fm.removeItem(at: tmp); throw error }
         return blob
     }
 
@@ -270,6 +282,7 @@ enum BundleStagingApplier {
                 case let .rename(path, newName):
                     if let r = guardrails.protectedReason(path) { throw BundleFileError.protectedPath(path, r) }
                     try BundlePath.validName(newName)
+                    if let r = guardrails.destinationReason(BundlePath.join(BundlePath.parent(path), newName)) { throw BundleFileError.protectedPath(newName, r) }
                     let src = try BundlePath.resolve(path, in: workspace)
                     let dst = try BundlePath.resolve(BundlePath.join(BundlePath.parent(path), newName), in: workspace, mustExist: false)
                     guard (try? fm.attributesOfItem(atPath: dst.path)) == nil else { throw BundleFileError.alreadyExists(newName) }
@@ -280,6 +293,7 @@ enum BundleStagingApplier {
                     try stash(try BundlePath.resolve(path, in: workspace))
                 case let .importFile(dir, name, blob):
                     try BundlePath.validName(name)
+                    if let r = guardrails.destinationReason(BundlePath.join(dir, name)) { throw BundleFileError.protectedPath(name, r) }
                     let parent = try BundlePath.resolve(dir, in: workspace)
                     let dst = try BundlePath.resolve(BundlePath.join(dir, name), in: workspace, mustExist: false)
                     guard parent.path.count > 0, (try? fm.attributesOfItem(atPath: dst.path)) == nil else { throw BundleFileError.alreadyExists(name) }
