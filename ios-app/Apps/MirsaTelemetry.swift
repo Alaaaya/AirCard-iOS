@@ -50,6 +50,7 @@ enum MirsaCrashParser {
         if data.count > maxBytes { throw MirsaCrashParseError.tooLarge }
         guard let text = String(data: data, encoding: .utf8) else { throw MirsaCrashParseError.notUTF8 }
         if text.contains("\u{FFFD}") { throw MirsaCrashParseError.notUTF8 }
+        try preflightDepth(data)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { throw MirsaCrashParseError.empty }
         // Format A: header JSON line, newline, payload JSON. Format B: single JSON object.
@@ -105,6 +106,20 @@ enum MirsaCrashParser {
                                 crashedThread: crashed, frames: frames, imageUUIDs: uuids, importedManually: true)
     }
 
+    /// String-aware bracket depth scan on raw bytes, BEFORE JSONSerialization allocates anything.
+    /// For the header+payload format each line is scanned independently, so depth is per document.
+    static func preflightDepth(_ data: Data) throws {
+        var depth = 0, inStr = false, esc = false
+        for b in data {
+            if inStr { if esc { esc = false } else if b == 0x5C { esc = true } else if b == 0x22 { inStr = false }; continue }
+            switch b {
+            case 0x22: inStr = true
+            case 0x5B, 0x7B: depth += 1; if depth > maxDepth { throw MirsaCrashParseError.tooDeep }
+            case 0x5D, 0x7D: depth = max(0, depth - 1)
+            default: break
+            }
+        }
+    }
     private static func obj(_ s: String) throws -> [String: Any] {
         guard let d = s.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d), let dict = o as? [String: Any] else { throw MirsaCrashParseError.malformed }
         return dict

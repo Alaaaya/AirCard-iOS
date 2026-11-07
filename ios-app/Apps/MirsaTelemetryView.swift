@@ -39,6 +39,7 @@ struct MirsaTelemetryView: View {
                 NavigationLink { MirsaCrashDetailView(report: c) } label: {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(c.readableReason).font(.subheadline).lineLimit(2)
+                        if c.bundleID == nil { Text(tr("Linked manually by you, not verified", "ربط يدوي منك، غير متحقق")).font(.caption2).foregroundStyle(.orange) }
                         Text(c.date.map { $0.formatted() } ?? tr("unknown time", "وقت غير معروف")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -65,15 +66,17 @@ struct MirsaCrashDetailView: View {
     let report: MirsaCrashReport
     @State private var showRaw = false
     var body: some View {
-        let text = MirsaRedactor.shareText(report, redacted: !showRaw)
+        let shown = MirsaRedactor.shareText(report, redacted: !showRaw)
+        let text = MirsaRedactor.shareText(report, redacted: true)   // copy/share are ALWAYS redacted
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(report.readableReason).font(.headline)
                 if report.frames.allSatisfy({ !$0.symbolicated }) {
                     Text(tr("Frames are not symbolicated.", "الإطارات غير مفككة الرموز.")).font(.footnote).foregroundStyle(.secondary)
                 }
-                Text(text).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                Toggle(tr("Show unredacted", "إظهار بدون إخفاء"), isOn: $showRaw)
+                Text(shown).font(.system(.caption, design: .monospaced))
+                Toggle(tr("Show unredacted on screen only", "إظهار بدون إخفاء على الشاشة فقط"), isOn: $showRaw)
+                if showRaw { Text(tr("Copy and Share still use the redacted text.", "النسخ والمشاركة يبقوا مخفيين.")).font(.footnote).foregroundStyle(.orange) }
                 HStack(spacing: 12) {
                     Button { UIPasteboard.general.string = text } label: { Label(tr("Copy", "نسخ"), systemImage: "doc.on.doc") }
                     ShareLink(item: text) { Label(tr("Share", "مشاركة"), systemImage: "square.and.arrow.up") }
