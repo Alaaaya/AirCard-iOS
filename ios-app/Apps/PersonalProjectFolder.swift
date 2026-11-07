@@ -27,6 +27,42 @@ enum PersonalProjectFolder {
         return url
     }
 
+    /// Preflight every source and destination before changing user data.
+    /// On failure, roll back moves without ever overwriting a collision.
+    static func migrate(files: [URL], to directory: URL) throws {
+        let fm = FileManager.default
+        try checkDirectory(directory)
+        var planned: [(URL, URL)] = []
+        for source in files {
+            let attrs: [FileAttributeKey: Any]
+            do { attrs = try fm.attributesOfItem(atPath: source.path) }
+            catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError { continue }
+            guard attrs[.type] as? FileAttributeType == .typeRegular else { throw CocoaError(.fileReadNoPermission) }
+            let destination = directory.appendingPathComponent(source.lastPathComponent)
+            // attributesOfItem also detects dangling symlinks, unlike fileExists.
+            if (try? fm.attributesOfItem(atPath: destination.path)) != nil {
+                throw CocoaError(.fileWriteFileExists)
+            }
+            planned.append((source, destination))
+        }
+        var moved: [(URL, URL)] = []
+        do {
+            for (source, destination) in planned {
+                try fm.moveItem(at: source, to: destination)
+                moved.append((source, destination))
+            }
+        } catch {
+            for (source, destination) in moved.reversed() {
+                // If rollback is itself interrupted, the destination is retained.
+                // Never delete the sole surviving copy or overwrite a new legacy file.
+                if (try? fm.attributesOfItem(atPath: source.path)) == nil {
+                    try? fm.moveItem(at: destination, to: source)
+                }
+            }
+            throw error
+        }
+    }
+
     private static func checkDirectory(_ url: URL) throws {
         let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
         guard values.isDirectory == true, values.isSymbolicLink != true else { throw CocoaError(.fileReadNoPermission) }
