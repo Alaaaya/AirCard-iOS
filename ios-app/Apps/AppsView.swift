@@ -256,7 +256,7 @@ struct AppsTab: View {
         }
         .sheet(item: $backupApp) { a in BackupsSheet(app: a) }
         .alert(tr("Home Screen", "الشاشة الرئيسية"), isPresented: Binding(get: { shortcutError != nil }, set: { if !$0 { shortcutError = nil } })) {
-            Button("OK") { shortcutError = nil }
+            Button(MirsaTr.lit("OK")) { shortcutError = nil }
         } message: { Text(shortcutError ?? "") }
         .sheet(item: $infoApp) { a in
             AppInfoSheet(app: a, store: store)
@@ -264,7 +264,7 @@ struct AppsTab: View {
                 .presentationBackground(.ultraThinMaterial)
         }
         .alert(L.t("tab"), isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
-            Button("OK") { store.error = nil }
+            Button(MirsaTr.lit("OK")) { store.error = nil }
         } message: { Text(store.error ?? "") }
         .alert(L.f("launch.title", store.launchCandidate?.name ?? ""),
                isPresented: Binding(get: { store.launchCandidate != nil }, set: { if !$0 { store.launchCandidate = nil } })) {

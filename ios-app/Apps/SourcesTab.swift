@@ -376,7 +376,7 @@ struct SourcesTab: View {
                 Button(tr("Add", "أضف")) { let t = input; Task { _ = await store.add(t) } }
             }
             .alert(tr("Source", "السورس"), isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
-                Button("OK") { store.error = nil }
+                Button(MirsaTr.lit("OK")) { store.error = nil }
             } message: { Text(store.error ?? "") }
             .task { if store.apps.isEmpty { await store.refreshAll() } }
             .mirsaScreen()

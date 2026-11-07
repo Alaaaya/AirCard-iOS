@@ -72,7 +72,7 @@ struct SetupView: View {
                 .interactiveDismissDisabled()
         }
         .alert(L.t("setup.title"), isPresented: Binding(get: { store.error != nil }, set: { if !$0 { store.error = nil } })) {
-            Button("OK") { store.error = nil }
+            Button(MirsaTr.lit("OK")) { store.error = nil }
         } message: { Text(store.error ?? "") }
         .task {
             vm.refreshNetworkStatus()
