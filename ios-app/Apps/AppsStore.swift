@@ -824,6 +824,15 @@ final class AppsStore: ObservableObject {
     /// Container apps must be signed by the same team as the AirCard that loads
     /// them. This installs a copy of AirCard signed with the user's Apple ID.
     func installSelf(vm: AppViewModel?, from source: URL? = nil, feedback: Bool = true) async {
+        if MirsaInstallMode.ownCertificate {
+            guard busy == nil else { return }
+            busy = personalText("Signing for OTA…", "عم يوقّع لتثبيت OTA…")
+            defer { busy = nil }
+            do { try await CertificateOTA.install(source: source ?? Bundle.main.bundleURL) }
+            catch { self.error = error.localizedDescription }
+            return
+        }
+
         MirsaInstallActivity.shared.setPhase(.signing, title: "Mirsa")
         var activitySucceeded = false
         let operation = MirsaOperationProgress.shared.begin(appID: "com.alaa.mirsa", phase: .signing)

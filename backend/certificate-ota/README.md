@@ -1,27 +1,27 @@
-# Private certificate OTA foundation, NOT enabled
+# Private certificate OTA
 
-Live infrastructure was checked with the owner's management token, without printing it.
-The Mirsa-only Supabase project hirebeofomiyumwysppj (mirsa-discovery) is ACTIVE_HEALTHY.
-Its only deployed Edge Function is discovery-search. Storage configuration is available.
-The Player project must not be used. Existing install behaviour and Apple ID default are untouched.
+Deployed only to Mirsa project hirebeofomiyumwysppj. Never use the Player project.
+Owner authorized additive infrastructure for this private batch, not app publication.
 
-contract.mjs is only a tested validation/manifest foundation. It is NOT a working OTA service.
-No toggle is exposed, no uploads happen, and no deployment has been performed.
+Dedicated private bucket mirsa-ota-private, 30 MiB upload maximum.
+User JWT checked with Auth getUser on every upload. Server-generated 256-bit bearer download tokens.
+RLS denies direct anonymous/authenticated table access. Only service_role invokes quota functions.
+Atomic quotas: three uploads/user/hour, five active global, twenty/day, 200 MiB/day, 400 MiB/31 days.
+Manifest and IPA use the same strict fifteen-minute expiry, enforced independently of cleanup.
+Eight GETs total per reservation; no redirect to a longer-lived storage URL. No-store responses.
+pg_cron every five minutes requests cleanup using a separate Vault-backed secret.
+Service-role, cleanup secret, P12, password and private keys are never shipped in the app.
+Only locally signed IPA with embedded PUBLIC profile is uploaded.
+Archive central-directory bounds reject traversal, duplicates, excessive expansion and signing-key extensions.
+This is structural validation, not cryptographic signature verification or iOS installation proof.
 
-Remaining implementation and authorization boundary
-- Private bucket dedicated to signed IPAs, 30 MB maximum per object.
-- Authenticated per-install JWT upload reservations, atomic user/global count and byte quotas.
-- Server-generated 256-bit tokens; short-lived signed IPA URLs and manifest URLs, 15 minute lifetime.
-- Manifest requests must fail closed after expiry and must never be cached.
-- Scheduled server cleanup must physically delete expired IPAs and metadata, with retry and audit.
-- Validate uploaded IPA archive, root Payload app, bundle/version and absence of bundled signing secrets.
-- Reject archive bombs, encrypted archives, path traversal and malformed signatures; do not trust filename/MIME.
-- Only locally signed IPA is sent. P12, private key, password and raw provisioning material never go to this API.
-- Client uses existing local signing, checks actual Mirsa ID/profile coverage for self-update, confirms before
-  launching itms-services. Explain keychain reset possibility and certificate revocation stopping Mirsa.
-- Apple ID remains default. No changes to 1.3.118 strict-OFF compatibility for normal certificate signing.
+Live tests passed authenticated structural-fixture upload, manifest XML GET and byte-identical IPA GET,
+unauthenticated 401, unknown token 410, expired manifest and IPA 410 BEFORE cleanup,
+and cleanup 200 with fixture object no longer downloadable afterward.
+Fixture was NOT an installable signed app. Real-device OTA install remains untested.
 
-A live host exists. There is no owner account/host blocker proven.
-Adding a bucket, schema, cleanup schedule and new live Edge Function changes the existing live backend;
-this private-only batch has not authorized production/backend deployment. Obtain that specific approval
-before deployment, then test a real HTTPS manifest/IPA download and expired URL rejection.
+Apple ID is the default. Own-certificate mode routes Mirsa self-install/update only.
+Local signer still uses the existing real-device pairing/VPN UDID check. OTA delivery uses HTTPS,
+not VPN. This batch does NOT remove that local signing dependency or weaken actual-UDID verification.
+Profile matching is strict for Mirsa self-install, normal certificate compatibility stays strict-OFF.
+The first locally selected saved certificate is used, matching the existing vault selection semantics.

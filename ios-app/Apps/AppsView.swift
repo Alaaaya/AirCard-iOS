@@ -1117,6 +1117,7 @@ struct PromptSheet: View {
 // MARK: - Settings
 
 struct AppsSettingsSheet: View {
+    @AppStorage(MirsaInstallMode.key) private var installMode = "appleID"
     @AppStorage("mirsa.apps.homeLayout") private var homeLayout = false
     @AppStorage(MirsaCompletionFeedback.enabledKey) private var completionFeedback = true
     @AppStorage("mirsa.home.wallpaper") private var wallpaper = "ocean"
@@ -1139,6 +1140,19 @@ struct AppsSettingsSheet: View {
                         Button(L.t("settings.signOut"), role: .destructive) { store.signOut() }
                     } else {
                         Button(L.t("hero.signIn"), action: onSignIn)
+                    }
+                }
+                Section(tr("Install mode", "طريقة التثبيت")) {
+                    Picker(tr("Install mode", "طريقة التثبيت"), selection: $installMode) {
+                        Text("Apple ID").tag("appleID")
+                        Text(tr("My certificate", "شهادتي")).tag("certificate")
+                    }
+                    if installMode == "certificate" {
+                        NavigationLink { PersonalCertificateManagerView() } label: {
+                            Label(tr("Certificates", "الشهادات"), systemImage: "signature")
+                        }
+                        Text(tr("Self-install and updates use your certificate and a private HTTPS link valid for 15 minutes, OTA installation does not use VPN, but local signing currently still needs the existing pairing/VPN device check. Only the signed IPA and public profile are uploaded, never your P12, password or private key. The profile must cover Mirsa and this device. Keychain data may reset; certificate revocation stops the app. Other Apple ID operations still require VPN.", "تثبيت مرسى وتحديثاته بشهادتك ورابط HTTPS خاص لمدة 15 دقيقة، التثبيت OTA ما بيحتاج VPN، بس التوقيع المحلي حالياً بعده بحاجة لفحص الجهاز بالاقتران وVPN. بينرفع ملف IPA الموقّع والبروفايل العام فقط، مو ملف P12 ولا كلمة السر ولا المفتاح الخاص. لازم البروفايل يدعم مرسى وجهازك. ممكن بيانات سلسلة المفاتيح تنمسح، وإلغاء الشهادة بيوقف التطبيق. عمليات Apple ID التانية بعدها بحاجة VPN."))
+                            .font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Section(tr("Apps layout", "واجهة التطبيقات")) {
@@ -1179,7 +1193,7 @@ struct AppsSettingsSheet: View {
                         dismiss()
                         Task { await MirsaUpdater.shared.updateNow(vm: vm) }
                     } label: { Label(tr("Update Mirsa", "حدّث مرسى"), systemImage: "arrow.triangle.2.circlepath") }
-                    .disabled(store.account == nil && !store.hasSavedLogin)
+                    .disabled(installMode != "certificate" && store.account == nil && !store.hasSavedLogin)
                 } footer: {
                     Text(tr("Checks for a newer build and installs it right away. Current build: \(MirsaUpdater.currentBuild).",
                             "بيفحص إذا في نسخة أحدث وبيثبّتها فوراً. نسختك الحالية: \(MirsaUpdater.currentBuild)."))
@@ -1189,7 +1203,7 @@ struct AppsSettingsSheet: View {
                         dismiss()
                         Task { await store.installSelf(vm: vm) }
                     } label: { Label(L.t("settings.selfInstall"), systemImage: "arrow.down.app") }
-                    .disabled(store.account == nil && !store.hasSavedLogin)
+                    .disabled(installMode != "certificate" && store.account == nil && !store.hasSavedLogin)
                 } footer: { Text(L.t("settings.selfInstallFoot")) }
 
                 Section(L.t("settings.anisette")) {
