@@ -8,6 +8,7 @@ struct PersonalProjectDetailView: View {
     @StateObject private var tweaks = IPATweakLibrary.shared
     @State private var draft = PersonalProjectDraft()
     @State private var loaded = false
+    @StateObject private var keyboard = MirsaKeyboardVisibility()
     @State private var identities: [PersonalIdentityVault.SavedIdentity] = []
     @State private var selectedID: String?
     @State private var showCertificates = false
@@ -59,8 +60,10 @@ struct PersonalProjectDetailView: View {
                     if let message { Text(message).font(.footnote).textSelection(.enabled) }
                 }.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 32)
             }.scrollIndicators(.hidden)
+                .scrollDismissesKeyboard(.interactively)
         }
         .safeAreaInset(edge: .bottom) {
+            if !keyboard.isVisible {
             Button { sign() } label: {
                 HStack(spacing: 8) {
                     if let state = signing.state, state.projectID == app.id, state.running {
@@ -72,9 +75,11 @@ struct PersonalProjectDetailView: View {
                 }.frame(maxWidth: .infinity).padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent).tint(.green)
+            .accessibilityIdentifier("mirsa.project.sign")
             .disabled(busy)
             .padding(.horizontal, 20).padding(.bottom, 12).padding(.top, 12)
             .background(.ultraThinMaterial)
+            }
         }
         .preferredColorScheme(.dark)
         .environment(\.layoutDirection, .leftToRight)
