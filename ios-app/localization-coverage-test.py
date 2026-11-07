@@ -15,3 +15,11 @@ bad=[x[0] for x in leg if '""' in (x[1],x[2],x[3])]
 print("empty",bad)
 assert ok and not bad and "?? ar" in a
 print("PASS")
+
+# Dictionary literals trap at runtime on duplicate keys, even when Swift compiles.
+for path in Path(d).glob("MirsaTr*.swift"):
+    text = path.read_text()
+    for name, body in re.findall(r"static let (\w+):.*?= \[\n(.*?)\n    \]", text, re.S):
+        keys = re.findall(r'^        "((?:[^"\\]|\\.)*)":', body, re.M)
+        assert len(keys) == len(set(keys)), f"duplicate translation key in {path.name}.{name}"
+print("Translation dictionary uniqueness PASS")

@@ -56,7 +56,6 @@ extension MirsaTr {
         "Import Pairing File Now": ("استيراد ملف الاقتران الآن", "ئێستا فایلی جووتکردن هاوردە بکە", "Niha pelê cotkirinê têxe"),
         "Pairing Guide": ("دليل الاقتران", "ڕێبەری جووتکردن", "Rêbera Cotkirinê"),
         "Notice": ("تنبيه", "ئاگاداری", "Hişyarî"),
-        "OK": ("حسناً", "باشە", "Baş e"),
         "Success! 🎉": ("تمّ بنجاح! 🎉", "سەرکەوتوو بوو! 🎉", "Serkeftî! 🎉"),
         "Apply custom wallet card skins and passcode themes on-device. Supports iOS 18.0 – 27.2 beta 2 (iOS 27.2 beta 3+ patched).": ("طبّق أشكال بطاقات المحفظة وثيمات رمز القفل على الجهاز. يدعم iOS 18.0 – 27.2 beta 2 (iOS 27.2 beta 3 وما بعده مُرقَّع).", "شێوەی کارتی جزدان و ڕووکاری کۆدی قوفڵ لەسەر ئامێرەکە جێبەجێ بکە. iOS 18.0 – 27.2 beta 2 پشتگیری دەکات (iOS 27.2 beta 3 و دواتر چاککراوە).", "Çermên kartên Wallet û temayên koda kilîtê li ser cihazê bisepîne. iOS 18.0 – 27.2 beta 2 piştgirî dike (iOS 27.2 beta 3 û nûtir hatiye çareserkirin)."),
         "iOS 27.2 beta 3 or newer detected: Apple patched the AirTraffic exploit on this version. Operations will likely fail.": ("تم اكتشاف iOS 27.2 beta 3 أو أحدث: رقعت Apple ثغرة AirTraffic في هذا الإصدار. ستفشل العمليات غالباً.", "iOS 27.2 beta 3 یان نوێتر دۆزرایەوە: Apple کەلێنی AirTrafficی لەم وەشانەدا چاک کردووە. زۆرجار کارەکان شکست دەهێنن.", "iOS 27.2 beta 3 an nûtir hat dîtin: Apple di vê guhertoyê de qulika AirTraffic çareser kiriye. Dibe ku operasyon têk biçin."),
