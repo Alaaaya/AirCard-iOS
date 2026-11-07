@@ -14,7 +14,7 @@ final class OTANoRedirect: NSObject, URLSessionTaskDelegate {
     static func install(source: URL, material explicitMaterial: PersonalIdentityVault.Material? = nil, options explicitOptions: PersonalProjectOptions? = nil) async throws {
         let selectedMaterial: PersonalIdentityVault.Material
         if let explicitMaterial { selectedMaterial = explicitMaterial }
-        else if let identity = PersonalIdentityVault.savedIdentities().first { selectedMaterial = identity.material }
+        else if let identity = try PersonalIdentityVault.savedIdentities().first { selectedMaterial = identity.material }
         else { throw SideloadError.message(personalText("Import your certificate first.", "استورد شهادتك بالأول.")) }
         let device = try OwnCertificateDevice.require()
         let fm = FileManager.default
