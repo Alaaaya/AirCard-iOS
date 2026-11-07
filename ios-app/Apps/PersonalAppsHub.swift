@@ -45,7 +45,13 @@ final class PersonalAppsLibrary: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         if let directory = try? PersonalProjectFolder.directory(documents: documents, id: app.id, create: false),
            FileManager.default.fileExists(atPath: directory.appendingPathComponent(app.filename).path) {
-            return directory.appendingPathComponent(name)
+            let target = directory.appendingPathComponent(name)
+            let legacy = root.appendingPathComponent(name)
+            // Recover an interrupted migration without hiding legacy draft/icon files.
+            if FileManager.default.fileExists(atPath: target.path) || !FileManager.default.fileExists(atPath: legacy.path) {
+                return target
+            }
+            return legacy
         }
         return root.appendingPathComponent(name)
     }
@@ -53,23 +59,20 @@ final class PersonalAppsLibrary: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let directory = try PersonalProjectFolder.directory(documents: documents, id: app.id)
         let files = [url(app), iconURL(app), draftURL(app)]
-        // Copy all first, then remove old copies. Never leave a half-moved library.
-        var copied: [URL] = []
+        // Same-container moves avoid copying a large IPA on the UI thread.
+        var moved: [(source: URL, destination: URL)] = []
         do {
             for source in files where source.deletingLastPathComponent() != directory && FileManager.default.fileExists(atPath: source.path) {
                 let destination = directory.appendingPathComponent(source.lastPathComponent)
                 guard !FileManager.default.fileExists(atPath: destination.path) else { throw CocoaError(.fileWriteFileExists) }
                 let attributes = try source.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
                 guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else { throw CocoaError(.fileReadNoPermission) }
-                try FileManager.default.copyItem(at: source, to: destination)
-                copied.append(destination)
+                try FileManager.default.moveItem(at: source, to: destination)
+                moved.append((source, destination))
             }
         } catch {
-            for url in copied { try? FileManager.default.removeItem(at: url) }
+            for pair in moved.reversed() { try? FileManager.default.moveItem(at: pair.destination, to: pair.source) }
             throw error
-        }
-        for source in files where source.deletingLastPathComponent() != directory {
-            try? FileManager.default.removeItem(at: source)
         }
         return directory
     }
