@@ -29,14 +29,15 @@ enum PersonalProjectFolder {
 
     /// Preflight every source and destination before changing user data.
     /// On failure, roll back moves without ever overwriting a collision.
-    static func migrate(files: [URL], to directory: URL) throws {
+    static func migrate(files: [URL], to directory: URL,
+                        move: (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }) throws {
         let fm = FileManager.default
         try checkDirectory(directory)
         var planned: [(URL, URL)] = []
         for source in files {
             let attrs: [FileAttributeKey: Any]
             do { attrs = try fm.attributesOfItem(atPath: source.path) }
-            catch let error as NSError where error.domain == NSCocoaErrorDomain && error.code == NSFileReadNoSuchFileError { continue }
+            catch let error as NSError where error.domain == NSCocoaErrorDomain && [NSFileReadNoSuchFileError, NSFileNoSuchFileError].contains(error.code) { continue }
             guard attrs[.type] as? FileAttributeType == .typeRegular else { throw CocoaError(.fileReadNoPermission) }
             let destination = directory.appendingPathComponent(source.lastPathComponent)
             // attributesOfItem also detects dangling symlinks, unlike fileExists.
@@ -48,7 +49,7 @@ enum PersonalProjectFolder {
         var moved: [(URL, URL)] = []
         do {
             for (source, destination) in planned {
-                try fm.moveItem(at: source, to: destination)
+                try move(source, destination)
                 moved.append((source, destination))
             }
         } catch {
