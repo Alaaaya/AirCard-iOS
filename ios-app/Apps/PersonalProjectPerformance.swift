@@ -80,7 +80,8 @@ actor PersonalProjectInspection {
         let result = await task.value
         pending[key] = nil
         // Do not retain stale results if the source changed during extraction.
-        if let result, (try? Key(url)) == key {
+        guard (try? Key(url)) == key else { return nil }
+        if let result {
             cache = cache.filter { $0.key.path != key.path }
             if cache.count >= 12 { cache.removeAll() }
             cache[key] = result

@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct PersonalProjectDetailView: View {
     let app: PersonalLibraryApp
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var library = PersonalAppsLibrary.shared
     @StateObject private var tweaks = IPATweakLibrary.shared
     @State private var draft = PersonalProjectDraft()
@@ -116,6 +117,7 @@ struct PersonalProjectDetailView: View {
         .task { await load(); await inspect(); consumeSigningResult() }
         .onChange(of: signing.state?.running) { _ in consumeSigningResult() }
         .onChange(of: draft) { _ in if loaded { draftWriter.schedule(draft, to: library.draftURL(app)) } }
+        .onChange(of: scenePhase) { phase in if phase != .active { draftWriter.flush() } }
         .onDisappear { draftWriter.flush(); if !sharing { cleanOutput() } }
     }
 
