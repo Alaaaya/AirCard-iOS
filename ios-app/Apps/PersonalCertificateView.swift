@@ -204,7 +204,7 @@ enum PersonalCertificateSigner {
         var installError: String? = nil
     }
     /// Extract and apply every non-signing edit. Shared by signed and configuration-only export.
-    private static func prepare(ipa: URL, stage: URL, options: PersonalProjectOptions) throws -> (root: URL, app: URL, info: [String: Any]) {
+    private static func prepare(ipa: URL, stage: URL, options: PersonalProjectOptions, applyBundleID: Bool = true) throws -> (root: URL, app: URL, info: [String: Any]) {
         let fm = FileManager.default
         let root = stage.appendingPathComponent("archive", isDirectory: true)
         try IPAEditorService.run("extract", input: ipa, output: root)
@@ -217,7 +217,7 @@ enum PersonalCertificateSigner {
             }
             info["CFBundleDisplayName"] = name; info["CFBundleName"] = name
         }
-        if let id = options.bundleID {
+        if applyBundleID, let id = options.bundleID {
             guard IPAEditorService.validBundleID(id) else { throw SideloadError.message("معرّف التطبيق غير صالح.") }
             info["CFBundleIdentifier"] = id
         }
@@ -305,7 +305,7 @@ enum PersonalCertificateSigner {
         try fm.createDirectory(at: stage, withIntermediateDirectories: true,
                                attributes: [.protectionKey: FileProtectionType.complete])
         defer { try? fm.removeItem(at: stage) }
-        let (root, app, info) = try prepare(ipa: ipa, stage: stage, options: options)
+        let (root, app, info) = try prepare(ipa: ipa, stage: stage, options: options, applyBundleID: false)
         // Reject FairPlay/encrypted code, including embedded libraries, before signing.
         let executable = app.appendingPathComponent(info["CFBundleExecutable"] as! String)
         try IPAEditorService.run("validate", input: executable)
@@ -316,6 +316,7 @@ enum PersonalCertificateSigner {
                                       "profile": profile.path, "private_key": key.base64EncodedString(),
                                       "certificate": certificate.base64EncodedString(),
                                       "pairing_path": pairingPath,
+                                      "bundle_id": options.bundleID ?? "",
                                       "remove_extensions": options.removeExtensions,
                                       "remove_watch": options.removeWatchApp,
                                       "remove_app_clips": options.removeAppClips,
