@@ -1,0 +1,6 @@
+{
+  "1.3.102": {
+    "en": "Refresh and install are more reliable: fixed a random \"No such file\" failure when renewing a signed app, and error messages are clearer. New in-app browser to grab IPAs straight into Mirsa, with a confirmation sheet before install. Projects get per-tweak targets and ordering, an optional LoadControl loader mode, a bundle file manager with plist editing, copy/share for tweak sources, and a launch log viewer. Renew wording on the Apple ID card, cellular refresh no longer needs Wi-Fi, and the updater now verifies downloads more strictly.",
+    "ar": "التجديد والتثبيت صاروا أثبت: صلّحنا خطأ «No such file» العشوائي لما تجدد تطبيق موقّع، ورسائل الأخطاء صارت أوضح. متصفح جديد داخل التطبيق لتنزيل ملفات IPA مباشرة لـ Mirsa مع شاشة تأكيد قبل التثبيت. المشاريع صار فيها هدف وترتيب لكل تويك، ووضع LoadControl اختياري، ومدير ملفات للحزمة مع تعديل plist، ونسخ ومشاركة لروابط المصادر، وسجل تشغيل للتطبيقات. كلمة «تجديد» على بطاقة Apple ID، والتجديد بالشبكة الخلوية ما عاد يحتاج Wi-Fi، والتحديثات صارت تتحقق من التنزيل بشكل أصرم."
+  }
+}
