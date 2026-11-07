@@ -598,7 +598,16 @@ struct ContentView: View {
     @EnvironmentObject var vm: AppViewModel
     @AppStorage("aircard.dont_show_support_on_launch") private var dontShowSupportOnLaunch: Bool = false
     @State private var showSupportPopup: Bool = false
-    @State private var receivingIPA = false
+    @State private var incoming: IncomingItem?
+    @State private var incomingQueue: [IncomingItem] = []
+    @State private var presentedURL: URL?
+    private struct IncomingItem: Identifiable { let url: URL; let filename: String; var id: URL { url } }
+    private func presentNextIncoming() {
+        guard incoming == nil, !incomingQueue.isEmpty else { return }
+        let next = incomingQueue.removeFirst()
+        presentedURL = next.url
+        incoming = next
+    }
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     private var liquidTheme: Bool { theme == MirsaTheme.liquid.rawValue }
 
@@ -642,25 +651,45 @@ struct ContentView: View {
             // Document handoff uses a private snapshot before the provider relinquishes access.
             guard url.isFileURL, url.pathExtension.lowercased() == "ipa" else { return }
             vm.selectedTab = .apps
-            guard !receivingIPA, AppsStore.shared.busy == nil, AppsStore.shared.pending == nil else {
-                vm.errorMessage = tr("Finish the current import before opening another IPA.", "خلّص الاستيراد الحالي قبل ما تفتح ملف تاني.")
-                return
-            }
-            receivingIPA = true
             Task {
-                defer { receivingIPA = false }
                 do {
                     let snapshot = try await Task.detached(priority: .userInitiated) {
                         try OpenInIPA.snapshot(url)
                     }.value
-                    defer { OpenInIPA.remove(snapshot) }
-                    guard AppsStore.shared.busy == nil, AppsStore.shared.pending == nil else {
-                        vm.errorMessage = tr("Finish the current import before opening another IPA.", "خلّص الاستيراد الحالي قبل ما تفتح ملف تاني.")
-                        return
-                    }
-                    await AppsStore.shared.importIPA(from: snapshot)
+                    incomingQueue.append(IncomingItem(url: snapshot, filename: url.lastPathComponent))
+                    presentNextIncoming()
                 } catch { vm.errorMessage = error.localizedDescription }
             }
+        }
+        .sheet(item: $incoming, onDismiss: {
+            // Swipe-dismiss or cancel: only an unconsumed snapshot is removed.
+            if let leftover = presentedURL { OpenInIPA.remove(leftover); presentedURL = nil }
+            presentNextIncoming()
+        }) { item in
+            IncomingIPAConfirmationSheet(
+                url: item.url,
+                filename: item.filename,
+                onCancel: { incoming = nil },
+                onImportProject: { source in
+                    presentedURL = nil
+                    incoming = nil
+                    Task {
+                        defer { OpenInIPA.remove(source) }
+                        do { try await PersonalAppsLibrary.shared.add(source, signed: false) }
+                        catch { vm.errorMessage = error.localizedDescription }
+                    }
+                },
+                onSignInstall: { source, identity in
+                    presentedURL = nil
+                    incoming = nil
+                    Task {
+                        defer { OpenInIPA.remove(source) }
+                        do {
+                            _ = try await CertificateInstall.run(input: source, appID: nil, identity: identity, store: AppsStore.shared)
+                        } catch { vm.errorMessage = error.localizedDescription }
+                    }
+                }
+            )
         }
         .alert("Notice", isPresented: Binding(
             get: { vm.errorMessage != nil },
