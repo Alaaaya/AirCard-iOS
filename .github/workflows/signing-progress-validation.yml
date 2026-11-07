@@ -81,7 +81,12 @@ jobs:
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLanguages -array ar en
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLocale ar
           mkdir -p build
+          python3 scripts/capture-keyboard-runtime.py "$DEVICE" build/simulator-validation.log build/screenshots &
+          CAPTURE_PID=$!
+          trap 'kill "$CAPTURE_PID" 2>/dev/null || true' EXIT
           xcodebuild -project Mirsa.xcodeproj -scheme Mirsa -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/SimulatorData -resultBundlePath build/PersonalUI.xcresult test CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/simulator-validation.log
+          test -s build/screenshots/project-real-keyboard-visible-focused-field.png
+          test -s build/screenshots/project-real-keyboard-hidden-CTA-restored.png
       - name: Export runtime screenshot attachments
         if: always()
         run: |

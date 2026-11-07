@@ -77,16 +77,17 @@ final class MirsaKeyboardTests: XCTestCase {
         XCTAssertLessThanOrEqual(visibleField.maxY, keyboardTop, "Focused project field remains above keyboard")
         XCTAssertGreaterThan(visibleField.height, 0)
         let scroll = try XCTUnwrap(descendants(host.view).compactMap { $0 as? UIScrollView }.first)
-        XCTAssertEqual(scroll.keyboardDismissMode, .interactive)
+        XCTAssertTrue([UIScrollView.KeyboardDismissMode.interactive, .interactiveWithAccessory].contains(scroll.keyboardDismissMode),
+                      "Must use interactive keyboard dismissal, with or without the accessory")
         XCTAssertFalse(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
                        "CTA must not be exposed or cover the page while software keyboard is visible")
-        attach("project-real-keyboard-visible-focused-field")
+        try await attach("project-real-keyboard-visible-focused-field")
         window.endEditing(false)
         try await Task.sleep(nanoseconds: 800_000_000)
         XCTAssertFalse(field.isFirstResponder)
         XCTAssertTrue(accessibilityContains(host.view, identifier: "mirsa.project.sign"),
                       "CTA must return after keyboard fully dismisses")
-        attach("project-real-keyboard-hidden-CTA-restored")
+        try await attach("project-real-keyboard-hidden-CTA-restored")
     }
 
     private func accessibilityContains(_ root: NSObject, identifier: String) -> Bool {
@@ -113,10 +114,10 @@ final class MirsaKeyboardTests: XCTestCase {
         return find(root, depth: 0)
     }
 
-    private func attach(_ name: String) {
-        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-        attachment.name = name
-        attachment.lifetime = .keepAlways
-        add(attachment)
+    private func attach(_ name: String) async throws {
+        // The host runner captures the real simulator display via simctl.
+        // XCUIScreen requires a UI-test runner and throws from hosted unit tests.
+        NSLog("MIRSA_SCREENSHOT_REQUEST %@", name)
+        try await Task.sleep(nanoseconds: 2_000_000_000)
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import SwiftUI
 
 /// A separate identity prevents the form's keystrokes from rebuilding the
@@ -40,18 +41,34 @@ final class PersonalProjectDraftWriter: ObservableObject {
 actor PersonalProjectInspection {
     struct Key: Hashable {
         let path: String
-        let size: Int
-        let modified: Date
-        let identifier: String
+        let size: Int64
+        let device: Int64
+        let inode: UInt64
+        let modifiedSeconds: Int64
+        let modifiedNanoseconds: Int64
+        let changedSeconds: Int64
+        let changedNanoseconds: Int64
         init(_ url: URL) throws {
-            let v = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey, .isRegularFileKey, .isSymbolicLinkKey])
-            guard v.isRegularFile == true, v.isSymbolicLink != true,
-                  let size = v.fileSize, let modified = v.contentModificationDate else { throw CocoaError(.fileReadCorruptFile) }
+            // URL.resourceValues caches metadata on the URL instance. Always
+            // query the filesystem, preserving nanoseconds and change time.
+            var metadata = stat()
+            guard url.withUnsafeFileSystemRepresentation({ path in
+                guard let path else { return false }
+                return lstat(path, &metadata) == 0
+            }), (metadata.st_mode & S_IFMT) == S_IFREG else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
             self.path = url.standardizedFileURL.path
-            self.size = size; self.modified = modified
-            self.identifier = String(describing: v.fileResourceIdentifier)
+            size = Int64(metadata.st_size)
+            device = Int64(metadata.st_dev)
+            inode = UInt64(metadata.st_ino)
+            modifiedSeconds = Int64(metadata.st_mtimespec.tv_sec)
+            modifiedNanoseconds = Int64(metadata.st_mtimespec.tv_nsec)
+            changedSeconds = Int64(metadata.st_ctimespec.tv_sec)
+            changedNanoseconds = Int64(metadata.st_ctimespec.tv_nsec)
         }
     }
+
     struct Result { let extensions: Int; let dependencies: [String] }
     static let shared = PersonalProjectInspection()
     private var cache: [Key: Result] = [:]
