@@ -164,7 +164,7 @@ final class PersonalAppsLibrary: ObservableObject {
         }
     }
 
-    func add(_ input: URL, signed: Bool) async throws {
+    func add(_ input: URL, signed: Bool, onAdded: ((PersonalLibraryApp) -> Void)? = nil) async throws {
         // Never overwrite an unreadable index with a partial library.
         guard loadError == nil else { throw SideloadError.message("Personal library could not be opened. Unlock your device and reopen Mirsa.") }
         let destination = root
@@ -210,6 +210,7 @@ final class PersonalAppsLibrary: ObservableObject {
             try? FileManager.default.removeItem(at: iconURL(app))
             throw error
         }
+        onAdded?(app)
     }
 }
 

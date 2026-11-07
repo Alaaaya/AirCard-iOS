@@ -359,6 +359,22 @@ final class AppsStore: ObservableObject {
 
     // MARK: Import
 
+    @Published var explicitIncomingInstall = false
+
+    /// Explicit Open-in Apple ID never consults the default installation mode.
+    /// Suppress the generic pending-choice sheet while committing this choice.
+    func installIncomingWithAppleID(from url: URL, vm: AppViewModel) async throws {
+        guard busy == nil, pending == nil, !explicitIncomingInstall else {
+            throw SideloadError.message(tr("Finish the current import first.", "خلّص الاستيراد الحالي أولاً."))
+        }
+        explicitIncomingInstall = true
+        defer { explicitIncomingInstall = false }
+        error = nil
+        await importIPA(from: url)
+        if pending != nil { await commitPending(to: .real, vm: vm) }
+        if let message = error { error = nil; throw SideloadError.message(message) }
+    }
+
     func importIPA(from url: URL) async {
         guard busy == nil, pending == nil else { return }
         let feedbackID = UUID()

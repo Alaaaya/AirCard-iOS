@@ -21,6 +21,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust-core
+      - name: Check explicit incoming routes
+        run: python3 scripts/tests/test_openin_explicit.py
       - name: Test Rust validation
         run: cargo test --manifest-path rust-core/Cargo.toml --lib personal_sign
       - name: Build Rust device library
@@ -78,7 +80,7 @@ jobs:
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLanguages -array ar en
           xcrun simctl spawn "$DEVICE" defaults write NSGlobalDomain AppleLocale ar
           mkdir -p build
-          xcodebuild -project Mirsa.xcodeproj -scheme Mirsa -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/SimulatorData -resultBundlePath build/PersonalUI.xcresult -only-testing:MirsaTests/OpenInIPATests test CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/simulator-validation.log
+          xcodebuild -project Mirsa.xcodeproj -scheme Mirsa -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE" -derivedDataPath build/SimulatorData -resultBundlePath build/PersonalUI.xcresult -only-testing:MirsaTests/OpenInIPATests -only-testing:MirsaTests/IncomingIPAConfirmationTests -only-testing:MirsaTests/IncomingIPAExplicitTests -only-testing:MirsaTests/OwnCertificateDeviceTests test CODE_SIGNING_ALLOWED=NO 2>&1 | tee build/simulator-validation.log
       - name: Export runtime screenshot attachments
         if: always()
         run: |

@@ -2,6 +2,9 @@ import Foundation
 
 extension MirsaTr {
     static let extraCkb: [String: String] = [
+        "Install with Apple ID": "دامەزراندن بە Apple ID",
+        "Save to my library": "هەڵگرتن لە کتێبخانەکەم",
+        "Sign & install with certificate": "واژۆکردن و دامەزراندن بە بڕوانامە",
         "@mak5er • Lead & Core Developer": "@mak5er • گەشەپێدەری سەرەکی",
         "Preparing edits": "دەستکارییەکان ئامادە دەکرێن",
         "Name, icon, version and your own code": "ناو، ئایکۆن، وەشان و کۆدی خۆت",
@@ -44,6 +47,9 @@ extension MirsaTr {
         "{} code file(s)": "{} فایلی کۆد",
     ]
     static let extraKmr: [String: String] = [
+        "Install with Apple ID": "Bi Apple ID saz bike",
+        "Save to my library": "Di pirtûkxaneya min de tomar bike",
+        "Sign & install with certificate": "Bi sertîfîkayê îmze û saz bike",
         "@mak5er • Lead & Core Developer": "@mak5er • Pêşdebirê sereke",
         "Preparing edits": "Guherîn têne amadekirin",
         "Name, icon, version and your own code": "Nav, îkon, guherto û koda te",

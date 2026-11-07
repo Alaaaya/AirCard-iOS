@@ -207,8 +207,8 @@ struct AppsTab: View {
                 Task { await store.importIPA(from: url) }
             }
         }
-        .sheet(item: Binding(get: { showURLImport || showPicker ? nil : store.pending }, set: {
-            if $0 == nil && !showURLImport && !showPicker { store.cancelPending() }
+        .sheet(item: Binding(get: { showURLImport || showPicker || store.explicitIncomingInstall ? nil : store.pending }, set: {
+            if $0 == nil && !showURLImport && !showPicker && !store.explicitIncomingInstall { store.cancelPending() }
         })) { p in
             InstallChoiceSheet(pending: p, store: store, onPersonal: {
                 Task {

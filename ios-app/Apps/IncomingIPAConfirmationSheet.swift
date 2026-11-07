@@ -8,10 +8,14 @@ struct IncomingIPAConfirmationSheet: View {
     let filename: String
     let onCancel: () -> Void
     let onImportProject: (URL) -> Void
+    var onAppleID: ((URL) -> Void)? = nil
+    var onSaveLibrary: ((URL) -> Void)? = nil
     let onSignInstall: (URL, PersonalIdentityVault.SavedIdentity) -> Void
     /// Supply ONLY when the existing direct-install path validated this exact
     /// snapshot/device. Signature/profile presence alone is NOT eligibility.
     var onDirectInstall: ((URL) -> Void)? = nil
+    @ObservedObject private var store = AppsStore.shared
+    @State private var login = false
     @State private var preview: IncomingIPAPreview?
     @State private var error: String?
     @State private var loading = true
@@ -33,7 +37,7 @@ struct IncomingIPAConfirmationSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack(alignment: .top) {
-                        Button(action: onCancel) { Image(systemName: "xmark").font(.headline).padding(12).appsGlass(cornerRadius: 14) }
+                        Button { guard !submitted else { return }; onCancel() } { Image(systemName: "xmark").font(.headline).padding(12).appsGlass(cornerRadius: 14) }
                             .accessibilityLabel(tr("Cancel", "إلغاء"))
                         Spacer()
                         VStack(alignment: .trailing, spacing: 5) {
@@ -112,6 +116,9 @@ struct IncomingIPAConfirmationSheet: View {
         .preferredColorScheme(.dark)
         .environment(\.layoutDirection, .leftToRight)
         .interactiveDismissDisabled(submitted)
+        .sheet(isPresented: $login, onDismiss: {
+            if store.account != nil, let onAppleID { submit(onAppleID) }
+        }) { LoginSheet(store: store) }
         .task {
             guard preview == nil else { return }
             do {
@@ -199,11 +206,30 @@ struct IncomingIPAConfirmationSheet: View {
     private var actions: some View {
         VStack(spacing: 10) {
             HStack(spacing: 10) {
-                Button(tr("Cancel", "إلغاء"), action: onCancel).frame(maxWidth: .infinity).padding(.vertical, 11).appsGlass(cornerRadius: 13)
+                Button(tr("Cancel", "إلغاء")) { guard !submitted else { return }; onCancel() }.frame(maxWidth: .infinity).padding(.vertical, 11).appsGlass(cornerRadius: 13)
                 Button { submit(onImportProject) } label: {
                     Text(tr("Import to project", "استيراد لمشروع")).frame(maxWidth: .infinity).padding(.vertical, 11)
                 }.appsGlass(cornerRadius: 13, tint: violet).disabled(preview == nil || submitted)
             }.font(.subheadline.weight(.semibold))
+            if let onSaveLibrary {
+                Button { submit(onSaveLibrary) } label: {
+                    Label(tr("Save to my library", "حفظ بمكتبتي"), systemImage: "square.stack.3d.up")
+                        .frame(maxWidth: .infinity).padding(.vertical, 11)
+                }.font(.subheadline.weight(.semibold)).appsGlass(cornerRadius: 13, tint: violet)
+                    .accessibilityIdentifier("mirsa.incoming.library")
+                    .disabled(preview == nil || submitted)
+            }
+            if let onAppleID {
+                Button {
+                    if store.account == nil && !store.hasSavedLogin { login = true }
+                    else { submit(onAppleID) }
+                } label: {
+                    Label(tr("Install with Apple ID", "تثبيت بـ Apple ID"), systemImage: "apple.logo")
+                        .font(.headline).frame(maxWidth: .infinity).padding(.vertical, 13)
+                }.appsGlass(cornerRadius: 15, tint: violet)
+                    .accessibilityIdentifier("mirsa.incoming.appleID")
+                    .disabled(preview == nil || submitted)
+            }
             Button {
                 if let selected {
                     guard preview != nil, !submitted else { return }
@@ -211,11 +237,11 @@ struct IncomingIPAConfirmationSheet: View {
                     onSignInstall(url, selected)
                 } else { certificates = true }
             } label: {
-                Label(tr("Sign & Install", "توقيع وتثبيت"), systemImage: "signature").font(.headline)
+                Label(tr("Sign & install with certificate", "توقيع وتثبيت بالشهادة"), systemImage: "signature").font(.headline)
                     .frame(maxWidth: .infinity).padding(.vertical, 15)
                     .foregroundStyle(Color(red: 0.12, green: 0.09, blue: 0.18))
                     .background(LinearGradient(colors: [gold, Color(red: 0.98, green: 0.88, blue: 0.67)], startPoint: .leading, endPoint: .trailing), in: RoundedRectangle(cornerRadius: 15))
-            }.disabled(preview == nil || submitted)
+            }.accessibilityIdentifier("mirsa.incoming.certificate").disabled(preview == nil || submitted)
             if let onDirectInstall {
                 Button { submit(onDirectInstall) } label: {
                     Label(tr("Direct install", "تثبيت مباشر"), systemImage: "square.and.arrow.down").font(.subheadline.weight(.semibold))

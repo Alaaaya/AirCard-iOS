@@ -601,12 +601,39 @@ struct ContentView: View {
     @State private var incoming: IncomingItem?
     @State private var incomingQueue: [IncomingItem] = []
     @State private var presentedURL: URL?
-    private struct IncomingItem: Identifiable { let url: URL; let filename: String; var id: URL { url } }
+    @State private var incomingHandoff: (() -> Void)?
+    @State private var incomingProject: PersonalLibraryApp?
+    @State private var incomingProcessing = false
+    @State private var incomingSources = Set<URL>()
+    @State private var presentedSource: URL?
+    private struct IncomingItem: Identifiable { let url: URL; let filename: String; let source: URL; var id: URL { url } }
     private func presentNextIncoming() {
-        guard incoming == nil, !incomingQueue.isEmpty else { return }
+        guard incoming == nil, !incomingProcessing, incomingProject == nil, !incomingQueue.isEmpty else { return }
         let next = incomingQueue.removeFirst()
+        presentedSource = next.source
         presentedURL = next.url
         incoming = next
+    }
+    /// Transfer ownership before dismissal. The snapshot survives nested sheets,
+    /// and work starts only once the confirmation sheet has actually dismissed.
+    private func consumeIncoming(_ source: URL, operation: @escaping @MainActor () async throws -> Void) {
+        guard incomingHandoff == nil, !incomingProcessing else { return }
+        incomingProcessing = true
+        presentedURL = nil
+        incomingHandoff = {
+            Task { @MainActor in
+                defer {
+                    OpenInIPA.remove(source)
+                    if let original = presentedSource { incomingSources.remove(original) }
+                    presentedSource = nil
+                    incomingProcessing = false
+                    presentNextIncoming()
+                }
+                do { try await operation() }
+                catch { vm.errorMessage = error.localizedDescription }
+            }
+        }
+        incoming = nil
     }
     @AppStorage(MirsaTheme.key) private var theme = MirsaTheme.liquid.rawValue
     private var liquidTheme: Bool { theme == MirsaTheme.liquid.rawValue }
@@ -651,56 +678,78 @@ struct ContentView: View {
             // Document handoff uses a private snapshot before the provider relinquishes access.
             guard url.isFileURL, url.pathExtension.lowercased() == "ipa" else { return }
             vm.selectedTab = .apps
+            guard incomingSources.insert(url.standardizedFileURL).inserted else { return }
             Task {
                 do {
                     let snapshot = try await Task.detached(priority: .userInitiated) {
                         try OpenInIPA.snapshot(url)
                     }.value
-                    incomingQueue.append(IncomingItem(url: snapshot, filename: url.lastPathComponent))
+                    incomingQueue.append(IncomingItem(url: snapshot, filename: url.lastPathComponent, source: url.standardizedFileURL))
                     presentNextIncoming()
-                } catch { vm.errorMessage = error.localizedDescription }
+                } catch {
+                    incomingSources.remove(url.standardizedFileURL)
+                    vm.errorMessage = error.localizedDescription
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .mirsaIncomingIPA)) { note in
-            guard let file = note.object as? URL else { return }
+            guard let file = note.object as? URL,
+                  incomingSources.insert(file.standardizedFileURL).inserted else { return }
             Task {
                 do {
                     try? await Task.sleep(nanoseconds: 600_000_000)
                     let snapshot = try await Task.detached(priority: .userInitiated) { try OpenInIPA.snapshot(file) }.value
-                    incomingQueue.append(IncomingItem(url: snapshot, filename: file.lastPathComponent))
+                    incomingQueue.append(IncomingItem(url: snapshot, filename: file.lastPathComponent, source: file.standardizedFileURL))
                     presentNextIncoming()
-                } catch { vm.errorMessage = error.localizedDescription }
+                } catch {
+                    incomingSources.remove(file.standardizedFileURL)
+                    vm.errorMessage = error.localizedDescription
+                }
             }
         }
         .sheet(item: $incoming, onDismiss: {
-            // Swipe-dismiss or cancel: only an unconsumed snapshot is removed.
             if let leftover = presentedURL { OpenInIPA.remove(leftover); presentedURL = nil }
-            presentNextIncoming()
+            if let handoff = incomingHandoff {
+                incomingHandoff = nil
+                handoff()
+            } else {
+                if let source = presentedSource { incomingSources.remove(source); presentedSource = nil }
+                presentNextIncoming()
+            }
         }) { item in
             IncomingIPAConfirmationSheet(
                 url: item.url,
                 filename: item.filename,
                 onCancel: { incoming = nil },
                 onImportProject: { source in
-                    presentedURL = nil
-                    incoming = nil
-                    Task {
-                        defer { OpenInIPA.remove(source) }
-                        do { try await PersonalAppsLibrary.shared.add(source, signed: false) }
-                        catch { vm.errorMessage = error.localizedDescription }
+                    consumeIncoming(source) {
+                        try await PersonalAppsLibrary.shared.add(source, signed: false) { app in
+                            incomingProject = app
+                        }
+                        vm.selectedTab = .personalHub
+                    }
+                },
+                onAppleID: { source in
+                    consumeIncoming(source) {
+                        vm.selectedTab = .apps
+                        try await AppsStore.shared.installIncomingWithAppleID(from: source, vm: vm)
+                    }
+                },
+                onSaveLibrary: { source in
+                    consumeIncoming(source) {
+                        try await PersonalAppsLibrary.shared.add(source, signed: false)
+                        vm.selectedTab = .personalHub
                     }
                 },
                 onSignInstall: { source, identity in
-                    presentedURL = nil
-                    incoming = nil
-                    Task {
-                        defer { OpenInIPA.remove(source) }
-                        do {
-                            _ = try await CertificateInstall.run(input: source, appID: nil, identity: identity, store: AppsStore.shared)
-                        } catch { vm.errorMessage = error.localizedDescription }
+                    consumeIncoming(source) {
+                        _ = try await CertificateInstall.run(input: source, appID: nil, identity: identity, store: AppsStore.shared)
                     }
                 }
             )
+        }
+        .sheet(item: $incomingProject, onDismiss: { presentNextIncoming() }) { app in
+            PersonalProjectDetailView(app: app)
         }
         .alert(MirsaTr.lit("Notice"), isPresented: Binding(
             get: { vm.errorMessage != nil },
