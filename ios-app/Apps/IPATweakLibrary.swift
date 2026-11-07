@@ -45,6 +45,17 @@ final class IPATweakLibrary: ObservableObject {
         do { try save() } catch { items = previous; throw error }
         try? FileManager.default.removeItem(at: Self.root.appendingPathComponent(item.id.uuidString))
     }
+    /// Stable per-component id: package UUID + normalized root-relative path.
+    static func componentID(_ item: IPATweak, _ root: String) -> String { item.id.uuidString + ":" + root }
+    /// Like urls(for:) but skips components the user excluded; order of roots is kept.
+    func urls(for id: UUID, excluding excluded: Set<String>) throws -> [URL] {
+        guard let item = items.first(where: { $0.id == id }) else {
+            throw SideloadError.message("A selected tweak is missing. Select it again.")
+        }
+        return item.roots.filter { !excluded.contains(Self.componentID(item, $0)) }.map {
+            Self.root.appendingPathComponent(item.id.uuidString).appendingPathComponent($0)
+        }
+    }
     func urls(for ids: Set<UUID>) throws -> [URL] {
         guard ids.isSubset(of: Set(items.map(\.id))) else {
             throw SideloadError.message("A selected tweak is missing. Select it again.")

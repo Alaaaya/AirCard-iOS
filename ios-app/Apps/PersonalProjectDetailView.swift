@@ -194,6 +194,7 @@ struct PersonalProjectDetailView: View {
                     }.buttonStyle(.plain)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(tweak(id)?.name ?? "").font(.subheadline).lineLimit(1)
+                        componentList(id)
                         Menu {
                             Button { draft.directInjection = true } label: { Label(personalText("Via main executable", "عبر الملف التنفيذي الرئيسي"), systemImage: loaderOn ? "circle" : "checkmark") }
                             Button { } label: { Text(personalText("Specific framework / extension (unavailable)", "إطار أو إضافة محددة (غير متاح)")) }.disabled(true)
@@ -209,6 +210,19 @@ struct PersonalProjectDetailView: View {
                 }.buttonStyle(.plain).padding(10).background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }.padding(16).appsGlass(cornerRadius: 24)
+    }
+    @ViewBuilder private func componentList(_ id: UUID) -> some View {
+        if let item = tweak(id), item.packageOnlyCode, item.roots.count > 1 {
+            ForEach(item.roots, id: \.self) { root in
+                let cid = IPATweakLibrary.componentID(item, root)
+                Toggle(isOn: Binding(get: { !(draft.excludedRoots ?? []).contains(cid) }, set: { on in
+                    var list = draft.excludedRoots ?? []
+                    list.removeAll { $0 == cid }
+                    if !on { list.append(cid) }
+                    draft.excludedRoots = list
+                })) { Text((root as NSString).lastPathComponent).font(.caption2).lineLimit(1) }
+            }
+        }
     }
     private var loaderOn: Bool { draft.directInjection == false }
     private func move(_ id: UUID, _ delta: Int) {
@@ -385,7 +399,8 @@ struct PersonalProjectDetailView: View {
         let minimum = draft.minimumOS.trimmingCharacters(in: .whitespacesAndNewlines)
         options.minimumOS = minimum.isEmpty ? nil : minimum
         do {
-            options.libraries = try draft.tweakIDs.flatMap { try tweaks.urls(for: [$0]) }
+            let excluded = Set(draft.excludedRoots ?? [])
+            options.libraries = try draft.tweakIDs.flatMap { try tweaks.urls(for: $0, excluding: excluded) }
         } catch { message = error.localizedDescription; return }
         let input = library.url(app)
         let signingOptions = options

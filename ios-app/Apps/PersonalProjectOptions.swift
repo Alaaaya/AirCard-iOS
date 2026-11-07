@@ -54,5 +54,7 @@ struct PersonalProjectDraft: Codable, Equatable {
     var directInjection: Bool? = nil
     /// tweak id -> target id. nil/absent = main executable. Specific framework/extension targets stay disabled until the backend enumerates real Mach-O targets.
     var tweakTargets: [String: String]? = nil
+    /// Excluded package components, keyed "<tweakUUID>:<rootRelativePath>". A .deb exposes each dylib/framework root as its own component.
+    var excludedRoots: [String]? = nil
     var appliedTweakIDs: [UUID]? = nil
 }
