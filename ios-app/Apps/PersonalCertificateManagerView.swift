@@ -40,6 +40,7 @@ struct PersonalCertificateManagerView: View {
                                         Spacer(minLength: 0)
                                     }
                                 }.buttonStyle(.plain)
+                                NavigationLink { PersonalCertificateDetailsView(identity: item) } label: { Image(systemName: "info.circle") }
                                 Button(role: .destructive) { removing = item } label: { Image(systemName: "trash") }
                             }.padding(16).appsGlass(cornerRadius: 22)
                         }
