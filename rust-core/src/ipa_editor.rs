@@ -3,6 +3,8 @@
 //! Mach-O rewriting only consumes verified zero header padding; no relocation.
 #[path = "load_control.rs"]
 mod load_control;
+#[path = "tweak_targets.rs"]
+mod tweak_targets;
 use serde::Deserialize;
 use std::{
     collections::{BTreeMap, HashSet},
@@ -900,6 +902,12 @@ fn inject(app: &Path, executable: &str, libraries: &[String], first: bool) -> Re
 struct Request {
     operation: String,
     #[serde(default)]
+    injections: Vec<tweak_targets::Injection>,
+    #[serde(default)]
+    order: Vec<String>,
+    #[serde(default)]
+    use_loader: bool,
+    #[serde(default)]
     input: String,
     #[serde(default)]
     output: String,
@@ -934,6 +942,9 @@ fn run(r: Request) -> Result<crate::personal_sign::Verification> {
             if out.parent().is_none() { return Err("Invalid output".into()); }
             fs::write(out, json).map_err(err)
         }
+        "targets" => tweak_targets::list_targets(Path::new(&r.input),Path::new(&r.output)),
+        "package_roots" => tweak_targets::package_roots(Path::new(&r.input),Path::new(&r.output)),
+        "inject_plan" => tweak_targets::inject_plan(Path::new(&r.input),&r.injections,&r.order,r.use_loader,r.new_first),
         "inject_loader" => load_control::inject_loader(Path::new(&r.input), &r.executable, &r.libraries, r.new_first),
         "inject" => inject(Path::new(&r.input), &r.executable, &r.libraries, r.new_first),
         _ => Err("Unknown editor operation".into()),
@@ -1400,6 +1411,29 @@ mod integration_tests {
         fs::write(&deb, b"!<arch>\ntruncated").unwrap();
         assert!(deb_data(&deb).is_err());
         fs::remove_dir_all(t).unwrap();
+    }
+    #[test]
+    fn deb_duplicate_paths_and_scripts_are_data_only() {
+        let t=temporary();let deb=t.join("test.deb");
+        for names in [vec!["a/T.dylib","a/T.dylib"],vec!["a/T.dylib","A/t.dylib"],vec!["parent","parent/child"]] {
+            let mut archive=tar::Builder::new(Vec::new());
+            for n in names {let mut h=tar::Header::new_gnu();h.set_size(4);h.set_mode(0o755);h.set_cksum();archive.append_data(&mut h,n,Cursor::new(b"test")).unwrap();}
+            fs::write(&deb,ar_data("data.tar/",&archive.into_inner().unwrap())).unwrap();
+            assert!(extract_deb(&deb,&t.join("out")).is_err());assert!(!t.join("out").exists());
+        }
+        let marker=t.join("NEVER_EXECUTED");let script=format!("#!/bin/sh\ntouch {}\n",marker.display());
+        let mut archive=tar::Builder::new(Vec::new());let mut h=tar::Header::new_gnu();h.set_size(script.len() as u64);h.set_mode(0o755);h.set_cksum();archive.append_data(&mut h,"DEBIAN/postinst",Cursor::new(script.as_bytes())).unwrap();
+        fs::write(&deb,ar_data("data.tar/",&archive.into_inner().unwrap())).unwrap();extract_deb(&deb,&t.join("out")).unwrap();assert!(!marker.exists());assert_eq!(fs::read_to_string(t.join("out/DEBIAN/postinst")).unwrap(),script);
+        fs::remove_dir_all(t).unwrap();
+    }
+    #[test]
+    fn deb_unsafe_names_and_oversized_entry_reject() {
+        let t=temporary();let deb=t.join("test.deb");
+        for name in ["../escape", "/absolute", "safe/../../escape"] {
+            let mut archive=tar_data("safe");let bytes=name.as_bytes();archive[..100].fill(0);archive[..bytes.len()].copy_from_slice(bytes);archive[148..156].fill(b' ');let sum:u32=archive[..512].iter().map(|b|*b as u32).sum();archive[148..156].copy_from_slice(format!("{:06o}\0 ",sum).as_bytes());
+            fs::write(&deb,ar_data("data.tar/",&archive)).unwrap();assert!(extract_deb(&deb,&t.join("out")).is_err());assert!(!t.join("out").exists());
+        }
+        let mut h=tar::Header::new_gnu();h.set_path("huge").unwrap();h.set_size(FILE_LIMIT+1);h.set_mode(0o644);h.set_cksum();let mut tar=h.as_bytes().to_vec();tar.extend([0u8;1024]);fs::write(&deb,ar_data("data.tar/",&tar)).unwrap();assert!(extract_deb(&deb,&t.join("out")).is_err());assert!(!t.join("out").exists());fs::remove_dir_all(t).unwrap();
     }
     #[test]
     fn missing_hook_runtime_is_explicit() {
