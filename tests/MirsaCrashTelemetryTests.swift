@@ -42,7 +42,7 @@ final class MirsaCrashTelemetryTests: XCTestCase {
     func testStoreBoundsAndAssociation() throws {
         let u = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
         let s = MirsaTelemetryStore(url: u)
-        for _ in 0..<(MirsaTelemetryStore.maxLaunches + 20) { s.recordLaunchAttempt(bundleID: "a", source: ) }
+        for _ in 0..<(MirsaTelemetryStore.maxLaunches + 20) { s.recordLaunchAttempt(bundleID: "a") }
         XCTAssertEqual(s.launches(for: "a").count, MirsaTelemetryStore.maxLaunches)
         let r = try s.importCrash(Data(#"{"procName":"Z","exception":{"type":"EXC_BAD_ACCESS"}}"#.utf8))
         XCTAssertEqual(s.unassociatedCrashes().count, 1)
